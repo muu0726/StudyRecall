@@ -15,6 +15,8 @@ import AddTermModal from './components/AddTermModal';
 import MoveNoteDialog from './components/MoveNoteDialog';
 import ConfirmDialog from './components/ConfirmDialog';
 import { useToast } from './components/Toast';
+import { TimerProvider } from './contexts/TimerProvider';
+import FloatingMiniTimer from './components/FloatingMiniTimer';
 
 const VIEW_KEY = 'studyrecall:view';
 const COLLAPSED_KEY = 'studyrecall:sidebar-collapsed';
@@ -179,192 +181,201 @@ export default function App() {
   const currentView = VIEWS.find((v) => v.id === view) ?? VIEWS[0];
 
   return (
-    <div className="flex h-full">
-      <Sidebar
-        view={view}
-        onSelectView={goTo}
-        categories={categories}
-        notebooks={notes.notebooks}
-        notebooksLoading={notes.isLoading}
-        selectedNoteId={notes.selectedId}
-        onSelectNote={handleSelectNote}
-        onCreateNote={(categoryId, parentId) => void handleCreateNote(categoryId, parentId)}
-        onMoveNote={(intent) => void notes.move(intent)}
-        onOpenNoteMenu={setMenuFor}
-        tags={tags}
-        activeTag={reviewTag}
-        onSelectTag={handleSelectTag}
-        onAddTerm={() => {
-          setIsAddTermOpen(true);
-          setDrawerOpen(false);
-        }}
-        onManageCategories={() => {
-          setIsCategoryOpen(true);
-          setDrawerOpen(false);
-        }}
-        collapsed={collapsed}
-        onToggleCollapsed={() => setCollapsed((previous) => !previous)}
-        drawerOpen={drawerOpen}
-        onCloseDrawer={() => setDrawerOpen(false)}
-      />
+    <TimerProvider
+      categories={categories}
+      onRecorded={() => void refresh()}
+      onNavigateToTimer={() => goTo('timer')}
+    >
+      <div className="flex h-full">
+        <Sidebar
+          view={view}
+          onSelectView={goTo}
+          categories={categories}
+          notebooks={notes.notebooks}
+          notebooksLoading={notes.isLoading}
+          selectedNoteId={notes.selectedId}
+          onSelectNote={handleSelectNote}
+          onCreateNote={(categoryId, parentId) => void handleCreateNote(categoryId, parentId)}
+          onMoveNote={(intent) => void notes.move(intent)}
+          onOpenNoteMenu={setMenuFor}
+          tags={tags}
+          activeTag={reviewTag}
+          onSelectTag={handleSelectTag}
+          onAddTerm={() => {
+            setIsAddTermOpen(true);
+            setDrawerOpen(false);
+          }}
+          onManageCategories={() => {
+            setIsCategoryOpen(true);
+            setDrawerOpen(false);
+          }}
+          collapsed={collapsed}
+          onToggleCollapsed={() => setCollapsed((previous) => !previous)}
+          drawerOpen={drawerOpen}
+          onCloseDrawer={() => setDrawerOpen(false)}
+        />
 
-      {/* 右側だけがスクロールする。サイドバーは常に見えたままになる。 */}
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-20 flex shrink-0 items-center gap-2 border-b border-slate-200 bg-white/90 px-4 py-3 backdrop-blur">
-          <button
-            type="button"
-            onClick={() => setDrawerOpen(true)}
-            aria-label="メニューを開く"
-            className="rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 md:hidden"
-          >
-            <Menu className="h-5 w-5" aria-hidden />
-          </button>
-          <h1 className="min-w-0 truncate text-base font-bold text-slate-900">
-            {currentView.title}
-          </h1>
-        </header>
-
-        <main className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-6xl px-4 py-6">
-            {(error ?? notes.error) && (
-              <p className="mb-6 rounded-2xl bg-red-50 px-5 py-4 text-sm text-red-700" role="alert">
-                {error ?? notes.error}
-              </p>
-            )}
-
-            {isLoading ? (
-              <div className="flex items-center justify-center gap-2 py-20 text-sm text-slate-500">
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                読み込み中…
-              </div>
-            ) : (
-              <>
-                {view === 'timer' && (
-                  <StudyTab categories={categories} onRecorded={() => void refresh()} />
-                )}
-                {view === 'notes' && (
-                  <NotesTab
-                    categories={categories}
-                    notebooks={notes.notebooks}
-                    selectedId={notes.selectedId}
-                    onReplace={notes.replace}
-                    onClearSelection={clearNoteSelection}
-                    onCreate={() => {
-                      const first = categories[0];
-                      if (first) void handleCreateNote(first.id);
-                    }}
-                    onRequestDelete={setDeleteTarget}
-                    onOpenExplorer={() => setDrawerOpen(true)}
-                    onChanged={() => void refresh()}
-                  />
-                )}
-                {view === 'review' && (
-                  <ReviewTab
-                    categories={categories}
-                    tags={tags}
-                    categoryId={reviewCategoryId}
-                    onCategoryChange={setReviewCategoryId}
-                    tag={reviewTag}
-                    onTagChange={setReviewTag}
-                    reloadToken={quizReloadToken}
-                    nextDueAt={logsData?.stats.quiz.nextDueAt ?? null}
-                    onAnswered={() => void refresh()}
-                  />
-                )}
-                {view === 'dashboard' && logsData && <StatsTab data={logsData} />}
-              </>
-            )}
-          </div>
-        </main>
-      </div>
-
-      {/* ツリーの ⋯ メニュー。モバイルでも確実に移動・削除できる導線。 */}
-      {menuFor && (
-        <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/30 p-4 sm:items-center"
-          onClick={() => setMenuFor(null)}
-        >
-          <div
-            className="w-full max-w-xs overflow-hidden rounded-2xl bg-white shadow-xl"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <p className="truncate border-b border-slate-100 px-4 py-3 text-sm font-semibold text-slate-900">
-              {menuFor.title}
-            </p>
+        {/* 右側だけがスクロールする。サイドバーは常に見えたままになる。 */}
+        <div className="flex min-w-0 flex-1 flex-col">
+          <header className="sticky top-0 z-20 flex shrink-0 items-center gap-2 border-b border-slate-200 bg-white/90 px-4 py-3 backdrop-blur">
             <button
               type="button"
-              onClick={() => {
-                setMoveTarget(menuFor);
-                setMenuFor(null);
-              }}
-              className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-slate-700 transition hover:bg-slate-50"
+              onClick={() => setDrawerOpen(true)}
+              aria-label="メニューを開く"
+              className="rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 md:hidden"
             >
-              <FolderTree className="h-4 w-4" aria-hidden />
-              移動する
+              <Menu className="h-5 w-5" aria-hidden />
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                setDeleteTarget(menuFor);
-                setMenuFor(null);
-              }}
-              className="flex w-full items-center gap-2 border-t border-slate-100 px-4 py-3 text-left text-sm text-red-600 transition hover:bg-red-50"
-            >
-              <Trash2 className="h-4 w-4" aria-hidden />
-              削除する
-            </button>
-          </div>
+            <h1 className="min-w-0 truncate text-base font-bold text-slate-900">
+              {currentView.title}
+            </h1>
+          </header>
+
+          <main className="min-h-0 flex-1 overflow-y-auto">
+            <div className="mx-auto max-w-6xl px-4 py-6">
+              {(error ?? notes.error) && (
+                <p className="mb-6 rounded-2xl bg-red-50 px-5 py-4 text-sm text-red-700" role="alert">
+                  {error ?? notes.error}
+                </p>
+              )}
+
+              {isLoading ? (
+                <div className="flex items-center justify-center gap-2 py-20 text-sm text-slate-500">
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                  読み込み中…
+                </div>
+              ) : (
+                <>
+                  {view === 'timer' && (
+                    <StudyTab categories={categories} onRecorded={() => void refresh()} />
+                  )}
+                  {view === 'notes' && (
+                    <NotesTab
+                      categories={categories}
+                      notebooks={notes.notebooks}
+                      selectedId={notes.selectedId}
+                      onReplace={notes.replace}
+                      onClearSelection={clearNoteSelection}
+                      onCreate={() => {
+                        const first = categories[0];
+                        if (first) void handleCreateNote(first.id);
+                      }}
+                      onRequestDelete={setDeleteTarget}
+                      onOpenExplorer={() => setDrawerOpen(true)}
+                      onChanged={() => void refresh()}
+                    />
+                  )}
+                  {view === 'review' && (
+                    <ReviewTab
+                      categories={categories}
+                      tags={tags}
+                      categoryId={reviewCategoryId}
+                      onCategoryChange={setReviewCategoryId}
+                      tag={reviewTag}
+                      onTagChange={setReviewTag}
+                      reloadToken={quizReloadToken}
+                      nextDueAt={logsData?.stats.quiz.nextDueAt ?? null}
+                      onAnswered={() => void refresh()}
+                    />
+                  )}
+                  {view === 'dashboard' && logsData && <StatsTab data={logsData} />}
+                </>
+              )}
+            </div>
+          </main>
         </div>
-      )}
 
-      <MoveNoteDialog
-        open={moveTarget !== null}
-        target={moveTarget}
-        notebooks={notes.notebooks}
-        categories={categories}
-        isBusy={notes.isMoving}
-        onClose={() => setMoveTarget(null)}
-        onMove={(parentId, categoryId) => {
-          if (!moveTarget) return;
-          void notes.move({ id: moveTarget.id, parentId, index: 0, categoryId }).then((ok) => {
-            if (ok) setMoveTarget(null);
-          });
-        }}
-      />
+        {/* ツリーの ⋯ メニュー。モバイルでも確実に移動・削除できる導線。 */}
+        {menuFor && (
+          <div
+            className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/30 p-4 sm:items-center"
+            onClick={() => setMenuFor(null)}
+          >
+            <div
+              className="w-full max-w-xs overflow-hidden rounded-2xl bg-white shadow-xl"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <p className="truncate border-b border-slate-100 px-4 py-3 text-sm font-semibold text-slate-900">
+                {menuFor.title}
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setMoveTarget(menuFor);
+                  setMenuFor(null);
+                }}
+                className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-slate-700 transition hover:bg-slate-50"
+              >
+                <FolderTree className="h-4 w-4" aria-hidden />
+                移動する
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDeleteTarget(menuFor);
+                  setMenuFor(null);
+                }}
+                className="flex w-full items-center gap-2 border-t border-slate-100 px-4 py-3 text-left text-sm text-red-600 transition hover:bg-red-50"
+              >
+                <Trash2 className="h-4 w-4" aria-hidden />
+                削除する
+              </button>
+            </div>
+          </div>
+        )}
 
-      <ConfirmDialog
-        open={deleteTarget !== null}
-        title={`「${deleteTarget?.title ?? ''}」を削除しますか？`}
-        description={[
-          ...(deleteTarget && notes.descendantCount(deleteTarget.id) > 0
-            ? [`子ノート ${notes.descendantCount(deleteTarget.id)} 件も一緒に削除されます。`]
-            : []),
-          '生成された問題は復習画面に残ります。',
-        ]}
-        isBusy={notes.isDeleting}
-        onConfirm={() => {
-          if (!deleteTarget) return;
-          void notes.remove(deleteTarget).then(() => setDeleteTarget(null));
-        }}
-        onCancel={() => setDeleteTarget(null)}
-      />
+        <MoveNoteDialog
+          open={moveTarget !== null}
+          target={moveTarget}
+          notebooks={notes.notebooks}
+          categories={categories}
+          isBusy={notes.isMoving}
+          onClose={() => setMoveTarget(null)}
+          onMove={(parentId, categoryId) => {
+            if (!moveTarget) return;
+            void notes.move({ id: moveTarget.id, parentId, index: 0, categoryId }).then((ok) => {
+              if (ok) setMoveTarget(null);
+            });
+          }}
+        />
 
-      <CategoryManagerModal
-        open={isCategoryOpen}
-        categories={categories}
-        onClose={() => setIsCategoryOpen(false)}
-        onChanged={() => void refresh()}
-      />
+        <ConfirmDialog
+          open={deleteTarget !== null}
+          title={`「${deleteTarget?.title ?? ''}」を削除しますか？`}
+          description={[
+            ...(deleteTarget && notes.descendantCount(deleteTarget.id) > 0
+              ? [`子ノート ${notes.descendantCount(deleteTarget.id)} 件も一緒に削除されます。`]
+              : []),
+            '生成された問題は復習画面に残ります。',
+          ]}
+          isBusy={notes.isDeleting}
+          onConfirm={() => {
+            if (!deleteTarget) return;
+            void notes.remove(deleteTarget).then(() => setDeleteTarget(null));
+          }}
+          onCancel={() => setDeleteTarget(null)}
+        />
 
-      <AddTermModal
-        open={isAddTermOpen}
-        categories={categories}
-        onClose={() => setIsAddTermOpen(false)}
-        onAdded={() => {
-          setQuizReloadToken((previous) => previous + 1);
-          void refresh();
-        }}
-      />
-    </div>
+        <CategoryManagerModal
+          open={isCategoryOpen}
+          categories={categories}
+          onClose={() => setIsCategoryOpen(false)}
+          onChanged={() => void refresh()}
+        />
+
+        <AddTermModal
+          open={isAddTermOpen}
+          categories={categories}
+          onClose={() => setIsAddTermOpen(false)}
+          onAdded={() => {
+            setQuizReloadToken((previous) => previous + 1);
+            void refresh();
+          }}
+        />
+
+        {/* タイマー画面には同じ情報が大きく出ているので、そこでは出さない */}
+        <FloatingMiniTimer visible={view !== 'timer'} />
+      </div>
+    </TimerProvider>
   );
 }

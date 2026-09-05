@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import {
   AlertTriangle,
   Clock,
@@ -11,23 +11,13 @@ import {
   Volume2,
   VolumeX,
 } from 'lucide-react';
-import type {
-  CategoryDTO,
-  CreateStudyLogRequest,
-  QuizQuestionDTO,
-  TimerMode,
-} from '../../shared/types';
-import { getPomodoroState, toRecordedMinutes } from '../lib/pomodoro';
-import { playAlarm, startFocusSound, type FocusSound, type SoundKind } from '../lib/audio';
-import { celebratePomodoro } from '../lib/celebrate';
-import { ApiError, api } from '../lib/api';
+import type { CategoryDTO } from '../../shared/types';
+import { getPomodoroState } from '../lib/pomodoro';
 import { submitQuizResultResilient } from '../lib/offline-queue';
-import { useTimer } from '../hooks/useTimer';
-import { useRevalidateOnFocus } from '../hooks/useRevalidateOnFocus';
+import { useTimerContext } from '../contexts/TimerProvider';
 import { formatDuration } from '../lib/format';
 import { cn } from '../lib/cn';
 import { useToast } from './Toast';
-import RecordModal from './RecordModal';
 import FlashCard from './FlashCard';
 
 interface Props {
@@ -36,131 +26,26 @@ interface Props {
 }
 
 export default function StudyTab({ categories, onRecorded }: Props) {
-  const timer = useTimer();
+  // タイマーの状態・副作用・記録モーダルは TimerProvider が持つ。
+  // ここは表示と操作だけに絞る（画面を離れても計測が続くのはそのため）。
+  const timer = useTimerContext();
   const { showToast } = useToast();
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [generated, setGenerated] = useState<QuizQuestionDTO[]>([]);
-  const [warning, setWarning] = useState<string | null>(null);
-  const [answeredIds, setAnsweredIds] = useState<Set<string>>(new Set());
-  /** 未開始のときにどちらで始めるかの選択。開始後はサーバーの mode が正。 */
-  const [desiredMode, setDesiredMode] = useState<TimerMode>('free');
-  const [soundKind, setSoundKind] = useState<SoundKind | null>(null);
   const previewRef = useRef<HTMLDivElement>(null);
-  const focusSoundRef = useRef<FocusSound | null>(null);
-  // 親から毎レンダー新しい関数が来るので、effect の依存から外すために ref に逃がす
-  const onRecordedRef = useRef(onRecorded);
-  onRecordedRef.current = onRecorded;
-
-  // 他端末での開始・一時停止・確定に追いつく
-  useRevalidateOnFocus(() => timer.refresh(), { enabled: !isModalOpen });
-
-  // 復帰時にセッションが消えていたら、黙ってリセットせず理由を伝える。
-  // 依存はフラグだけにする（timer は毎レンダー新しい参照になるため、
-  // そのまま入れると effect が毎回走る）。中で呼ぶ関数はいずれも安定。
-  const { endedElsewhere, acknowledgeEnded } = timer;
-  useEffect(() => {
-    if (!endedElsewhere) return;
-    acknowledgeEnded();
-    showToast('計測中だった学習は別の端末で記録・破棄されました', { kind: 'info' });
-    onRecordedRef.current();
-  }, [endedElsewhere, acknowledgeEnded, showToast]);
 
   const isPomodoro = timer.mode === 'pomodoro';
   const pomodoro = isPomodoro ? getPomodoroState(timer.elapsedMs) : null;
 
-  // フェーズが切り替わった瞬間にアラームを鳴らす。
-  // 各端末が同じ elapsedMs から導出するので、鳴るタイミングも揃う。
-  const previousPhaseRef = useRef<string | null>(null);
+  // 記録直後に生成された問題まで送る。他画面から記録した場合もここへ来る。
+  const generatedCount = timer.generated.length;
   useEffect(() => {
-    const phase = pomodoro && timer.isRunning ? pomodoro.phase : null;
-    const previous = previousPhaseRef.current;
-    previousPhaseRef.current = phase;
-    if (phase && previous && phase !== previous) {
-      // 集中入り＝3回、休憩入り＝2回で区別できるようにする
-      playAlarm(phase === 'work' ? 3 : 2);
-      // 休憩に入る = 集中を 1 セット完走したということ
-      if (phase === 'break') celebratePomodoro();
-      showToast(phase === 'work' ? '集中タイムを開始します' : '休憩に入りましょう', {
-        kind: 'info',
-      });
-    }
-  }, [pomodoro, timer.isRunning, showToast]);
-
-  // 集中サウンドの生成・破棄。トグルの状態だけを見て同期させる。
-  useEffect(() => {
-    if (soundKind === null) {
-      focusSoundRef.current?.stop();
-      focusSoundRef.current = null;
-      return;
-    }
-    focusSoundRef.current?.stop();
-    focusSoundRef.current = startFocusSound(soundKind);
-    return () => {
-      focusSoundRef.current?.stop();
-      focusSoundRef.current = null;
-    };
-  }, [soundKind]);
-
-  // 画面を離れるときに鳴りっぱなしにしない
-  useEffect(() => {
-    return () => {
-      focusSoundRef.current?.stop();
-      focusSoundRef.current = null;
-    };
-  }, []);
-
-  const openModal = async () => {
-    // 一時停止のついでに、他端末が先に確定していないか確かめる。
-    // ここで気付かないと、確定済みの学習時間をもう一度記録してしまう。
-    const { endedElsewhere } = await timer.pause();
-    if (endedElsewhere) {
-      timer.acknowledgeEnded();
-      showToast('この学習は別の端末ですでに記録されています', { kind: 'info' });
-      return;
-    }
-    setSubmitError(null);
-    setIsModalOpen(true);
-  };
-
-  const handleSubmit = async (payload: CreateStudyLogRequest) => {
-    setIsSubmitting(true);
-    setSubmitError(null);
-    try {
-      const result = await api.createStudyLog({
-        ...payload,
-        // タイマー由来なら確定するセッションを渡す。二重記録はサーバーが弾く。
-        ...(timer.sessionId ? { timerSessionId: timer.sessionId } : {}),
-      });
-      setGenerated(result.questions);
-      setWarning(result.warning ?? null);
-      setAnsweredIds(new Set());
-      setIsModalOpen(false);
-      timer.clearLocal();
-      onRecorded();
-      // 生成された問題の確認エリアまで自動スクロール
-      requestAnimationFrame(() => {
-        previewRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      });
-    } catch (error) {
-      // 他端末が先に確定していた場合。タイマーを畳んで実情に合わせる。
-      if (error instanceof ApiError && error.status === 400 && timer.sessionId) {
-        setIsModalOpen(false);
-        timer.clearLocal();
-        void timer.refresh();
-        onRecorded();
-        showToast('この学習は別の端末ですでに記録されています', { kind: 'info' });
-        return;
-      }
-      setSubmitError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+    if (generatedCount === 0) return;
+    requestAnimationFrame(() => {
+      previewRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }, [generatedCount]);
 
   const handleAnswer = async (questionId: string, correct: boolean) => {
-    setAnsweredIds((previous) => new Set(previous).add(questionId));
+    timer.markAnswered(questionId);
     try {
       const outcome = await submitQuizResultResilient(questionId, correct);
       if (outcome.status === 'queued') {
@@ -173,7 +58,7 @@ export default function StudyTab({ categories, onRecorded }: Props) {
     }
   };
 
-  const remaining = generated.filter((question) => !answeredIds.has(question.id));
+  const remaining = timer.generated.filter((question) => !timer.answeredIds.has(question.id));
   const isBusy = timer.isSyncing;
 
   return (
@@ -197,11 +82,11 @@ export default function StudyTab({ categories, onRecorded }: Props) {
                 <button
                   key={m}
                   type="button"
-                  onClick={() => setDesiredMode(m)}
-                  aria-pressed={desiredMode === m}
+                  onClick={() => timer.setDesiredMode(m)}
+                  aria-pressed={timer.desiredMode === m}
                   className={cn(
                     'rounded-lg px-3.5 py-1.5 text-sm font-medium transition',
-                    desiredMode === m
+                    timer.desiredMode === m
                       ? 'bg-white text-blue-700 shadow-sm'
                       : 'text-slate-600 hover:text-slate-900',
                   )}
@@ -252,7 +137,7 @@ export default function StudyTab({ categories, onRecorded }: Props) {
           {timer.isRunning ? (
             <button
               type="button"
-              onClick={() => void timer.pause()}
+              onClick={() => void timer.pauseTimer()}
               disabled={isBusy}
               className="flex items-center gap-2 rounded-xl bg-slate-800 px-6 py-3 text-sm font-semibold text-white transition hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -266,7 +151,7 @@ export default function StudyTab({ categories, onRecorded }: Props) {
           ) : (
             <button
               type="button"
-              onClick={() => void timer.start(desiredMode)}
+              onClick={() => void timer.startTimer()}
               disabled={isBusy}
               className="flex items-center gap-2 rounded-xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -281,7 +166,7 @@ export default function StudyTab({ categories, onRecorded }: Props) {
 
           <button
             type="button"
-            onClick={() => void timer.reset()}
+            onClick={() => void timer.resetTimer()}
             disabled={isBusy || timer.sessionId === null}
             className="flex items-center gap-2 rounded-xl border border-slate-300 px-6 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
           >
@@ -291,7 +176,7 @@ export default function StudyTab({ categories, onRecorded }: Props) {
 
           <button
             type="button"
-            onClick={() => void openModal()}
+            onClick={() => void timer.openCompleteModal()}
             disabled={isBusy || categories.length === 0}
             className="flex items-center gap-2 rounded-xl bg-emerald-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
@@ -306,11 +191,11 @@ export default function StudyTab({ categories, onRecorded }: Props) {
             <button
               key={kind ?? 'off'}
               type="button"
-              onClick={() => setSoundKind(kind)}
-              aria-pressed={soundKind === kind}
+              onClick={() => timer.setSoundKind(kind)}
+              aria-pressed={timer.soundKind === kind}
               className={cn(
                 'flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition',
-                soundKind === kind
+                timer.soundKind === kind
                   ? 'bg-slate-800 text-white'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
               )}
@@ -334,22 +219,22 @@ export default function StudyTab({ categories, onRecorded }: Props) {
         )}
       </section>
 
-      {warning && (
+      {timer.generateWarning && (
         <div
           className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900"
           role="alert"
         >
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-          <p>{warning}</p>
+          <p>{timer.generateWarning}</p>
         </div>
       )}
 
-      {generated.length > 0 && (
+      {timer.generated.length > 0 && (
         <section ref={previewRef} className="scroll-mt-6 space-y-4">
           <div className="flex items-baseline justify-between">
             <h2 className="text-lg font-bold text-slate-900">生成された問題</h2>
             <span className="text-sm text-slate-500">
-              残り {remaining.length} / {generated.length} 問
+              残り {remaining.length} / {timer.generated.length} 問
             </span>
           </div>
 
@@ -369,15 +254,7 @@ export default function StudyTab({ categories, onRecorded }: Props) {
         </section>
       )}
 
-      <RecordModal
-        open={isModalOpen}
-        categories={categories}
-        defaultMinutes={toRecordedMinutes(timer.elapsedMs, isPomodoro)}
-        isSubmitting={isSubmitting}
-        error={submitError}
-        onClose={() => setIsModalOpen(false)}
-        onSubmit={(payload) => void handleSubmit(payload)}
-      />
+
     </div>
   );
 }

@@ -8,6 +8,19 @@ export function formatDuration(ms: number): string {
   return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
 }
 
+/**
+ * ミリ秒を「24:15」形式に整形する（1 時間を超えたら「1:24:15」）。
+ * タブタイトルやミニタイマーのように、幅を取りたくない場所で使う。
+ */
+export function formatClock(ms: number): string {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return hours > 0 ? `${hours}:${pad(minutes)}:${pad(seconds)}` : `${pad(minutes)}:${pad(seconds)}`;
+}
+
 /** 分を「2時間30分」形式に整形する */
 export function formatMinutes(minutes: number): string {
   if (minutes < 60) return `${minutes}分`;
