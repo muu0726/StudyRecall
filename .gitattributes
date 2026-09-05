@@ -1,0 +1,10 @@
+# Cloudflare Workers（Linux）へデプロイするので、作業ツリーも含めて LF に統一する。
+# Windows の core.autocrlf=true のままだと put-secrets.sh のようなシェルスクリプトが
+# CRLF で checkout され、`\r` のせいで実行できなくなる。
+* text=auto eol=lf
+
+# バイナリは変換しない
+*.png binary
+*.ico binary
+*.jpg binary
+*.woff2 binary

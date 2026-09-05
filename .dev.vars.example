@@ -1,0 +1,11 @@
+# Google AI Studio (https://aistudio.google.com/apikey) で発行した API キーを設定する。
+# このファイルをコピーして .dev.vars を作成すること。.dev.vars は git 管理外。
+GEMINI_API_KEY=
+
+BETTER_AUTH_SECRET="your-auth-secret"
+GOOGLE_CLIENT_ID="your-google-client-id"
+GOOGLE_CLIENT_SECRET="your-google-client-secret"
+
+# 開発用モックログイン。ローカルでだけ有効にする。
+# wrangler.jsonc には置かない（本番へ漏れるため）。
+ALLOW_DEV_LOGIN=true
