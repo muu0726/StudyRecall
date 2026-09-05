@@ -1,4 +1,3 @@
-import JSZip from 'jszip';
 import type { NotebookDTO, QuizQuestionDTO } from '../../shared/types';
 import { getAncestorPath } from '../../shared/note-tree';
 
@@ -86,6 +85,8 @@ export function buildNotebookMarkdown(notebook: NotebookDTO, parentTitle?: strin
  * 同名ファイルは連番を振って衝突を避ける。
  */
 export async function buildNotebooksZip(notebooks: NotebookDTO[]): Promise<Blob> {
+  // jszip は書き出しのときにしか要らないので、ここで初めて読み込む
+  const { default: JSZip } = await import('jszip');
   const zip = new JSZip();
   const used = new Set<string>();
   const byId = new Map(notebooks.map((n) => [n.id, n]));

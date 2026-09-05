@@ -129,6 +129,8 @@ Google AI Studio 側で使用量アラートを設定しておくとよい。
 | `db:generate` | スキーマ変更から migrations の SQL を生成 |
 | `db:migrate:local` | ローカル D1 にマイグレーションを適用 |
 | `db:migrate:remote` | リモート D1 にマイグレーションを適用 |
+| `test` | Vitest を 1 回実行（純粋関数のみ対象） |
+| `test:watch` | Vitest をウォッチ実行 |
 | `cf-typegen` | `wrangler.jsonc` から `worker-configuration.d.ts` を再生成 |
 
 ## 画面構成
@@ -264,6 +266,42 @@ Notion のようにノートを入れ子にできる。`notebooks.parentId`（�
 - **Markdown ZIP** — ツリーをそのままフォルダにした `カテゴリ名/親/子.md` の構造。
   YAML フロントマター（`title` / `category` / `parent` / `created` / `updated`）付き
 
+## テスト
+
+`npm test`（Vitest）。**全部は書かず、壊れると被害が大きい純粋関数だけ**を対象にしている。
+
+- `src/shared/note-tree.test.ts` — **サーバーとクライアントが同じ実装を共有している**ので、
+  ここが壊れると「UI とサーバーがズレる」のではなく**両方が同時に間違う**。循環・深さ上限・
+  部分木の高さの境界を固めてある
+- `src/client/lib/export.test.ts` — Anki CSV と Markdown フロントマター。
+  書き出しは外部ツールが読むもので、壊れても画面上は何も起きない
+- `src/client/lib/pomodoro.test.ts` — `focusMs` は**記録される学習時間そのもの**
+
+DOM やネットワークを触るものは対象外（`environment: 'node'`）。
+設定を `vite.config.ts` と分けているのは、テストのたびに Worker のビルドと SW 生成を
+走らせる必要がないため。
+
+> テストに実効性があるかは、`canMove` の深さ判定にオフバイワンを入れて 2 件落ちることで確認した。
+
+### vitest のバージョンは 4 系に固定している
+`better-auth` が `peerOptional vitest@"^2 || ^3 || ^4"` を宣言しているため、
+5 系を入れると **`npm ci` が ERESOLVE で落ちる**（Workers Builds のビルドが壊れる）。
+`npm install` は通ってしまうので気付きにくい。バージョンを変えたら `npm ci --dry-run` で確かめる。
+
+## バンドル
+
+初回ロードに要らないものは動的 import に逃がしてある。
+
+| チャンク | サイズ | 読み込まれる契機 |
+|---|---|---|
+| `index` | 362 KB (gzip 110 KB) | 起動時 |
+| `MarkdownRenderer` | 156 KB (gzip 46 KB) | ノートをプレビュー表示したとき |
+| `jszip` | 96 KB (gzip 28 KB) | ZIP を書き出すとき |
+| `confetti` | 11 KB (gzip 4 KB) | 紙吹雪を出すとき |
+
+分割前は単一チャンク 609 KB（gzip 189 KB）で、Vite の 500KB 警告が出続けていた。
+起動直後に見えるのはタイマー画面なので、Markdown も ZIP も紙吹雪もその時点では要らない。
+
 ## 設計上の注意点
 
 - **統計の日境界は JST 固定**。Worker は UTC で動くため、`src/worker/lib/time.ts` で UTC+9 のオフセットを明示的に計算している。これがないと深夜の記録が前日/翌日にズレる。
@@ -314,4 +352,4 @@ SQLite は列の NOT NULL 変更ができないため、drizzle-kit は「テー
 
 リモート D1・本番デプロイ / リアルタイム同期（WebSocket・SSE でのプッシュ）/ ノートの自動保存・
 バージョン履歴・3-way マージ（競合時は「破棄 or 強制上書き」の二択）/ オフライン時のノート編集キュー
-（判定のみ対象）/ SRS（間隔反復）/ ダークモード / 自動テスト / タグの表記ゆれ正規化（trim と重複除去のみ）
+（判定のみ対象）/ SRS（間隔反復）/ ダークモード / タグの表記ゆれ正規化（trim と重複除去のみ）
