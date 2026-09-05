@@ -16,8 +16,9 @@
     {
       "binding": "DB",
       "database_name": "study-recall-db",
-      // ローカル開発用のプレースホルダ。リモート D1 を作成したら差し替える。
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      // `wrangler d1 create study-recall-db` で作った本番 D1（APAC）。
+      // D1 の ID は秘匿情報ではない（アカウントの認証情報が無ければ使えない）のでコミットしてよい。
+      "database_id": "98521364-85a2-446e-b1d2-2aa3fc722648",
       "migrations_dir": "migrations"
     }
   ],

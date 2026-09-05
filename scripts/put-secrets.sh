@@ -13,6 +13,14 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+# npx は使わない。Windows の PowerShell 実行ポリシーが npx.ps1 の読み込みを止めることがあり、
+# そこで詰まると原因が分かりにくい。ローカルにインストール済みの wrangler を直接叩く。
+WRANGLER="./node_modules/.bin/wrangler"
+if [ ! -x "${WRANGLER}" ]; then
+  echo "エラー: ${WRANGLER} が見つかりません。先に npm install を実行してください。" >&2
+  exit 1
+fi
+
 if [ ! -f .dev.vars ]; then
   echo "エラー: .dev.vars が見つかりません。.dev.vars.example をコピーして作成してください。" >&2
   exit 1
@@ -48,7 +56,7 @@ for key in $KEYS; do
   esac
 
   # 値は stdin 経由で渡す。コマンドライン引数にすると履歴やプロセス一覧に残る。
-  printf '%s' "${value}" | npx wrangler secret put "${key}" > /dev/null
+  printf '%s' "${value}" | "${WRANGLER}" secret put "${key}" > /dev/null
   echo "  登録: ${key}"
 done
 
@@ -59,4 +67,4 @@ fi
 
 echo
 echo "完了。登録済みのキー名は次で確認できます:"
-echo "  npx wrangler secret list"
+echo "  ./node_modules/.bin/wrangler secret list"
