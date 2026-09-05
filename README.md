@@ -89,6 +89,10 @@ bash scripts/put-secrets.sh
    - 承認済みの JavaScript 生成元: `https://<worker>.workers.dev`
    - 承認済みのリダイレクト URI: `https://<worker>.workers.dev/api/auth/callback/google`
 
+> **デプロイ直後の 1 回目は古い画面が出る。** `vite-plugin-pwa` が index.html を
+> Service Worker でプリキャッシュしているため、更新が当たるのは**次の読み込み**から。
+> 「デプロイしたのに変わらない」と思ったらリロードをもう一度（`registerType: 'autoUpdate'` の挙動）。
+
 以後は `git push` で **Cloudflare Workers Builds** が自動デプロイする
 （Build command `npm run build` / Deploy command `npx wrangler deploy`）。
 **マイグレーションは自動では流れない。** スキーマを変えたときだけ `npm run db:migrate:remote` を手で流す。
