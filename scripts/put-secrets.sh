@@ -26,44 +26,49 @@ if [ ! -f .dev.vars ]; then
   exit 1
 fi
 
-KEYS="GEMINI_API_KEY BETTER_AUTH_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET"
-failed=0
+# `wrangler secret put` は使えない。
+# stdin から値を流す形だと wrangler が「非対話環境」と判断し、OAuth ログイン済みでも
+#   「CLOUDFLARE_API_TOKEN を設定しろ」
+# と言って止まる（deploy や secret list は同じ条件でも通るのに、secret put だけが拒否する）。
+# ファイルを読む `secret bulk` は非対話でも通るので、こちらを使う。
+TMP_JSON="$(mktemp)"
+# 途中で失敗しても平文の JSON を残さない
+trap 'rm -f "${TMP_JSON}"' EXIT INT TERM
 
-for key in $KEYS; do
-  # CRLF 混じりでも壊れないよう \r を落としてから、= 以降を値として取り出し、
-  # 前後のダブルクォート/シングルクォートを剥がす。
-  value=$(
-    tr -d '\r' < .dev.vars \
-      | grep -E "^${key}=" \
-      | head -1 \
-      | cut -d= -f2- \
-      | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'\$/\1/"
-  ) || true
+# JSON の組み立ては node に任せる。値にクォートやバックスラッシュが入っていても壊れない。
+node - "${TMP_JSON}" <<'NODE'
+const fs = require('fs');
+const out = process.argv[2];
+const KEYS = ['GEMINI_API_KEY', 'BETTER_AUTH_SECRET', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'];
 
-  if [ -z "${value}" ]; then
-    echo "  スキップ: ${key} が .dev.vars に無いか空です" >&2
-    failed=1
-    continue
-  fi
+// CRLF 混じりでも壊れないよう \r を落としてから読む
+const lines = fs.readFileSync('.dev.vars', 'utf8').replace(/\r/g, '').split('\n');
+const secrets = {};
+const problems = [];
 
-  # 雛形のプレースホルダをそのまま本番へ送らない
-  case "${value}" in
-    your-*)
-      echo "  スキップ: ${key} が雛形のプレースホルダのままです" >&2
-      failed=1
-      continue
-      ;;
-  esac
+for (const key of KEYS) {
+  const line = lines.find((l) => l.startsWith(key + '='));
+  let value = line === undefined ? '' : line.slice(key.length + 1).trim();
+  // 前後のクォートを剥がす
+  const quoted = /^(["'])(.*)\1$/.exec(value);
+  if (quoted) value = quoted[2];
 
-  # 値は stdin 経由で渡す。コマンドライン引数にすると履歴やプロセス一覧に残る。
-  printf '%s' "${value}" | "${WRANGLER}" secret put "${key}" > /dev/null
-  echo "  登録: ${key}"
-done
+  if (value === '') problems.push(`${key}: .dev.vars に無いか空です`);
+  else if (value.startsWith('your-')) problems.push(`${key}: 雛形のプレースホルダのままです`);
+  else secrets[key] = value;
+}
 
-if [ "${failed}" -ne 0 ]; then
-  echo "一部のキーを登録できませんでした。上のメッセージを確認してください。" >&2
-  exit 1
-fi
+if (problems.length > 0) {
+  // 値そのものは絶対に出さない。キー名と理由だけ。
+  for (const p of problems) console.error('  ' + p);
+  process.exit(1);
+}
+
+fs.writeFileSync(out, JSON.stringify(secrets), { mode: 0o600 });
+console.log('登録するキー: ' + Object.keys(secrets).join(', '));
+NODE
+
+"${WRANGLER}" secret bulk "${TMP_JSON}"
 
 echo
 echo "完了。登録済みのキー名は次で確認できます:"
