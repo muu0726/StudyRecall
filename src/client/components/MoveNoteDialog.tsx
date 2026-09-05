@@ -54,14 +54,14 @@ export default function MoveNoteDialog({
             className={cn(
               'flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-sm transition',
               check.ok && !isCurrentParent
-                ? 'text-slate-700 hover:bg-blue-50'
-                : 'cursor-not-allowed text-slate-300',
+                ? 'text-slate-700 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-blue-950'
+                : 'cursor-not-allowed text-slate-300 dark:text-slate-600',
             )}
             style={{ paddingLeft: `${8 + (depth - 1) * 14}px` }}
           >
             <CornerDownRight className="h-3.5 w-3.5 shrink-0" aria-hidden />
             <span className="truncate">{node.title}</span>
-            {isCurrentParent && <span className="shrink-0 text-xs text-slate-400">（現在）</span>}
+            {isCurrentParent && <span className="shrink-0 text-xs text-slate-400 dark:text-slate-500">（現在）</span>}
           </button>
           {children.length > 0 && <ul>{renderNodes(children)}</ul>}
         </li>
@@ -69,22 +69,22 @@ export default function MoveNoteDialog({
     });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-4 sm:items-center">
-      <div className="max-h-full w-full max-w-md overflow-y-auto rounded-2xl bg-white shadow-xl">
-        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 dark:bg-slate-950/70 p-4 sm:items-center">
+      <div className="max-h-full w-full max-w-md overflow-y-auto rounded-2xl bg-white dark:bg-slate-900 shadow-xl">
+        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 px-5 py-4">
           <div className="min-w-0">
-            <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">
+            <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900 dark:text-slate-100">
               <FolderTree className="h-4 w-4 shrink-0" aria-hidden />
               移動先を選ぶ
             </h2>
-            <p className="mt-0.5 truncate text-sm text-slate-500">「{target.title}」を移動します</p>
+            <p className="mt-0.5 truncate text-sm text-slate-500 dark:text-slate-400">「{target.title}」を移動します</p>
           </div>
           <button
             type="button"
             onClick={onClose}
             disabled={isBusy}
             aria-label="閉じる"
-            className="shrink-0 rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 disabled:opacity-50"
+            className="shrink-0 rounded-lg p-1 text-slate-400 dark:text-slate-500 transition hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50"
           >
             <X className="h-5 w-5" aria-hidden />
           </button>
@@ -105,7 +105,7 @@ export default function MoveNoteDialog({
                     style={{ backgroundColor: category.color }}
                     aria-hidden
                   />
-                  <h3 className="text-xs font-semibold text-slate-500">{category.name}</h3>
+                  <h3 className="text-xs font-semibold text-slate-500 dark:text-slate-400">{category.name}</h3>
                 </div>
 
                 <button
@@ -115,13 +115,13 @@ export default function MoveNoteDialog({
                   className={cn(
                     'mt-1 flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-sm transition',
                     isCurrentRoot
-                      ? 'cursor-not-allowed text-slate-300'
-                      : 'font-medium text-slate-700 hover:bg-blue-50',
+                      ? 'cursor-not-allowed text-slate-300 dark:text-slate-600'
+                      : 'font-medium text-slate-700 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-blue-950',
                   )}
                 >
                   <FolderTree className="h-3.5 w-3.5 shrink-0" aria-hidden />
                   このカテゴリの直下へ
-                  {isCurrentRoot && <span className="text-xs text-slate-400">（現在）</span>}
+                  {isCurrentRoot && <span className="text-xs text-slate-400 dark:text-slate-500">（現在）</span>}
                 </button>
 
                 {tree.length > 0 && <ul className="mt-0.5">{renderNodes(tree)}</ul>}

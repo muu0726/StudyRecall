@@ -10,24 +10,24 @@ import remarkGfm from 'remark-gfm';
  */
 export default function MarkdownRenderer({ content }: { content: string }) {
   return (
-    <div className="text-sm leading-relaxed text-slate-700">
+    <div className="text-sm leading-relaxed text-slate-700 dark:text-slate-300">
       <Markdown
         remarkPlugins={[remarkGfm]}
         components={{
-          h1: (props) => <h1 className="mt-6 mb-3 text-2xl font-bold text-slate-900" {...props} />,
+          h1: (props) => <h1 className="mt-6 mb-3 text-2xl font-bold text-slate-900 dark:text-slate-100" {...props} />,
           h2: (props) => (
             <h2
-              className="mt-6 mb-2 border-b border-slate-200 pb-1 text-xl font-bold text-slate-900"
+              className="mt-6 mb-2 border-b border-slate-200 dark:border-slate-800 pb-1 text-xl font-bold text-slate-900 dark:text-slate-100"
               {...props}
             />
           ),
-          h3: (props) => <h3 className="mt-5 mb-2 text-base font-bold text-slate-900" {...props} />,
+          h3: (props) => <h3 className="mt-5 mb-2 text-base font-bold text-slate-900 dark:text-slate-100" {...props} />,
           p: (props) => <p className="my-3" {...props} />,
           ul: (props) => <ul className="my-3 list-disc space-y-1 pl-5" {...props} />,
           ol: (props) => <ol className="my-3 list-decimal space-y-1 pl-5" {...props} />,
           a: (props) => (
             <a
-              className="text-blue-600 underline underline-offset-2 hover:text-blue-700"
+              className="text-blue-600 dark:text-blue-400 underline underline-offset-2 hover:text-blue-700"
               target="_blank"
               rel="noreferrer"
               {...props}
@@ -35,7 +35,7 @@ export default function MarkdownRenderer({ content }: { content: string }) {
           ),
           blockquote: (props) => (
             <blockquote
-              className="my-3 border-l-4 border-slate-200 pl-4 text-slate-500 italic"
+              className="my-3 border-l-4 border-slate-200 dark:border-slate-800 pl-4 text-slate-500 dark:text-slate-400 italic"
               {...props}
             />
           ),
@@ -49,14 +49,14 @@ export default function MarkdownRenderer({ content }: { content: string }) {
               );
             }
             return (
-              <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[13px] text-slate-800">
+              <code className="rounded bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 font-mono text-[13px] text-slate-800 dark:text-slate-200">
                 {children}
               </code>
             );
           },
           pre: (props) => (
             <pre
-              className="my-3 overflow-x-auto rounded-xl bg-slate-900 px-4 py-3 text-slate-100"
+              className="my-3 overflow-x-auto rounded-xl border border-transparent bg-slate-900 px-4 py-3 text-slate-100 dark:border-slate-700 dark:bg-slate-950"
               {...props}
             />
           ),
@@ -66,10 +66,10 @@ export default function MarkdownRenderer({ content }: { content: string }) {
             </div>
           ),
           th: (props) => (
-            <th className="border border-slate-200 bg-slate-50 px-3 py-1.5 font-semibold" {...props} />
+            <th className="border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 px-3 py-1.5 font-semibold" {...props} />
           ),
-          td: (props) => <td className="border border-slate-200 px-3 py-1.5" {...props} />,
-          hr: () => <hr className="my-6 border-slate-200" />,
+          td: (props) => <td className="border border-slate-200 dark:border-slate-800 px-3 py-1.5" {...props} />,
+          hr: () => <hr className="my-6 border-slate-200 dark:border-slate-800" />,
           input: (props) => (
             // GFM のタスクリスト
             <input className="mr-1.5 align-middle accent-blue-600" disabled {...props} />

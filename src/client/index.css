@@ -1,5 +1,12 @@
 @import 'tailwindcss';
 
+/*
+ * Tailwind v4 の `dark:` は既定で prefers-color-scheme を見る。
+ * 手動で切り替えたいので、<html> の .dark クラスを見る形に差し替える。
+ * この 1 行が無いと ThemeProvider がクラスを付けても何も変わらない。
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --font-sans:
     'Inter', 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', 'Noto Sans JP', 'Meiryo', system-ui,
@@ -14,4 +21,13 @@ body,
 
 body {
   @apply bg-slate-50 text-slate-900 antialiased;
+  @apply dark:bg-slate-950 dark:text-slate-100;
+}
+
+/* フォームのネイティブ部品（select の矢印、チェックボックス等）もテーマに従わせる */
+:root {
+  color-scheme: light;
+}
+.dark {
+  color-scheme: dark;
 }

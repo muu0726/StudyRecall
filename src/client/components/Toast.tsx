@@ -80,7 +80,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 }
 
 const KIND_STYLE: Record<ToastKind, string> = {
-  info: 'bg-slate-800 text-white',
+  info: 'bg-slate-800 text-white dark:bg-slate-600',
   success: 'bg-emerald-600 text-white',
   error: 'bg-red-600 text-white',
 };

@@ -75,6 +75,16 @@ export default function NotesTab({
 
   /** 読み込んだ時点の updatedAt。楽観的ロックのトークン。 */
   const [baseUpdatedAt, setBaseUpdatedAt] = useState<string | null>(null);
+  /**
+   * いま draft* が指しているノートの id。
+   *
+   * **selectedId と一致しないあいだ、下書きは無効として扱う。**
+   * isDirty はレンダー中に計算されるので、ノートを A→B に切り替えた直後の
+   * レンダーでは「下書き = A の内容 / selected = B」となり isDirty が立つ。
+   * これを見ずに退避すると **B の id で A の本文を保存**してしまい、
+   * 次に B を開いたときに A の内容が復元されてノートが壊れる（実際に壊した）。
+   */
+  const [draftNoteId, setDraftNoteId] = useState<string | null>(null);
   const [conflict, setConflict] = useState<{ currentContent: string } | null>(null);
   const [remoteChanged, setRemoteChanged] = useState(false);
   const [questions, setQuestions] = useState<QuizQuestionDTO[]>([]);
@@ -85,10 +95,16 @@ export default function NotesTab({
   const [autosaveFailed, setAutosaveFailed] = useState(false);
 
   const selected = notebooks.find((n) => n.id === selectedId) ?? null;
+  /** 下書きが、いま開いているノートのものか */
+  const draftsBelongToSelection = selectedId !== null && draftNoteId === selectedId;
   /** 本文・タイトルの未保存分。カテゴリは構造側で動くので別扱いにする。 */
   const isBodyDirty =
-    selected !== null && (draftTitle !== selected.title || draftContent !== selected.content);
-  const isDirty = isBodyDirty || (selected !== null && draftCategoryId !== selected.categoryId);
+    draftsBelongToSelection &&
+    selected !== null &&
+    (draftTitle !== selected.title || draftContent !== selected.content);
+  const isDirty =
+    isBodyDirty ||
+    (draftsBelongToSelection && selected !== null && draftCategoryId !== selected.categoryId);
 
   /**
    * 送信時に本文が切り詰められるか。**サーバーと同じ関数で判定する**ので、
@@ -106,6 +122,7 @@ export default function NotesTab({
     if (!selectedId) {
       setQuestions([]);
       setBaseUpdatedAt(null);
+      setDraftNoteId(null);
       return;
     }
     const notebook = notebooksRef.current.find((n) => n.id === selectedId);
@@ -116,6 +133,7 @@ export default function NotesTab({
     const recovery = decideRecovery(readDraft(notebook.id), notebook);
     const source = recovery.kind === 'none' ? notebook : recovery.draft;
 
+    setDraftNoteId(notebook.id);
     setDraftTitle(source.title);
     setDraftContent(source.content);
     setDraftCategoryId(source.categoryId);
@@ -192,6 +210,8 @@ export default function NotesTab({
    */
   useEffect(() => {
     if (!selectedId) return;
+    // 切り替え直後の 1 レンダーぶんは下書きがまだ前のノートのもの。触らない。
+    if (!draftsBelongToSelection) return;
     if (!isDirty) {
       clearDraft(selectedId);
       return;
@@ -204,7 +224,15 @@ export default function NotesTab({
       baseUpdatedAt,
       savedAt: new Date().toISOString(),
     });
-  }, [selectedId, isDirty, draftTitle, draftContent, draftCategoryId, baseUpdatedAt]);
+  }, [
+    selectedId,
+    draftsBelongToSelection,
+    isDirty,
+    draftTitle,
+    draftContent,
+    draftCategoryId,
+    baseUpdatedAt,
+  ]);
 
   /**
    * 入力が止まったらサーバーへ送る。
@@ -341,15 +369,15 @@ export default function NotesTab({
 
   if (!selected) {
     return (
-      <div className="flex min-h-64 flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-slate-300 px-6 py-20 text-center">
-        <p className="text-sm text-slate-500">
+      <div className="flex min-h-64 flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 px-6 py-20 text-center">
+        <p className="text-sm text-slate-500 dark:text-slate-400">
           サイドバーのツリーからノートを選ぶか、新しく作成してください。
         </p>
         <div className="flex flex-wrap items-center justify-center gap-2">
           <button
             type="button"
             onClick={onOpenExplorer}
-            className="flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 md:hidden"
+            className="flex items-center gap-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm font-semibold text-slate-700 dark:text-slate-300 transition hover:bg-slate-50 dark:hover:bg-slate-800 md:hidden"
           >
             <PanelLeft className="h-4 w-4" aria-hidden />
             ノートを探す
@@ -358,7 +386,7 @@ export default function NotesTab({
             type="button"
             onClick={onCreate}
             disabled={categories.length === 0}
-            className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+            className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300 dark:disabled:bg-slate-700"
           >
             <FilePlus2 className="h-4 w-4" aria-hidden />
             新規ノート
@@ -371,16 +399,16 @@ export default function NotesTab({
   return (
     <div className="space-y-4">
       {error && (
-        <p className="rounded-2xl bg-red-50 px-5 py-4 text-sm text-red-700" role="alert">
+        <p className="rounded-2xl bg-red-50 dark:bg-red-950 px-5 py-4 text-sm text-red-700 dark:text-red-300" role="alert">
           {error}
         </p>
       )}
 
-      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
         {/* パンくず。どの階層にいるか一目で分かるようにする */}
         <nav
           aria-label="階層"
-          className="flex flex-wrap items-center gap-1 border-b border-slate-100 px-4 pt-3 text-xs text-slate-500"
+          className="flex flex-wrap items-center gap-1 border-b border-slate-100 dark:border-slate-800 px-4 pt-3 text-xs text-slate-500 dark:text-slate-400"
         >
           <span className="font-medium" style={{ color: selected.categoryColor }}>
             {selected.categoryName}
@@ -388,19 +416,19 @@ export default function NotesTab({
           {getAncestorPath(notebooks, selected.id).map((node) => (
             <span key={node.id} className="flex items-center gap-1">
               <span aria-hidden>/</span>
-              <span className={cn(node.id === selected.id && 'font-medium text-slate-700')}>
+              <span className={cn(node.id === selected.id && 'font-medium text-slate-700 dark:text-slate-300')}>
                 {node.title}
               </span>
             </span>
           ))}
         </nav>
 
-        <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-3">
+        <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 px-4 py-3">
           <button
             type="button"
             onClick={onOpenExplorer}
             aria-label="ノート一覧を開く"
-            className="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 md:hidden"
+            className="rounded-lg p-1 text-slate-400 dark:text-slate-500 transition hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-600 dark:hover:text-slate-400 md:hidden"
           >
             <PanelLeft className="h-5 w-5" aria-hidden />
           </button>
@@ -410,21 +438,21 @@ export default function NotesTab({
             onChange={(event) => setDraftTitle(event.target.value)}
             placeholder="ノートのタイトル"
             aria-label="ノートのタイトル"
-            className="min-w-0 flex-1 rounded-lg px-2 py-1 text-lg font-bold text-slate-900 focus:bg-slate-50 focus:outline-none"
+            className="min-w-0 flex-1 rounded-lg px-2 py-1 text-lg font-bold text-slate-900 dark:text-slate-100 focus:bg-slate-50 dark:focus:bg-slate-800 focus:outline-none"
           />
 
           <button
             type="button"
             onClick={() => onRequestDelete(selected)}
             aria-label="ノートを削除"
-            className="rounded-lg p-1.5 text-slate-400 transition hover:bg-red-50 hover:text-red-600"
+            className="rounded-lg p-1.5 text-slate-400 dark:text-slate-500 transition hover:bg-red-50 dark:hover:bg-red-950 hover:text-red-600"
           >
             <Trash2 className="h-4 w-4" aria-hidden />
           </button>
         </div>
 
         {/* 問題生成は画面上部に置く。本文が長くなっても下まで探しに行かなくて済む。 */}
-        <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-4 py-2.5">
+        <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 dark:border-slate-800 px-4 py-2.5">
           <select
             value={draftCategoryId}
             onChange={(event) => setDraftCategoryId(event.target.value)}
@@ -435,7 +463,7 @@ export default function NotesTab({
                 ? '子ノートは親と同じカテゴリになります。変えるにはツリーから移動してください。'
                 : undefined
             }
-            className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm focus:border-blue-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+            className="rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
           >
             {categories.map((category) => (
               <option key={category.id} value={category.id}>
@@ -444,7 +472,7 @@ export default function NotesTab({
             ))}
           </select>
 
-          <div className="flex rounded-lg bg-slate-100 p-0.5">
+          <div className="flex rounded-lg bg-slate-100 dark:bg-slate-800 p-0.5">
             <ModeButton
               active={mode === 'edit'}
               onClick={() => setMode('edit')}
@@ -460,14 +488,14 @@ export default function NotesTab({
           </div>
 
           <div className="ml-auto flex flex-wrap items-center gap-2">
-            <label htmlFor="gen-count" className="text-sm text-slate-600">
+            <label htmlFor="gen-count" className="text-sm text-slate-600 dark:text-slate-400">
               問題数
             </label>
             <select
               id="gen-count"
               value={genCount}
               onChange={(event) => setGenCount(Number(event.target.value))}
-              className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
+              className="rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
             >
               {Array.from({ length: MAX_GENERATED_QUESTIONS }, (_, i) => i + 1).map((n) => (
                 <option key={n} value={n}>
@@ -480,7 +508,7 @@ export default function NotesTab({
               type="button"
               onClick={() => void handleGenerate()}
               disabled={isGenerating || !draftContent.trim()}
-              className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+              className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300 dark:disabled:bg-slate-700"
             >
               {isGenerating ? (
                 <>
@@ -501,7 +529,7 @@ export default function NotesTab({
               aria-live="polite"
               className={cn(
                 'text-xs whitespace-nowrap',
-                autosaveFailed ? 'text-red-600' : 'text-slate-400',
+                autosaveFailed ? 'text-red-600 dark:text-red-400' : 'text-slate-400 dark:text-slate-500',
               )}
             >
               {isSaving
@@ -518,7 +546,7 @@ export default function NotesTab({
               onClick={() => void handleSave(false)}
               disabled={!isDirty || isSaving}
               aria-label="今すぐ保存"
-              className="flex items-center gap-1.5 rounded-xl bg-slate-800 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-900 disabled:cursor-not-allowed disabled:bg-slate-300"
+              className="flex items-center gap-1.5 rounded-xl bg-slate-800 px-3 py-2 dark:bg-slate-700 dark:hover:bg-slate-600 text-sm font-semibold text-white transition hover:bg-slate-900 disabled:cursor-not-allowed disabled:bg-slate-300 dark:disabled:bg-slate-700"
             >
               {isSaving ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
@@ -531,7 +559,7 @@ export default function NotesTab({
         </div>
 
         {promptWillTruncate && (
-          <p className="border-b border-slate-100 px-4 py-2 text-xs text-slate-400">
+          <p className="border-b border-slate-100 dark:border-slate-800 px-4 py-2 text-xs text-slate-400 dark:text-slate-500">
             ※ トークン節約のため、ノート冒頭の約{MAX_PROMPT_CHARS.toLocaleString()}
             文字から重要ポイントを抽出して問題を生成します
           </p>
@@ -547,7 +575,7 @@ export default function NotesTab({
               placeholder={
                 '# 見出し\n\n- 箇条書き\n- **太字** や `コード` が使えます\n\nMarkdown で書けます。'
               }
-              className="w-full resize-y rounded-xl border border-slate-300 px-3.5 py-3 font-mono text-sm leading-relaxed focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none"
+              className="w-full resize-y rounded-xl border border-slate-300 dark:border-slate-700 px-3.5 py-3 font-mono text-sm leading-relaxed focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none"
             />
           ) : (
             <div className="min-h-96">
@@ -559,7 +587,7 @@ export default function NotesTab({
 
       {remoteChanged && (
         <div
-          className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900"
+          className="flex items-start gap-3 rounded-2xl border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950 px-5 py-4 text-sm text-amber-900 dark:text-amber-200"
           role="alert"
         >
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
@@ -572,7 +600,7 @@ export default function NotesTab({
 
       {warning && (
         <div
-          className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900"
+          className="flex items-start gap-3 rounded-2xl border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950 px-5 py-4 text-sm text-amber-900 dark:text-amber-200"
           role="alert"
         >
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
@@ -581,11 +609,11 @@ export default function NotesTab({
       )}
 
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-slate-900">
+        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
           このノートから生成された問題（{questions.length}）
         </h2>
         {questions.length === 0 ? (
-          <p className="rounded-2xl border border-dashed border-slate-300 px-5 py-10 text-center text-sm text-slate-500">
+          <p className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 px-5 py-10 text-center text-sm text-slate-500 dark:text-slate-400">
             まだ生成されていません。
           </p>
         ) : (
@@ -645,7 +673,7 @@ function ModeButton({
       onClick={onClick}
       className={cn(
         'flex items-center gap-1.5 rounded-md px-2.5 py-1 text-sm font-medium transition',
-        active ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-900',
+        active ? 'bg-white dark:bg-slate-900 text-blue-700 dark:text-blue-300 shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100',
       )}
     >
       {icon}

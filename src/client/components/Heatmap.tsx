@@ -14,12 +14,17 @@ const DESKTOP_WEEKS = 53;
 const MOBILE_WEEKS = 27;
 const MOBILE_BREAKPOINT = 768;
 
+/**
+ * 草の濃さ。**ダークでは向きを反転させる。**
+ * ライトは「薄い → 濃い青」で濃いほど学習量が多いが、暗い背景に濃い青を置くと
+ * 沈んで見えなくなる。ダークは「暗い → 明るい青」にして濃淡の意味を保つ。
+ */
 const LEVEL_CLASS: Record<HeatmapDay['level'], string> = {
-  0: 'bg-slate-100',
-  1: 'bg-blue-200',
-  2: 'bg-blue-400',
-  3: 'bg-blue-600',
-  4: 'bg-blue-800',
+  0: 'bg-slate-100 dark:bg-slate-800',
+  1: 'bg-blue-200 dark:bg-blue-900',
+  2: 'bg-blue-400 dark:bg-blue-700',
+  3: 'bg-blue-600 dark:bg-blue-500',
+  4: 'bg-blue-800 dark:bg-blue-300',
 };
 
 const WEEKDAY_LABELS = ['日', '月', '火', '水', '木', '金', '土'];
@@ -81,10 +86,10 @@ export default function Heatmap({ data }: { data: HeatmapResponse }) {
   }, [data.days, weeksToShow]);
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-sm font-semibold text-slate-900">学習の記録</h2>
-        <div className="flex items-center gap-3 text-xs text-slate-500">
+        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">学習の記録</h2>
+        <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
           <span className="flex items-center gap-1 font-medium text-orange-600">
             <Flame className="h-3.5 w-3.5" aria-hidden />
             {data.currentStreak}日連続
@@ -94,7 +99,7 @@ export default function Heatmap({ data }: { data: HeatmapResponse }) {
       </div>
 
       {/* ツールチップ代わりの固定表示。狭い画面でも見切れない。 */}
-      <p className="mt-2 h-5 text-xs text-slate-600">
+      <p className="mt-2 h-5 text-xs text-slate-600 dark:text-slate-400">
         {hovered ? formatDayLabel(hovered) : `直近 ${weeksToShow} 週間`}
       </p>
 
@@ -104,7 +109,7 @@ export default function Heatmap({ data }: { data: HeatmapResponse }) {
           {WEEKDAY_LABELS.map((label, i) => (
             <span
               key={label}
-              className="h-[11px] text-[9px] leading-[11px] text-slate-400"
+              className="h-[11px] text-[9px] leading-[11px] text-slate-400 dark:text-slate-500"
               aria-hidden
             >
               {i % 2 === 1 ? label : ''}
@@ -117,7 +122,7 @@ export default function Heatmap({ data }: { data: HeatmapResponse }) {
             {monthLabels.map(({ columnIndex, label }) => (
               <span
                 key={`${columnIndex}-${label}`}
-                className="absolute text-[9px] text-slate-400"
+                className="absolute text-[9px] text-slate-400 dark:text-slate-500"
                 style={{ left: `${(columnIndex / columns.length) * 100}%` }}
               >
                 {label}
@@ -154,7 +159,7 @@ export default function Heatmap({ data }: { data: HeatmapResponse }) {
         </div>
       </div>
 
-      <div className="mt-3 flex items-center justify-end gap-1.5 text-[10px] text-slate-400">
+      <div className="mt-3 flex items-center justify-end gap-1.5 text-[10px] text-slate-400 dark:text-slate-500">
         <span>少ない</span>
         {([0, 1, 2, 3, 4] as const).map((level) => (
           <span key={level} className={cn('h-2.5 w-2.5 rounded-[2px]', LEVEL_CLASS[level])} />

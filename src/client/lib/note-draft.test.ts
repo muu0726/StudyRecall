@@ -77,3 +77,21 @@ describe('decideRecovery', () => {
     expect(result).toEqual({ kind: 'none' });
   });
 });
+
+describe('decideRecovery: 被害を抑えるための規則', () => {
+  it('空の下書きで、中身のあるノートを上書きしない', () => {
+    // 「全部消した」を復元する価値より、本文を丸ごと失う危険のほうが大きい
+    const d = draft({ content: '' });
+    expect(decideRecovery(d, notebook({ content: '大事な本文' }))).toEqual({ kind: 'none' });
+  });
+
+  it('サーバー側も空なら、空の下書きでも矛盾しない（タイトルの変更は拾う）', () => {
+    const d = draft({ content: '', title: '書きかけのタイトル' });
+    expect(decideRecovery(d, notebook({ content: '' })).kind).toBe('restore');
+  });
+
+  it('中身のある下書きは従来どおり復元する', () => {
+    const d = draft({ content: '未送信の追記' });
+    expect(decideRecovery(d, notebook({ content: '本文' })).kind).toBe('restore');
+  });
+});

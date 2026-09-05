@@ -100,6 +100,18 @@ export function decideRecovery(
   // 保存が通った後の消し忘れなど。復元しても意味がない。
   if (sameAsServer) return { kind: 'none' };
 
+  /*
+   * 空の下書きで、中身のあるノートを上書きしない。
+   *
+   * 「全部消した」状態を復元する価値より、**本文を丸ごと失う**危険のほうが大きい。
+   * 消したつもりが残っていたらもう一度消せばよいが、消えたものは戻らない。
+   * （検証中に実際にノートが空の下書きで潰れる事象に当たったため入れた。
+   *   発生経路は特定できていないので、原因ではなく被害の側で止める。）
+   */
+  if (draft.content.trim() === '' && notebook.content.trim() !== '') {
+    return { kind: 'none' };
+  }
+
   // 退避した時点のサーバー版と、いま返ってきたサーバー版が同じなら、
   // 差分は自分がまだ送れていないぶんだけ。素直に復元してよい。
   if (draft.baseUpdatedAt === notebook.updatedAt) return { kind: 'restore', draft };

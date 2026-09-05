@@ -134,7 +134,7 @@ export default function ReviewTab({
           type="button"
           onClick={() => setIsSpeechOpen(true)}
           disabled={questions.length === 0}
-          className="flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+          className="flex items-center gap-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm font-semibold text-slate-700 dark:text-slate-300 transition hover:bg-slate-50 dark:hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
         >
           <Headphones className="h-4 w-4" aria-hidden />
           ハンズフリー再生
@@ -144,17 +144,17 @@ export default function ReviewTab({
           type="button"
           onClick={handleAnkiExport}
           disabled={questions.length === 0}
-          className="flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+          className="flex items-center gap-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm font-semibold text-slate-700 dark:text-slate-300 transition hover:bg-slate-50 dark:hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
         >
           <Download className="h-4 w-4" aria-hidden />
           この条件をAnki出力（{questions.length}）
         </button>
       </div>
 
-      <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <section className="space-y-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm">
         {/* 上段: カテゴリ */}
         <div>
-          <p className="mb-1.5 text-xs font-medium text-slate-500">カテゴリ</p>
+          <p className="mb-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">カテゴリ</p>
           <div className="flex flex-wrap gap-2">
             <FilterChip
               label="すべて"
@@ -174,10 +174,10 @@ export default function ReviewTab({
         </div>
 
         {/* 下段: ジャンルタグ。カテゴリとは AND で効く。サイドバーの選択とも連動する。 */}
-        <div className="border-t border-slate-100 pt-3">
-          <p className="mb-1.5 text-xs font-medium text-slate-500">ジャンル</p>
+        <div className="border-t border-slate-100 dark:border-slate-800 pt-3">
+          <p className="mb-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">ジャンル</p>
           {tags.length === 0 ? (
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-slate-400 dark:text-slate-500">
               まだタグがありません。問題を生成するとAIがジャンルを付けます。
             </p>
           ) : (
@@ -195,20 +195,20 @@ export default function ReviewTab({
           )}
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 dark:border-slate-800 pt-3">
           <div className="flex flex-wrap items-center gap-3">
             {/* 出題範囲。既定は期限が来たものだけ。 */}
-            <div className="flex rounded-lg bg-slate-100 p-0.5">
+            <div className="flex rounded-lg bg-slate-100 dark:bg-slate-800 p-0.5">
               <ScopeButton active={dueOnly} onClick={() => setDueOnly(true)} label="今日の復習" />
               <ScopeButton active={!dueOnly} onClick={() => setDueOnly(false)} label="すべて" />
             </div>
 
-            <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
               <input
                 type="checkbox"
                 checked={unmasteredOnly}
                 onChange={(event) => setUnmasteredOnly(event.target.checked)}
-                className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                className="h-4 w-4 rounded border-slate-300 dark:border-slate-700 text-blue-600 dark:text-blue-400 focus:ring-blue-500"
               />
               未習得（まだ不安）のみ
             </label>
@@ -217,7 +217,7 @@ export default function ReviewTab({
           <button
             type="button"
             onClick={() => void load()}
-            className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+            className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm text-slate-500 dark:text-slate-400 transition hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-800 dark:hover:text-slate-200"
           >
             <RefreshCw className="h-3.5 w-3.5" aria-hidden />
             再読み込み
@@ -226,58 +226,58 @@ export default function ReviewTab({
       </section>
 
       {error && (
-        <p className="rounded-2xl bg-red-50 px-5 py-4 text-sm text-red-700" role="alert">
+        <p className="rounded-2xl bg-red-50 dark:bg-red-950 px-5 py-4 text-sm text-red-700 dark:text-red-300" role="alert">
           {error}
         </p>
       )}
 
       {isLoading ? (
-        <div className="flex items-center justify-center gap-2 py-16 text-sm text-slate-500">
+        <div className="flex items-center justify-center gap-2 py-16 text-sm text-slate-500 dark:text-slate-400">
           <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
           読み込み中…
         </div>
       ) : questions.length === 0 ? (
         dueOnly ? (
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-12 text-center">
-            <PartyPopper className="mx-auto h-8 w-8 text-emerald-600" aria-hidden />
-            <p className="mt-3 text-base font-semibold text-emerald-900">
+          <div className="rounded-2xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950 px-5 py-12 text-center">
+            <PartyPopper className="mx-auto h-8 w-8 text-emerald-600 dark:text-emerald-400" aria-hidden />
+            <p className="mt-3 text-base font-semibold text-emerald-900 dark:text-emerald-200">
               今日の復習は終わりました
             </p>
             {nextDueAt ? (
-              <p className="mt-1.5 flex items-center justify-center gap-1.5 text-sm text-emerald-800">
+              <p className="mt-1.5 flex items-center justify-center gap-1.5 text-sm text-emerald-800 dark:text-emerald-300">
                 <CalendarClock className="h-4 w-4" aria-hidden />
                 次の出題は {formatDate(nextDueAt)}
                 {daysUntil(nextDueAt, new Date()) > 0 &&
                   `（${daysUntil(nextDueAt, new Date())}日後）`}
               </p>
             ) : (
-              <p className="mt-1.5 text-sm text-emerald-800">
+              <p className="mt-1.5 text-sm text-emerald-800 dark:text-emerald-300">
                 問題がまだありません。タイマー・ノート・「用語を追加」から作れます。
               </p>
             )}
             <button
               type="button"
               onClick={() => setDueOnly(false)}
-              className="mt-5 rounded-xl border border-emerald-300 bg-white px-5 py-2.5 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-50"
+              className="mt-5 rounded-xl border border-emerald-300 dark:border-emerald-800 bg-white dark:bg-slate-900 px-5 py-2.5 text-sm font-semibold text-emerald-800 dark:text-emerald-300 transition hover:bg-emerald-50 dark:hover:bg-emerald-950"
             >
               先に進んで全部やる
             </button>
           </div>
         ) : (
-          <p className="rounded-2xl border border-dashed border-slate-300 px-5 py-16 text-center text-sm text-slate-500">
+          <p className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 px-5 py-16 text-center text-sm text-slate-500 dark:text-slate-400">
             該当する問題がありません。タイマー・ノート・サイドバーの「用語を追加」から問題を作れます。
           </p>
         )
       ) : current ? (
         <>
           <div className="flex items-center gap-3">
-            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-200">
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
               <div
                 className="h-full rounded-full bg-blue-600 transition-all"
                 style={{ width: `${(index / questions.length) * 100}%` }}
               />
             </div>
-            <span className="text-sm font-medium text-slate-500 tabular-nums">
+            <span className="text-sm font-medium text-slate-500 dark:text-slate-400 tabular-nums">
               {index + 1} / {questions.length}
             </span>
           </div>
@@ -290,9 +290,9 @@ export default function ReviewTab({
           />
         </>
       ) : (
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-12 text-center">
-          <PartyPopper className="mx-auto h-8 w-8 text-emerald-600" aria-hidden />
-          <p className="mt-3 text-base font-semibold text-emerald-900">
+        <div className="rounded-2xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950 px-5 py-12 text-center">
+          <PartyPopper className="mx-auto h-8 w-8 text-emerald-600 dark:text-emerald-400" aria-hidden />
+          <p className="mt-3 text-base font-semibold text-emerald-900 dark:text-emerald-200">
             {questions.length} 問すべて確認しました
           </p>
           <button
@@ -330,7 +330,7 @@ function ScopeButton({
       aria-pressed={active}
       className={cn(
         'rounded-md px-3 py-1 text-sm font-medium transition',
-        active ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-900',
+        active ? 'bg-white dark:bg-slate-900 text-blue-700 dark:text-blue-300 shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100',
       )}
     >
       {label}
@@ -357,7 +357,7 @@ function FilterChip({
         'flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition',
         active
           ? 'bg-blue-600 text-white'
-          : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900',
+          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-slate-100',
       )}
     >
       {color && (

@@ -217,16 +217,16 @@ export default function App() {
 
         {/* 右側だけがスクロールする。サイドバーは常に見えたままになる。 */}
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="sticky top-0 z-20 flex shrink-0 items-center gap-2 border-b border-slate-200 bg-white/90 px-4 py-3 backdrop-blur">
+          <header className="sticky top-0 z-20 flex shrink-0 items-center gap-2 border-b border-slate-200 dark:border-slate-800 bg-white/90 px-4 py-3 backdrop-blur dark:bg-slate-950/90">
             <button
               type="button"
               onClick={() => setDrawerOpen(true)}
               aria-label="メニューを開く"
-              className="rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 md:hidden"
+              className="rounded-lg p-1.5 text-slate-500 dark:text-slate-400 transition hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 md:hidden"
             >
               <Menu className="h-5 w-5" aria-hidden />
             </button>
-            <h1 className="min-w-0 truncate text-base font-bold text-slate-900">
+            <h1 className="min-w-0 truncate text-base font-bold text-slate-900 dark:text-slate-100">
               {currentView.title}
             </h1>
           </header>
@@ -234,13 +234,13 @@ export default function App() {
           <main className="min-h-0 flex-1 overflow-y-auto">
             <div className="mx-auto max-w-6xl px-4 py-6">
               {(error ?? notes.error) && (
-                <p className="mb-6 rounded-2xl bg-red-50 px-5 py-4 text-sm text-red-700" role="alert">
+                <p className="mb-6 rounded-2xl bg-red-50 dark:bg-red-950 px-5 py-4 text-sm text-red-700 dark:text-red-300" role="alert">
                   {error ?? notes.error}
                 </p>
               )}
 
               {isLoading ? (
-                <div className="flex items-center justify-center gap-2 py-20 text-sm text-slate-500">
+                <div className="flex items-center justify-center gap-2 py-20 text-sm text-slate-500 dark:text-slate-400">
                   <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
                   読み込み中…
                 </div>
@@ -288,14 +288,14 @@ export default function App() {
         {/* ツリーの ⋯ メニュー。モバイルでも確実に移動・削除できる導線。 */}
         {menuFor && (
           <div
-            className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/30 p-4 sm:items-center"
+            className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/30 dark:bg-slate-950/60 p-4 sm:items-center"
             onClick={() => setMenuFor(null)}
           >
             <div
-              className="w-full max-w-xs overflow-hidden rounded-2xl bg-white shadow-xl"
+              className="w-full max-w-xs overflow-hidden rounded-2xl bg-white dark:bg-slate-900 shadow-xl"
               onClick={(event) => event.stopPropagation()}
             >
-              <p className="truncate border-b border-slate-100 px-4 py-3 text-sm font-semibold text-slate-900">
+              <p className="truncate border-b border-slate-100 dark:border-slate-800 px-4 py-3 text-sm font-semibold text-slate-900 dark:text-slate-100">
                 {menuFor.title}
               </p>
               <button
@@ -304,7 +304,7 @@ export default function App() {
                   setMoveTarget(menuFor);
                   setMenuFor(null);
                 }}
-                className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-slate-700 transition hover:bg-slate-50"
+                className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-slate-700 dark:text-slate-300 transition hover:bg-slate-50 dark:hover:bg-slate-800"
               >
                 <FolderTree className="h-4 w-4" aria-hidden />
                 移動する
@@ -315,7 +315,7 @@ export default function App() {
                   setDeleteTarget(menuFor);
                   setMenuFor(null);
                 }}
-                className="flex w-full items-center gap-2 border-t border-slate-100 px-4 py-3 text-left text-sm text-red-600 transition hover:bg-red-50"
+                className="flex w-full items-center gap-2 border-t border-slate-100 dark:border-slate-800 px-4 py-3 text-left text-sm text-red-600 dark:text-red-400 transition hover:bg-red-50 dark:hover:bg-red-950"
               >
                 <Trash2 className="h-4 w-4" aria-hidden />
                 削除する

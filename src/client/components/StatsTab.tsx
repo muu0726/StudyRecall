@@ -34,13 +34,13 @@ export default function StatsTab({ data }: Props) {
           icon={<Clock className="h-5 w-5" aria-hidden />}
           label="本日の学習時間"
           value={formatMinutes(stats.todayMinutes)}
-          accent="bg-blue-50 text-blue-700"
+          accent="bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300"
         />
         <SummaryCard
           icon={<CalendarDays className="h-5 w-5" aria-hidden />}
           label="今週の学習時間"
           value={formatMinutes(stats.weekMinutes)}
-          accent="bg-sky-50 text-sky-700"
+          accent="bg-sky-50 dark:bg-sky-950 text-sky-700 dark:text-sky-300"
         />
       </section>
 
@@ -73,28 +73,28 @@ export default function StatsTab({ data }: Props) {
       </section>
 
       {stats.quiz.dueNow === 0 && stats.quiz.nextDueAt && (
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-slate-500 dark:text-slate-400">
           次の出題は {formatDate(stats.quiz.nextDueAt)}
           （{daysUntil(stats.quiz.nextDueAt, new Date())}日後）。
           間隔は正解するほど伸びます。
         </p>
       )}
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-sm font-semibold text-slate-900">科目別の学習時間</h2>
+      <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm">
+        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">科目別の学習時間</h2>
         {stats.byCategory.length === 0 ? (
-          <p className="mt-4 text-sm text-slate-500">カテゴリがまだありません。</p>
+          <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">カテゴリがまだありません。</p>
         ) : (
           <ul className="mt-4 space-y-3">
             {stats.byCategory.map((category) => (
               <li key={category.categoryId}>
                 <div className="flex items-baseline justify-between text-sm">
-                  <span className="font-medium text-slate-700">{category.name}</span>
-                  <span className="text-slate-500 tabular-nums">
+                  <span className="font-medium text-slate-700 dark:text-slate-300">{category.name}</span>
+                  <span className="text-slate-500 dark:text-slate-400 tabular-nums">
                     {formatMinutes(category.totalMinutes)}
                   </span>
                 </div>
-                <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-100">
+                <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
                   <div
                     className="h-full rounded-full transition-all"
                     style={{
@@ -109,12 +109,12 @@ export default function StatsTab({ data }: Props) {
         )}
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-sm font-semibold text-slate-900">最近の学習記録</h2>
+      <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm">
+        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">最近の学習記録</h2>
         {logs.length === 0 ? (
-          <p className="mt-4 text-sm text-slate-500">まだ記録がありません。</p>
+          <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">まだ記録がありません。</p>
         ) : (
-          <ul className="mt-3 divide-y divide-slate-100">
+          <ul className="mt-3 divide-y divide-slate-100 dark:divide-slate-800">
             {logs.slice(0, 10).map((log) => (
               <li key={log.id} className="flex items-center gap-3 py-3">
                 <span
@@ -123,16 +123,16 @@ export default function StatsTab({ data }: Props) {
                   aria-hidden
                 />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-slate-800">{log.categoryName}</p>
+                  <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{log.categoryName}</p>
                   {log.notes && (
-                    <p className="truncate text-xs text-slate-500">{log.notes.split('\n')[0]}</p>
+                    <p className="truncate text-xs text-slate-500 dark:text-slate-400">{log.notes.split('\n')[0]}</p>
                   )}
                 </div>
                 <div className="shrink-0 text-right">
-                  <p className="text-sm font-semibold text-slate-700 tabular-nums">
+                  <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 tabular-nums">
                     {formatMinutes(log.durationMinutes)}
                   </p>
-                  <p className="text-xs text-slate-400">{formatDateTime(log.createdAt)}</p>
+                  <p className="text-xs text-slate-400 dark:text-slate-500">{formatDateTime(log.createdAt)}</p>
                 </div>
               </li>
             ))}
@@ -155,10 +155,10 @@ function SummaryCard({
   accent: string;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm">
       <div className={cn('inline-flex rounded-xl p-2', accent)}>{icon}</div>
-      <p className="mt-3 text-sm text-slate-500">{label}</p>
-      <p className="mt-1 text-3xl font-bold text-slate-900">{value}</p>
+      <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">{label}</p>
+      <p className="mt-1 text-3xl font-bold text-slate-900 dark:text-slate-100">{value}</p>
     </div>
   );
 }
@@ -179,12 +179,12 @@ function Badge({
     <div
       className={cn(
         'flex items-center gap-2.5 rounded-full border px-4 py-2 shadow-sm',
-        highlight ? 'border-blue-200 bg-blue-50' : 'border-slate-200 bg-white',
+        highlight ? 'border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950' : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900',
       )}
     >
-      <span className={highlight ? 'text-blue-600' : 'text-slate-400'}>{icon}</span>
-      <span className={cn('text-sm', highlight ? 'text-blue-800' : 'text-slate-500')}>{label}</span>
-      <span className={cn('text-sm font-bold', highlight ? 'text-blue-900' : 'text-slate-900')}>
+      <span className={highlight ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'}>{icon}</span>
+      <span className={cn('text-sm', highlight ? 'text-blue-800 dark:text-blue-300' : 'text-slate-500 dark:text-slate-400')}>{label}</span>
+      <span className={cn('text-sm font-bold', highlight ? 'text-blue-900 dark:text-blue-200' : 'text-slate-900 dark:text-slate-100')}>
         {value}
       </span>
     </div>

@@ -59,7 +59,7 @@ export default function FloatingMiniTimer({ visible }: Props) {
       </span>
 
       {/* 狭い画面ではラベルを畳んで時間だけにする */}
-      <span className="hidden items-center gap-1 text-xs font-medium text-slate-500 sm:flex dark:text-slate-400">
+      <span className="hidden items-center gap-1 text-xs font-medium text-slate-500 dark:text-slate-400 sm:flex">
         {pomodoro ? (
           pomodoro.phase === 'work' ? (
             <Timer className="h-3 w-3" aria-hidden />
@@ -72,7 +72,7 @@ export default function FloatingMiniTimer({ visible }: Props) {
         {label}
       </span>
 
-      <span className="font-mono text-sm font-bold text-slate-900 tabular-nums dark:text-slate-100">
+      <span className="font-mono text-sm font-bold text-slate-900 dark:text-slate-100 tabular-nums">
         {formatClock(timer.elapsedMs)}
       </span>
 
@@ -83,7 +83,7 @@ export default function FloatingMiniTimer({ visible }: Props) {
           disabled={timer.isSyncing}
           aria-label={timer.isRunning ? '一時停止' : '再開'}
           title={timer.isRunning ? '一時停止' : '再開'}
-          className="rounded-full p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 disabled:opacity-40 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+          className="rounded-full p-1.5 text-slate-500 dark:text-slate-400 transition hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 disabled:opacity-40"
         >
           {timer.isSyncing ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
