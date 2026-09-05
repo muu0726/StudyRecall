@@ -6,6 +6,7 @@ import { toNotebookDto, toQuizQuestionDto } from '../lib/dto';
 import { newId } from '../lib/ids';
 import { clampQuestionCount, generateQuizFromNotebook } from '../lib/gemini';
 import { canMove, collectSubtreeIds } from '../../shared/note-tree';
+import { buildPromptSource } from '../../shared/note-sanitize';
 import {
   DEFAULT_GENERATED_QUESTIONS,
   type CreateNotebookRequest,
@@ -380,10 +381,21 @@ export const notebooksRoute = new Hono<AppEnv>()
       return c.json({ error: 'ノートの本文が空です' }, 400);
     }
 
+    // 画像・コードブロックを落として 2,500 文字で切る。
+    // 無料枠だと長いノートがそのままレート制限（429）に効くため。
+    // 空文字の判定は上（サニタイズ前）で済ませてあるので、ここでは挙動が変わらない。
+    const source = buildPromptSource(notebook.content);
+    if (source.truncated) {
+      // 内容は出さない。切ったという事実と長さだけ残す。
+      console.log(
+        `[generate-quiz] 本文を切り詰めました notebook=${notebook.id} ${notebook.content.length} -> ${source.text.length} 文字`,
+      );
+    }
+
     const { questions: generated, warning } = await generateQuizFromNotebook(
       c.env.GEMINI_API_KEY,
       notebook.title,
-      notebook.content,
+      source.text,
       notebook.categoryName,
       count,
     );

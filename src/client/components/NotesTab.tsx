@@ -14,6 +14,7 @@ import type { CategoryDTO, NotebookDTO, QuizQuestionDTO } from '../../shared/typ
 import { DEFAULT_GENERATED_QUESTIONS, MAX_GENERATED_QUESTIONS } from '../../shared/types';
 import { api, asNotebookConflict } from '../lib/api';
 import { getAncestorPath } from '../../shared/note-tree';
+import { MAX_PROMPT_CHARS, willTruncate } from '../../shared/note-sanitize';
 import { submitQuizResultResilient } from '../lib/offline-queue';
 import { cn } from '../lib/cn';
 import { useRevalidateOnFocus } from '../hooks/useRevalidateOnFocus';
@@ -88,6 +89,13 @@ export default function NotesTab({
   const isBodyDirty =
     selected !== null && (draftTitle !== selected.title || draftContent !== selected.content);
   const isDirty = isBodyDirty || (selected !== null && draftCategoryId !== selected.categoryId);
+
+  /**
+   * 送信時に本文が切り詰められるか。**サーバーと同じ関数で判定する**ので、
+   * 「注記が出ていないのに切られる」というズレが起きない。
+   * 下書きに対して見るので、書いている最中に閾値を超えた時点で現れる。
+   */
+  const promptWillTruncate = willTruncate(draftContent);
 
   // 開いた瞬間の一覧だけを読みたいので ref 経由にする（一覧の更新で下書きを作り直さない）
   const notebooksRef = useRef(notebooks);
@@ -521,6 +529,13 @@ export default function NotesTab({
             </button>
           </div>
         </div>
+
+        {promptWillTruncate && (
+          <p className="border-b border-slate-100 px-4 py-2 text-xs text-slate-400">
+            ※ トークン節約のため、ノート冒頭の約{MAX_PROMPT_CHARS.toLocaleString()}
+            文字から重要ポイントを抽出して問題を生成します
+          </p>
+        )}
 
         <div className="px-4 py-4">
           {mode === 'edit' ? (
