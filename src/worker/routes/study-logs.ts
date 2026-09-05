@@ -47,16 +47,25 @@ async function buildStats(db: Db, userId: string): Promise<StudyStats> {
     .groupBy(categories.id, categories.name, categories.color)
     .orderBy(desc(sql`coalesce(sum(${studyLogs.durationMinutes}), 0)`));
 
+  const nowMs = Date.now();
+  // due_at は秒精度の unixepoch で入っている（drizzle の timestamp モード）
+  const nowSec = Math.floor(nowMs / 1000);
+
   const [quiz] = await db
     .select({
       total: sql<number>`count(*)`,
       mastered: sql<number>`coalesce(sum(case when ${quizQuestions.isMastered} = 1 then 1 else 0 end), 0)`,
+      // 未学習（due_at が NULL）も出題対象に数える
+      dueNow: sql<number>`coalesce(sum(case when ${quizQuestions.dueAt} is null or ${quizQuestions.dueAt} <= ${nowSec} then 1 else 0 end), 0)`,
+      // まだ来ていないもののうち最も早い出題日
+      nextDueSec: sql<number | null>`min(case when ${quizQuestions.dueAt} > ${nowSec} then ${quizQuestions.dueAt} else null end)`,
     })
     .from(quizQuestions)
     .where(eq(quizQuestions.userId, userId));
 
   const quizTotal = Number(quiz?.total ?? 0);
   const quizMastered = Number(quiz?.mastered ?? 0);
+  const nextDueSec = quiz?.nextDueSec ?? null;
 
   return {
     todayMinutes: Number(duration?.today ?? 0),
@@ -67,6 +76,8 @@ async function buildStats(db: Db, userId: string): Promise<StudyStats> {
       total: quizTotal,
       mastered: quizMastered,
       masteryRate: quizTotal === 0 ? 0 : quizMastered / quizTotal,
+      dueNow: Number(quiz?.dueNow ?? 0),
+      nextDueAt: nextDueSec === null ? null : new Date(Number(nextDueSec) * 1000).toISOString(),
     },
   };
 }

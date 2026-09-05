@@ -97,9 +97,11 @@ export default function FlashCard({ question, onAnswer, disabled = false }: Prop
         </div>
       )}
 
-      <div className="flex gap-4 border-t border-slate-100 px-5 py-2 text-xs text-slate-400">
+      <div className="flex flex-wrap gap-4 border-t border-slate-100 px-5 py-2 text-xs text-slate-400">
         <span>わかった {question.correctCount}回</span>
         <span>まだ不安 {question.incorrectCount}回</span>
+        {/* いまの出題間隔。伸びているほど定着している。 */}
+        {question.intervalDays > 0 && <span>出題間隔 {question.intervalDays}日</span>}
       </div>
     </div>
   );

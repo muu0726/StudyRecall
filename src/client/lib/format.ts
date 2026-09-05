@@ -26,3 +26,12 @@ export function formatDateTime(iso: string): string {
     minute: '2-digit',
   });
 }
+
+/** ISO 文字列を「9月6日」形式に整形する（JST 表示） */
+export function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('ja-JP', {
+    timeZone: 'Asia/Tokyo',
+    month: 'long',
+    day: 'numeric',
+  });
+}

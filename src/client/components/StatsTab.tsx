@@ -1,10 +1,11 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { CalendarDays, Clock, Layers, Trophy } from 'lucide-react';
+import { CalendarClock, CalendarDays, Clock, Layers, Trophy } from 'lucide-react';
 import type { StudyLogsResponse } from '../../shared/types';
 import { cn } from '../lib/cn';
 import type { HeatmapResponse } from '../../shared/types';
 import { api } from '../lib/api';
-import { formatDateTime, formatMinutes } from '../lib/format';
+import { formatDate, formatDateTime, formatMinutes } from '../lib/format';
+import { daysUntil } from '../../shared/srs';
 import Heatmap from './Heatmap';
 
 interface Props {
@@ -56,7 +57,28 @@ export default function StatsTab({ data }: Props) {
           label="習得率"
           value={`${masteryPercent}%（${stats.quiz.mastered}/${stats.quiz.total}）`}
         />
+        {/* 間隔反復の予定。今日やるべき量が一目で分かるようにする。 */}
+        <Badge
+          icon={<CalendarClock className="h-4 w-4" aria-hidden />}
+          label="今日の復習"
+          value={
+            stats.quiz.dueNow > 0
+              ? `${stats.quiz.dueNow} 問`
+              : stats.quiz.nextDueAt
+                ? `なし（次は ${formatDate(stats.quiz.nextDueAt)}）`
+                : 'なし'
+          }
+          highlight={stats.quiz.dueNow > 0}
+        />
       </section>
+
+      {stats.quiz.dueNow === 0 && stats.quiz.nextDueAt && (
+        <p className="text-xs text-slate-500">
+          次の出題は {formatDate(stats.quiz.nextDueAt)}
+          （{daysUntil(stats.quiz.nextDueAt, new Date())}日後）。
+          間隔は正解するほど伸びます。
+        </p>
+      )}
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="text-sm font-semibold text-slate-900">科目別の学習時間</h2>
@@ -141,12 +163,30 @@ function SummaryCard({
   );
 }
 
-function Badge({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
+function Badge({
+  icon,
+  label,
+  value,
+  highlight = false,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+  /** 今すぐ手を動かすべきものだけ色を付ける */
+  highlight?: boolean;
+}) {
   return (
-    <div className="flex items-center gap-2.5 rounded-full border border-slate-200 bg-white px-4 py-2 shadow-sm">
-      <span className="text-slate-400">{icon}</span>
-      <span className="text-sm text-slate-500">{label}</span>
-      <span className="text-sm font-bold text-slate-900">{value}</span>
+    <div
+      className={cn(
+        'flex items-center gap-2.5 rounded-full border px-4 py-2 shadow-sm',
+        highlight ? 'border-blue-200 bg-blue-50' : 'border-slate-200 bg-white',
+      )}
+    >
+      <span className={highlight ? 'text-blue-600' : 'text-slate-400'}>{icon}</span>
+      <span className={cn('text-sm', highlight ? 'text-blue-800' : 'text-slate-500')}>{label}</span>
+      <span className={cn('text-sm font-bold', highlight ? 'text-blue-900' : 'text-slate-900')}>
+        {value}
+      </span>
     </div>
   );
 }

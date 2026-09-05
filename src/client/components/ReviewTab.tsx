@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Download, Headphones, Loader2, PartyPopper, RefreshCw } from 'lucide-react';
+import { CalendarClock, Download, Headphones, Loader2, PartyPopper, RefreshCw } from 'lucide-react';
 import type { CategoryDTO, QuizQuestionDTO, TagCount } from '../../shared/types';
 import { api } from '../lib/api';
 import { submitQuizResultResilient } from '../lib/offline-queue';
@@ -8,6 +8,8 @@ import { useRevalidateOnFocus } from '../hooks/useRevalidateOnFocus';
 import { useToast } from './Toast';
 import { exportAnkiCsv, todayStamp } from '../lib/export';
 import { celebrateReviewComplete } from '../lib/celebrate';
+import { daysUntil } from '../../shared/srs';
+import { formatDate } from '../lib/format';
 import FlashCard from './FlashCard';
 import SpeechPlayer from './SpeechPlayer';
 
@@ -22,6 +24,8 @@ interface Props {
   onTagChange: (tag: string) => void;
   /** 用語追加などの外部イベントで一覧を取り直すための合図 */
   reloadToken: number;
+  /** 期限がまだ来ていない問題のうち、最も早い出題日。「次は◯日後」の表示に使う。 */
+  nextDueAt: string | null;
   onAnswered: () => void;
 }
 
@@ -33,10 +37,16 @@ export default function ReviewTab({
   tag,
   onTagChange,
   reloadToken,
+  nextDueAt,
   onAnswered,
 }: Props) {
   const { showToast } = useToast();
   const [unmasteredOnly, setUnmasteredOnly] = useState(false);
+  /**
+   * 既定は「今日の復習」。間隔反復の主目的は、期限が来たものだけを出すこと。
+   * 全部を出すと、覚えたてのカードばかり何度も回って先に進まない。
+   */
+  const [dueOnly, setDueOnly] = useState(true);
   const [questions, setQuestions] = useState<QuizQuestionDTO[]>([]);
   const [index, setIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -54,6 +64,7 @@ export default function ReviewTab({
         categoryId: categoryId || undefined,
         tag: tag || undefined,
         unmasteredOnly,
+        dueOnly,
       });
       setQuestions(quizzes.questions);
       setIndex(0);
@@ -63,7 +74,7 @@ export default function ReviewTab({
     } finally {
       setIsLoading(false);
     }
-  }, [categoryId, tag, unmasteredOnly]);
+  }, [categoryId, tag, unmasteredOnly, dueOnly]);
 
   useEffect(() => {
     void load();
@@ -184,16 +195,24 @@ export default function ReviewTab({
           )}
         </div>
 
-        <div className="flex items-center justify-between border-t border-slate-100 pt-3">
-          <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
-            <input
-              type="checkbox"
-              checked={unmasteredOnly}
-              onChange={(event) => setUnmasteredOnly(event.target.checked)}
-              className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-            />
-            未習得（まだ不安）のみ
-          </label>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
+          <div className="flex flex-wrap items-center gap-3">
+            {/* 出題範囲。既定は期限が来たものだけ。 */}
+            <div className="flex rounded-lg bg-slate-100 p-0.5">
+              <ScopeButton active={dueOnly} onClick={() => setDueOnly(true)} label="今日の復習" />
+              <ScopeButton active={!dueOnly} onClick={() => setDueOnly(false)} label="すべて" />
+            </div>
+
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                checked={unmasteredOnly}
+                onChange={(event) => setUnmasteredOnly(event.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+              />
+              未習得（まだ不安）のみ
+            </label>
+          </div>
 
           <button
             type="button"
@@ -218,9 +237,37 @@ export default function ReviewTab({
           読み込み中…
         </div>
       ) : questions.length === 0 ? (
-        <p className="rounded-2xl border border-dashed border-slate-300 px-5 py-16 text-center text-sm text-slate-500">
-          該当する問題がありません。タイマー・ノート・サイドバーの「用語を追加」から問題を作れます。
-        </p>
+        dueOnly ? (
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-12 text-center">
+            <PartyPopper className="mx-auto h-8 w-8 text-emerald-600" aria-hidden />
+            <p className="mt-3 text-base font-semibold text-emerald-900">
+              今日の復習は終わりました
+            </p>
+            {nextDueAt ? (
+              <p className="mt-1.5 flex items-center justify-center gap-1.5 text-sm text-emerald-800">
+                <CalendarClock className="h-4 w-4" aria-hidden />
+                次の出題は {formatDate(nextDueAt)}
+                {daysUntil(nextDueAt, new Date()) > 0 &&
+                  `（${daysUntil(nextDueAt, new Date())}日後）`}
+              </p>
+            ) : (
+              <p className="mt-1.5 text-sm text-emerald-800">
+                問題がまだありません。タイマー・ノート・「用語を追加」から作れます。
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={() => setDueOnly(false)}
+              className="mt-5 rounded-xl border border-emerald-300 bg-white px-5 py-2.5 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-50"
+            >
+              先に進んで全部やる
+            </button>
+          </div>
+        ) : (
+          <p className="rounded-2xl border border-dashed border-slate-300 px-5 py-16 text-center text-sm text-slate-500">
+            該当する問題がありません。タイマー・ノート・サイドバーの「用語を追加」から問題を作れます。
+          </p>
+        )
       ) : current ? (
         <>
           <div className="flex items-center gap-3">
@@ -264,6 +311,30 @@ export default function ReviewTab({
         onClose={() => setIsSpeechOpen(false)}
       />
     </div>
+  );
+}
+
+function ScopeButton({
+  active,
+  onClick,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn(
+        'rounded-md px-3 py-1 text-sm font-medium transition',
+        active ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-900',
+      )}
+    >
+      {label}
+    </button>
   );
 }
 

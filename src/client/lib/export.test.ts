@@ -22,6 +22,8 @@ const question = (overrides: Partial<QuizQuestionDTO> = {}): QuizQuestionDTO => 
   correctCount: 0,
   incorrectCount: 0,
   lastAnsweredAt: null,
+  dueAt: null,
+  intervalDays: 0,
   createdAt: '2026-09-05T00:00:00.000Z',
   ...overrides,
 });

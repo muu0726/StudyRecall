@@ -103,6 +103,8 @@ export function toQuizQuestionDto(row: QuizQuestionRow): QuizQuestionDTO {
     correctCount: row.correctCount,
     incorrectCount: row.incorrectCount,
     lastAnsweredAt: toIso(row.lastAnsweredAt),
+    dueAt: toIso(row.dueAt),
+    intervalDays: row.intervalDays,
     createdAt: isoOrEpoch(row.createdAt),
   };
 }

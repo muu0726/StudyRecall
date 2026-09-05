@@ -84,6 +84,8 @@ export interface QuizFilters {
   notebookId?: string;
   tag?: string;
   unmasteredOnly?: boolean;
+  /** 出題期限が来ているものだけ（未学習を含む） */
+  dueOnly?: boolean;
 }
 
 export const api = {
@@ -137,6 +139,7 @@ export const api = {
     if (options.notebookId) params.set('notebookId', options.notebookId);
     if (options.tag) params.set('tag', options.tag);
     if (options.unmasteredOnly) params.set('unmasteredOnly', 'true');
+    if (options.dueOnly) params.set('dueOnly', 'true');
     const query = params.toString();
     return request<QuizzesResponse>(`/api/quizzes${query ? `?${query}` : ''}`);
   },

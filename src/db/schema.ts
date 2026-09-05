@@ -253,6 +253,19 @@ export const quizQuestions = sqliteTable(
     correctCount: integer('correct_count').notNull().default(0),
     incorrectCount: integer('incorrect_count').notNull().default(0),
     lastAnsweredAt: integer('last_answered_at', { mode: 'timestamp' }),
+
+    // --- 間隔反復（SRS）。詳細は src/shared/srs.ts ---
+    /** 次に出題してよくなる時刻。null は未学習で、常に出題対象。 */
+    dueAt: integer('due_at', { mode: 'timestamp' }),
+    /** 現在の間隔（日）。0 は「まだ間隔がついていない」。 */
+    intervalDays: integer('interval_days').notNull().default(0),
+    /**
+     * 難易度係数を 100 倍した整数（250 = 2.50）。
+     * REAL で持つと丸めが環境で変わり、同じ操作から違う間隔が出る余地が残る。
+     */
+    easeFactor: integer('ease_factor').notNull().default(250),
+    /** 連続正解回数。間違えると 0 に戻る。 */
+    repetitions: integer('repetitions').notNull().default(0),
     createdAt: integer('created_at', { mode: 'timestamp' })
       .notNull()
       .$defaultFn(() => new Date()),
@@ -265,6 +278,8 @@ export const quizQuestions = sqliteTable(
     index('quiz_questions_user_answered_idx').on(t.userId, t.lastAnsweredAt),
     index('quiz_questions_study_log_idx').on(t.studyLogId),
     index('quiz_questions_notebook_idx').on(t.notebookId),
+    // 「今日の復習」= dueAt が来ているものの絞り込み
+    index('quiz_questions_user_due_idx').on(t.userId, t.dueAt),
   ],
 );
 

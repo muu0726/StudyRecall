@@ -267,6 +267,7 @@ export default function App() {
                     tag={reviewTag}
                     onTagChange={setReviewTag}
                     reloadToken={quizReloadToken}
+                    nextDueAt={logsData?.stats.quiz.nextDueAt ?? null}
                     onAnswered={() => void refresh()}
                   />
                 )}

@@ -73,6 +73,10 @@ export interface QuizQuestionDTO {
   correctCount: number;
   incorrectCount: number;
   lastAnsweredAt: string | null;
+  /** 次に出題してよくなる時刻。null は未学習で常に出題対象。→ src/shared/srs.ts */
+  dueAt: string | null;
+  /** 現在の出題間隔（日） */
+  intervalDays: number;
   createdAt: string;
 }
 
@@ -100,6 +104,10 @@ export interface StudyStats {
     mastered: number;
     /** 0〜1。total が 0 のときは 0 */
     masteryRate: number;
+    /** いま出題対象になっている問題数（未学習を含む） */
+    dueNow: number;
+    /** まだ期限が来ていないもののうち、最も早い出題日。無ければ null */
+    nextDueAt: string | null;
   };
 }
 

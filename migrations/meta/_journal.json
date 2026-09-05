@@ -43,6 +43,13 @@
       "when": 1788533337542,
       "tag": "0007_notebook_tree",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1788621598981,
+      "tag": "0008_black_the_stranger",
+      "breakpoints": true
     }
   ]
 }
