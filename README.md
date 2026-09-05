@@ -54,7 +54,69 @@ http://localhost:5173 で起動する。Vite と Workers ランタイム（worke
 4. 発行されたクライアント ID / シークレットを `.dev.vars` に設定する
 
 未設定のあいだはログイン画面の Google ボタンが無効になり、代わりに**開発用モックログイン**が使える
-（`wrangler.jsonc` の `vars.ALLOW_DEV_LOGIN` が `"true"` のときだけ表示される。本番デプロイ時は `"false"` にすること）。
+（`.dev.vars` の `ALLOW_DEV_LOGIN=true` のときだけ表示される）。
+
+> **`ALLOW_DEV_LOGIN` は `wrangler.jsonc` に書かない。** このファイルは Workers Builds が
+> 本番ビルドでもそのまま使うため、ここに `"true"` を置くとモックログインが本番へ漏れる。
+> `.dev.vars`（git 管理外）にだけ置き、本番は**未定義＝無効**という安全側の既定にしている。
+> `"false"` と書き換えないのは、`wrangler types` が vars をリテラル型で吐くせいで
+> `env.ALLOW_DEV_LOGIN === 'true'` が「重ならない型の比較」で型エラーになるため。
+
+## デプロイ
+
+本番: **https://study-recall.u-muta180726.workers.dev**（Cloudflare Workers + リモート D1 / APAC）
+
+初回だけ次の順に行う。**順番に意味がある** — Google の設定は URL が確定するまで登録できない。
+
+```bash
+# 1. Cloudflare にログイン（ブラウザで OAuth 同意）
+npx wrangler login
+
+# 2. リモート D1 を作り、出た database_id を wrangler.jsonc に書く
+npx wrangler d1 create study-recall-db
+
+# 3. マイグレーションを本番へ適用
+npm run db:migrate:remote
+
+# 4. デプロイ（ここで本番 URL が確定する）
+npm run deploy
+
+# 5. シークレット 4 件を投入（値は画面に出ない）
+bash scripts/put-secrets.sh
+```
+
+6. Google Cloud Console の OAuth クライアントに本番 URL を追加する
+   - 承認済みの JavaScript 生成元: `https://<worker>.workers.dev`
+   - 承認済みのリダイレクト URI: `https://<worker>.workers.dev/api/auth/callback/google`
+
+以後は `git push` で **Cloudflare Workers Builds** が自動デプロイする
+（Build command `npm run build` / Deploy command `npx wrangler deploy`）。
+**マイグレーションは自動では流れない。** スキーマを変えたときだけ `npm run db:migrate:remote` を手で流す。
+push のたびに DDL が走ると、失敗したときにデプロイごと巻き添えで止まるため。
+
+### 詰まりやすい点
+
+- **`wrangler secret put` は非対話環境で使えない。** 値を stdin から流すと wrangler が
+  「非対話」と判断し、OAuth ログイン済みでも `CLOUDFLARE_API_TOKEN` を要求して止まる
+  （`deploy` や `secret list` は同じ条件で通るのに `secret put` だけが拒否する）。
+  `scripts/put-secrets.sh` はファイルを読む **`secret bulk`** を使ってこれを回避している。
+  一時 JSON は `mktemp` に mode 0600 で書き、`trap` で必ず消す
+- **Windows の PowerShell では `npx` が実行ポリシーに弾かれることがある**
+  （`npx.ps1` が `UnauthorizedAccess`）。`npx.cmd` を使うか、Git Bash から実行する。
+  `scripts/put-secrets.sh` は `./node_modules/.bin/wrangler` を直接叩いて npx を経由しない
+- **PowerShell の `bash` は WSL の bash**（`C:\Windows\System32\bash.exe`）。
+  Git Bash を使うならフルパスで指定する: `& "C:\Program Files\Git\bin\bash.exe" scripts/put-secrets.sh`
+- **`database_id` を差し替えるとローカル開発 DB が別ファイルになる。**
+  `.wrangler/state/v3/d1/miniflare-D1DatabaseObject/<hash>.sqlite` が ID ごとに分かれるため。
+  引き継ぐなら dev サーバーを止めて（WAL をチェックポイントさせて）から旧ファイルをコピーする。
+  停止前にコピーすると WAL 側の更新が抜ける
+
+### 公開範囲についての注意
+
+workers.dev の URL は誰でも開ける。**アクセス制限を掛けていないので、URL を知った第三者が
+自分の Google アカウントで登録でき、その人の問題生成が `GEMINI_API_KEY` の持ち主に課金される。**
+Google AI Studio 側で使用量アラートを設定しておくとよい。
+制限するなら Better Auth の `databaseHooks.user.create.before` で許可メール以外を弾くのが素直。
 
 ## npm scripts
 
