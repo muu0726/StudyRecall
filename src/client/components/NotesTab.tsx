@@ -17,6 +17,7 @@ import { getAncestorPath } from '../../shared/note-tree';
 import { submitQuizResultResilient } from '../lib/offline-queue';
 import { cn } from '../lib/cn';
 import { useRevalidateOnFocus } from '../hooks/useRevalidateOnFocus';
+import { clearDraft, decideRecovery, readDraft, saveDraft } from '../lib/note-draft';
 import { useToast } from './Toast';
 import ConflictDialog from './ConflictDialog';
 import MarkdownView from './MarkdownView';
@@ -28,6 +29,13 @@ import FlashCard from './FlashCard';
  */
 
 const NEW_NOTE_TITLE = '無題のノート';
+
+/**
+ * 入力が止まってからサーバーへ送るまでの待ち。
+ * 短すぎると 1 文字ごとに書きに行き、長すぎると失う量が増える。
+ * localStorage への退避は debounce せず毎回やるので、ここは短くしなくてよい。
+ */
+const AUTOSAVE_DELAY_MS = 2000;
 
 interface Props {
   categories: CategoryDTO[];
@@ -72,6 +80,8 @@ export default function NotesTab({
   const [genCount, setGenCount] = useState(DEFAULT_GENERATED_QUESTIONS);
   const [isGenerating, setIsGenerating] = useState(false);
   const [warning, setWarning] = useState<string | null>(null);
+  /** 自動保存の直近の結果。保存中は isSaving を見る。 */
+  const [autosaveFailed, setAutosaveFailed] = useState(false);
 
   const selected = notebooks.find((n) => n.id === selectedId) ?? null;
   /** 本文・タイトルの未保存分。カテゴリは構造側で動くので別扱いにする。 */
@@ -93,14 +103,35 @@ export default function NotesTab({
     const notebook = notebooksRef.current.find((n) => n.id === selectedId);
     if (!notebook) return;
 
-    setDraftTitle(notebook.title);
-    setDraftContent(notebook.content);
-    setDraftCategoryId(notebook.categoryId);
-    setBaseUpdatedAt(notebook.updatedAt);
-    setRemoteChanged(false);
+    // 端末に退避が残っていれば、サーバー版より先にそちらを採る。
+    // 残っている＝まだサーバーに載っていない、という意味で保存している。
+    const recovery = decideRecovery(readDraft(notebook.id), notebook);
+    const source = recovery.kind === 'none' ? notebook : recovery.draft;
+
+    setDraftTitle(source.title);
+    setDraftContent(source.content);
+    setDraftCategoryId(source.categoryId);
+    // 退避してからサーバー側も動いていた場合は、**退避時点のトークン**を持たせる。
+    // 現在の updatedAt を入れてしまうと、保存が素通りして他端末の更新を踏み潰す。
+    setBaseUpdatedAt(
+      recovery.kind === 'restore-stale'
+        ? (recovery.draft.baseUpdatedAt ?? notebook.updatedAt)
+        : notebook.updatedAt,
+    );
+    setRemoteChanged(recovery.kind === 'restore-stale');
+    setAutosaveFailed(false);
     setMode('edit');
     setWarning(null);
     setError(null);
+
+    if (recovery.kind !== 'none') {
+      showToast(
+        recovery.kind === 'restore'
+          ? '保存前の下書きを復元しました'
+          : '保存前の下書きを復元しました。その間に別の端末でも更新されています',
+        { kind: recovery.kind === 'restore' ? 'success' : 'info' },
+      );
+    }
 
     let cancelled = false;
     api
@@ -147,6 +178,51 @@ export default function NotesTab({
     setBaseUpdatedAt(latest.updatedAt);
   }, [notebooks, selectedId, baseUpdatedAt, isBodyDirty]);
 
+  /**
+   * 入力のたびに端末へ退避する。通信を伴わないので debounce しない。
+   * サーバー保存が通れば isDirty が falsy になり、ここで退避を消す。
+   */
+  useEffect(() => {
+    if (!selectedId) return;
+    if (!isDirty) {
+      clearDraft(selectedId);
+      return;
+    }
+    saveDraft({
+      id: selectedId,
+      title: draftTitle,
+      content: draftContent,
+      categoryId: draftCategoryId,
+      baseUpdatedAt,
+      savedAt: new Date().toISOString(),
+    });
+  }, [selectedId, isDirty, draftTitle, draftContent, draftCategoryId, baseUpdatedAt]);
+
+  /**
+   * 入力が止まったらサーバーへ送る。
+   * 競合を検知しているあいだは止める（解決するまで投げ続けても 409 が返るだけ）。
+   */
+  const autosaveBlocked = remoteChanged || conflict !== null;
+  // effect の依存に入れたくないので ref 経由で最新の関数を渡す
+  const autoSaveRef = useRef<() => void>(() => {});
+  autoSaveRef.current = () => {
+    void handleSave(false, 'auto');
+  };
+
+  useEffect(() => {
+    if (!selectedId || !isDirty || autosaveBlocked || isSaving) return;
+    const timer = setTimeout(() => autoSaveRef.current(), AUTOSAVE_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [
+    selectedId,
+    isDirty,
+    autosaveBlocked,
+    isSaving,
+    draftTitle,
+    draftContent,
+    draftCategoryId,
+  ]);
+
   // ノート一覧は App が取り直すので、ここで面倒を見るのは生成済み問題だけ
   useRevalidateOnFocus(
     async () => {
@@ -161,8 +237,13 @@ export default function NotesTab({
     { enabled: conflict === null },
   );
 
-  /** @param force true なら競合を承知で上書きする */
-  const handleSave = async (force = false): Promise<boolean> => {
+  /**
+   * @param force true なら競合を承知で上書きする
+   * @param mode 'auto' は debounce による自動保存。**勝手にモーダルを開かない**。
+   *   入力中に競合ダイアログが割り込むと、書いている手が止まって鬱陶しいだけなので、
+   *   バナーに留めて明示的な保存のときに解決させる。
+   */
+  const handleSave = async (force = false, mode: 'manual' | 'auto' = 'manual'): Promise<boolean> => {
     if (!selected) return false;
     setIsSaving(true);
     try {
@@ -178,13 +259,26 @@ export default function NotesTab({
       setRemoteChanged(false);
       setConflict(null);
       setError(null);
+      setAutosaveFailed(false);
+      // サーバーに載ったので退避は要らない
+      clearDraft(selected.id);
       onChanged();
       return true;
     } catch (saveError) {
       const detected = asNotebookConflict(saveError);
       if (detected) {
+        if (mode === 'auto') {
+          setRemoteChanged(true);
+          return false;
+        }
         // 勝手にどちらかへ倒さず、ユーザーに選ばせる
         setConflict({ currentContent: detected.currentContent });
+        return false;
+      }
+      if (mode === 'auto') {
+        // 通信断などの一時的な失敗で赤いバナーを出さない。
+        // 退避は端末に残っているので、書いた内容は失われない。
+        setAutosaveFailed(true);
         return false;
       }
       setError(saveError instanceof Error ? saveError.message : String(saveError));
@@ -393,10 +487,29 @@ export default function NotesTab({
               )}
             </button>
 
+            {/* 自動保存の状況。手動の保存ボタンも残す（今すぐ確定したいときのため） */}
+            <span
+              role="status"
+              aria-live="polite"
+              className={cn(
+                'text-xs whitespace-nowrap',
+                autosaveFailed ? 'text-red-600' : 'text-slate-400',
+              )}
+            >
+              {isSaving
+                ? '保存中…'
+                : autosaveFailed
+                  ? '保存できません（下書きは端末に残しています）'
+                  : isDirty
+                    ? '未保存'
+                    : '保存済み'}
+            </span>
+
             <button
               type="button"
               onClick={() => void handleSave(false)}
               disabled={!isDirty || isSaving}
+              aria-label="今すぐ保存"
               className="flex items-center gap-1.5 rounded-xl bg-slate-800 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-900 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
               {isSaving ? (
@@ -404,7 +517,7 @@ export default function NotesTab({
               ) : (
                 <Save className="h-3.5 w-3.5" aria-hidden />
               )}
-              {isDirty ? '保存' : '保存済み'}
+              保存
             </button>
           </div>
         </div>
