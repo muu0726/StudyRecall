@@ -124,18 +124,18 @@ Google AI Studio 側で使用量アラートを設定しておくとよい。
 
 ## npm scripts
 
-| script | 内容 |
-| --- | --- |
-| `dev` | 開発サーバー起動 |
-| `build` | 型チェック＋本番ビルド（PWA の SW も生成される） |
-| `preview` | ビルドしてローカルで本番相当の動作確認 |
-| `typecheck` | `tsc -b` のみ実行 |
-| `db:generate` | スキーマ変更から migrations の SQL を生成 |
-| `db:migrate:local` | ローカル D1 にマイグレーションを適用 |
-| `db:migrate:remote` | リモート D1 にマイグレーションを適用 |
-| `test` | Vitest を 1 回実行（純粋関数のみ対象） |
-| `test:watch` | Vitest をウォッチ実行 |
-| `cf-typegen` | `wrangler.jsonc` から `worker-configuration.d.ts` を再生成 |
+| script              | 内容                                                       |
+| ------------------- | ---------------------------------------------------------- |
+| `dev`               | 開発サーバー起動                                           |
+| `build`             | 型チェック＋本番ビルド（PWA の SW も生成される）           |
+| `preview`           | ビルドしてローカルで本番相当の動作確認                     |
+| `typecheck`         | `tsc -b` のみ実行                                          |
+| `db:generate`       | スキーマ変更から migrations の SQL を生成                  |
+| `db:migrate:local`  | ローカル D1 にマイグレーションを適用                       |
+| `db:migrate:remote` | リモート D1 にマイグレーションを適用                       |
+| `test`              | Vitest を 1 回実行（純粋関数のみ対象）                     |
+| `test:watch`        | Vitest をウォッチ実行                                      |
+| `cf-typegen`        | `wrangler.jsonc` から `worker-configuration.d.ts` を再生成 |
 
 ## 画面構成
 
@@ -151,11 +151,11 @@ Google AI Studio 側で使用量アラートを設定しておくとよい。
 
 レスポンシブの切り替えは `md`（768px）を境にする。
 
-| | PC（`md:` 以上） | モバイル（`md:` 未満） |
-| --- | --- | --- |
-| サイドバー | 常時表示・幅 260px | 既定は非表示。ハンバーガーでドロワー |
+|            | PC（`md:` 以上）                                  | モバイル（`md:` 未満）                                     |
+| ---------- | ------------------------------------------------- | ---------------------------------------------------------- |
+| サイドバー | 常時表示・幅 260px                                | 既定は非表示。ハンバーガーでドロワー                       |
 | 折りたたみ | アイコンのみ（64px）にできる。状態は localStorage | 効かせない（狭い画面でアイコンだけ出しても意味がないため） |
-| 閉じる | — | 項目の選択 / 背景タップ / Escape |
+| 閉じる     | —                                                 | 項目の選択 / 背景タップ / Escape                           |
 
 開いていた画面（`studyrecall:view`）と折りたたみ状態（`studyrecall:sidebar-collapsed`）は
 localStorage に保存し、次回も復元する。スクロールするのは右側のコンテンツ領域だけで、
@@ -192,27 +192,27 @@ scripts/
 
 ## API
 
-| メソッド | パス | 認証 | 内容 |
-| --- | --- | --- | --- |
-| GET | `/api/auth-config` | 不要 | ログイン画面が出す手段（Google / モック）の可否 |
-| POST | `/api/auth/dev-login` | 不要 | 開発用モックログイン（`ALLOW_DEV_LOGIN=true` のときだけ） |
-| GET/POST | `/api/auth/*` | 不要 | Better Auth（Google OAuth・セッション・サインアウト） |
-| GET | `/api/categories` | 必要 | カテゴリ一覧 |
-| POST | `/api/categories` | 必要 | カテゴリ作成 `{ name, color? }` |
-| GET | `/api/study-logs` | 必要 | 学習履歴＋統計（今日/今週/科目別/習得率） |
-| POST | `/api/study-logs` | 必要 | 記録保存＋問題生成 `{ categoryId, durationMinutes, notes, timerSessionId? }` |
-| GET | `/api/quizzes` | 必要 | `?categoryId=&tag=&notebookId=&unmasteredOnly=` で絞り込み（すべて AND） |
-| POST | `/api/quizzes/manual-add` | 必要 | 用語から1問生成 `{ categoryId, term, description }` |
-| POST | `/api/quizzes/:id/result` | 必要 | 判定を記録 `{ correct: boolean }` |
-| GET | `/api/tags` | 必要 | 使用中のジャンルタグと問題数 |
-| PUT/DELETE | `/api/categories/:id` | 必要 | カテゴリの改名・色変更 / 削除（使用中は 409） |
-| GET | `/api/timer` | 必要 | 稼働中タイマー（サーバーが `elapsedMs` を算出） |
-| POST | `/api/timer/start\|pause\|resume\|reset` | 必要 | タイマー操作。start は `{ mode }`（free / pomodoro）。既存セッションがあれば合流する |
-| GET/POST | `/api/notebooks` | 必要 | ノート一覧（フラット配列。ツリー化は描画側）/ 作成（`parentId` 可） |
-| POST | `/api/notebooks/:id/move` | 必要 | ツリー内の移動 `{ parentId, index, categoryId? }` |
-| PUT/DELETE | `/api/notebooks/:id` | 必要 | ノート更新（`expectedUpdatedAt` 必須、競合は 409）/ 削除（子孫ごと。件数を返す） |
-| POST | `/api/notebooks/:id/generate-quiz` | 必要 | ノート本文から生成 `{ count?: 1〜10 }` |
-| GET | `/api/stats/heatmap` | 必要 | 過去365日の日別集計（JST）＋ストリーク |
+| メソッド   | パス                                     | 認証 | 内容                                                                                 |
+| ---------- | ---------------------------------------- | ---- | ------------------------------------------------------------------------------------ |
+| GET        | `/api/auth-config`                       | 不要 | ログイン画面が出す手段（Google / モック）の可否                                      |
+| POST       | `/api/auth/dev-login`                    | 不要 | 開発用モックログイン（`ALLOW_DEV_LOGIN=true` のときだけ）                            |
+| GET/POST   | `/api/auth/*`                            | 不要 | Better Auth（Google OAuth・セッション・サインアウト）                                |
+| GET        | `/api/categories`                        | 必要 | カテゴリ一覧                                                                         |
+| POST       | `/api/categories`                        | 必要 | カテゴリ作成 `{ name, color? }`                                                      |
+| GET        | `/api/study-logs`                        | 必要 | 学習履歴＋統計（今日/今週/科目別/習得率）                                            |
+| POST       | `/api/study-logs`                        | 必要 | 記録保存＋問題生成 `{ categoryId, durationMinutes, notes, timerSessionId? }`         |
+| GET        | `/api/quizzes`                           | 必要 | `?categoryId=&tag=&notebookId=&unmasteredOnly=` で絞り込み（すべて AND）             |
+| POST       | `/api/quizzes/manual-add`                | 必要 | 用語から1問生成 `{ categoryId, term, description }`                                  |
+| POST       | `/api/quizzes/:id/result`                | 必要 | 判定を記録 `{ correct: boolean }`                                                    |
+| GET        | `/api/tags`                              | 必要 | 使用中のジャンルタグと問題数                                                         |
+| PUT/DELETE | `/api/categories/:id`                    | 必要 | カテゴリの改名・色変更 / 削除（使用中は 409）                                        |
+| GET        | `/api/timer`                             | 必要 | 稼働中タイマー（サーバーが `elapsedMs` を算出）                                      |
+| POST       | `/api/timer/start\|pause\|resume\|reset` | 必要 | タイマー操作。start は `{ mode }`（free / pomodoro）。既存セッションがあれば合流する |
+| GET/POST   | `/api/notebooks`                         | 必要 | ノート一覧（フラット配列。ツリー化は描画側）/ 作成（`parentId` 可）                  |
+| POST       | `/api/notebooks/:id/move`                | 必要 | ツリー内の移動 `{ parentId, index, categoryId? }`                                    |
+| PUT/DELETE | `/api/notebooks/:id`                     | 必要 | ノート更新（`expectedUpdatedAt` 必須、競合は 409）/ 削除（子孫ごと。件数を返す）     |
+| POST       | `/api/notebooks/:id/generate-quiz`       | 必要 | ノート本文から生成 `{ count?: 1〜10 }`                                               |
+| GET        | `/api/stats/heatmap`                     | 必要 | 過去365日の日別集計（JST）＋ストリーク                                               |
 
 ## マルチデバイス同期
 
@@ -263,25 +263,27 @@ Notion のようにノートを入れ子にできる。`notebooks.parentId`（�
 
 書いたものが消えないよう、二段構えにしている。
 
-| 層 | いつ | 通信 |
-|---|---|---|
+| 層                    | いつ                              | 通信 |
+| --------------------- | --------------------------------- | ---- |
 | localStorage への退避 | **入力のたび**（debounce しない） | なし |
-| サーバー保存 | 入力が止まって 2 秒後 | あり |
+| サーバー保存          | 入力が止まって 2 秒後             | あり |
 
 `studyrecall:note-draft:<id>` に退避が**残っている＝まだサーバーに載っていない**、という意味にしている。
 保存が通った時点で消す。次にそのノートを開いたとき、退避が残っていれば復元する。
 
 ### 自動保存は競合ダイアログを開かない
+
 入力中にモーダルが割り込むと書いている手が止まる。自動保存が 409 を受けたら
 **バナー（他の端末で更新されています）に留め、そこで自動保存を止める**。
 解決は明示的な「保存」ボタンから競合ダイアログで行う。
 
 ### 復元は 3 通りに分かれる（`decideRecovery`）
-| 状況 | 挙動 |
-|---|---|
-| 退避が無い / 中身がサーバー版と同じ | 何もしない |
-| 退避時点のサーバー版と現在が一致 | そのまま復元（差分は自分の未送信分だけ） |
-| 退避後にサーバー側も動いていた | 復元するが**競合として扱う** |
+
+| 状況                                | 挙動                                     |
+| ----------------------------------- | ---------------------------------------- |
+| 退避が無い / 中身がサーバー版と同じ | 何もしない                               |
+| 退避時点のサーバー版と現在が一致    | そのまま復元（差分は自分の未送信分だけ） |
+| 退避後にサーバー側も動いていた      | 復元するが**競合として扱う**             |
 
 3 番目では `baseUpdatedAt` に**退避した時点のトークン**を入れる。
 ここに現在の `updatedAt` を入れると保存が素通りし、**他端末の更新を無言で踏み潰す**。
@@ -308,6 +310,7 @@ Notion のようにノートを入れ子にできる。`notebooks.parentId`（�
   SRS は出題日の管理。両方を残しているので、習得率 0% でも出題予定は入る
 
 ### スキーマ
+
 `quiz_questions` に `due_at` / `interval_days` / `ease_factor` / `repetitions` を追加した
 （`0008_black_the_stranger.sql`。**すべて `ADD COLUMN` でテーブル再作成なし**）。
 `due_at` が NULL は未学習で、常に出題対象になる。既存の問題はこれで自動的にキューへ入る。
@@ -354,6 +357,7 @@ Provider には**タイマーに付随する副作用も移してある** — �
 - `color-scheme` も切り替える。select の矢印やチェックボックスなどネイティブ部品のため
 
 ### 機械置換しなかったもの
+
 色指定は 570 箇所あり、大半は対応表で機械的に `dark:` を足した。次の 3 つは手で当てている。
 
 - **`bg-slate-800/900` の「ボタン」**（保存・モックログイン。`text-white` と対）。
@@ -381,11 +385,11 @@ UPDATE では発火しない。以前より良くなっている。
 
 ## 復習のキーボード操作
 
-| キー | 動作 |
-|---|---|
+| キー              | 動作       |
+| ----------------- | ---------- |
 | `Space` / `Enter` | 答えを見る |
-| `1` / `←` | まだ不安 |
-| `2` / `→` | わかった |
+| `1` / `←`         | まだ不安   |
+| `2` / `→`         | わかった   |
 
 拾ってよいかの判定は `src/client/lib/keyboard.ts` に集約してテストしてある。
 **迷ったら「無視する」側に倒す。** 効かないのは不便なだけだが、効いてほしくない場面で
@@ -406,10 +410,10 @@ UPDATE では発火しない。以前より良くなっている。
 
 上限に当たったときの扱いは入り口ごとに違う。
 
-| 入り口 | 挙動 |
-|---|---|
-| 学習記録 | **記録は保存し** warning を返す |
-| ノートからの生成 | ノートは保存済みなので warning のみ |
+| 入り口             | 挙動                                       |
+| ------------------ | ------------------------------------------ |
+| 学習記録           | **記録は保存し** warning を返す            |
+| ノートからの生成   | ノートは保存済みなので warning のみ        |
 | 用語のクイック追加 | 生成が本体で保存するものが無いので **429** |
 
 「生成の失敗が保存を巻き込まない」という既存の方針をそのまま当てている。
@@ -445,6 +449,7 @@ DOM やネットワークを触るものは対象外（`environment: 'node'`）�
 > テストに実効性があるかは、`canMove` の深さ判定にオフバイワンを入れて 2 件落ちることで確認した。
 
 ### vitest のバージョンは 4 系に固定している
+
 `better-auth` が `peerOptional vitest@"^2 || ^3 || ^4"` を宣言しているため、
 5 系を入れると **`npm ci` が ERESOLVE で落ちる**（Workers Builds のビルドが壊れる）。
 `npm install` は通ってしまうので気付きにくい。バージョンを変えたら `npm ci --dry-run` で確かめる。
@@ -453,12 +458,12 @@ DOM やネットワークを触るものは対象外（`environment: 'node'`）�
 
 初回ロードに要らないものは動的 import に逃がしてある。
 
-| チャンク | サイズ | 読み込まれる契機 |
-|---|---|---|
-| `index` | 362 KB (gzip 110 KB) | 起動時 |
-| `MarkdownRenderer` | 156 KB (gzip 46 KB) | ノートをプレビュー表示したとき |
-| `jszip` | 96 KB (gzip 28 KB) | ZIP を書き出すとき |
-| `confetti` | 11 KB (gzip 4 KB) | 紙吹雪を出すとき |
+| チャンク           | サイズ               | 読み込まれる契機               |
+| ------------------ | -------------------- | ------------------------------ |
+| `index`            | 362 KB (gzip 110 KB) | 起動時                         |
+| `MarkdownRenderer` | 156 KB (gzip 46 KB)  | ノートをプレビュー表示したとき |
+| `jszip`            | 96 KB (gzip 28 KB)   | ZIP を書き出すとき             |
+| `confetti`         | 11 KB (gzip 4 KB)    | 紙吹雪を出すとき               |
 
 分割前は単一チャンク 609 KB（gzip 189 KB）で、Vite の 500KB 警告が出続けていた。
 起動直後に見えるのはタイマー画面なので、Markdown も ZIP も紙吹雪もその時点では要らない。

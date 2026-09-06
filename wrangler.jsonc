@@ -10,7 +10,7 @@
     // OAuth のコールバックは fetch ではなくトップレベルのページ遷移なので、
     // SPA フォールバックに吸われて Worker まで届かない。/api/* を先に Worker へ流す。
     // これが無いと /api/auth/callback/google に index.html が返り、認証が完了しない。
-    "run_worker_first": ["/api/*"]
+    "run_worker_first": ["/api/*"],
   },
   "d1_databases": [
     {
@@ -19,8 +19,8 @@
       // `wrangler d1 create study-recall-db` で作った本番 D1（APAC）。
       // D1 の ID は秘匿情報ではない（アカウントの認証情報が無ければ使えない）のでコミットしてよい。
       "database_id": "98521364-85a2-446e-b1d2-2aa3fc722648",
-      "migrations_dir": "migrations"
-    }
+      "migrations_dir": "migrations",
+    },
   ],
   // ここに "vars" は置かない。
   // 開発用モックログインのフラグ ALLOW_DEV_LOGIN は .dev.vars（git 管理外）にだけ書く。
@@ -29,6 +29,6 @@
   // ("false" と書かない理由: wrangler types が vars をリテラル型で吐くため、
   //  `env.ALLOW_DEV_LOGIN === 'true'` が「重ならない型の比較」で型エラーになる)
   "observability": {
-    "enabled": true
-  }
+    "enabled": true,
+  },
 }
