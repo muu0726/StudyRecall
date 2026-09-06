@@ -33,7 +33,9 @@ const SIZE: Record<ButtonSize, string> = {
 };
 
 const BASE = cn(
-  'inline-flex shrink-0 items-center justify-center rounded-control font-semibold transition',
+  // shrink-0 は付けない。fullWidth を 2 つ横に並べたときに縮まず、器からはみ出す。
+  // 横スクロールのツールバーなど、縮んでほしくない場所は呼び出し側で shrink-0 を足す。
+  'inline-flex items-center justify-center rounded-control font-semibold transition',
   'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
   'disabled:cursor-not-allowed disabled:opacity-45',
 );

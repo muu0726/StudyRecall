@@ -57,7 +57,8 @@ interface ModalProps {
   footer?: ReactNode;
   className?: string;
   bodyClassName?: string;
-  children: ReactNode;
+  /** 省略可。確認ダイアログのように見出しとフッターだけの構成もある */
+  children?: ReactNode;
 }
 
 export function Modal({
@@ -140,7 +141,9 @@ export function Modal({
           </div>
         )}
 
-        <div className={cn(bare ? '' : 'px-5 py-5', bodyClassName)}>{children}</div>
+        {children != null && children !== false && (
+          <div className={cn(bare ? '' : 'px-5 py-5', bodyClassName)}>{children}</div>
+        )}
 
         {footer && <div className="flex gap-2 border-t border-line px-5 py-3">{footer}</div>}
       </div>
