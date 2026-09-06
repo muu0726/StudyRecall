@@ -356,17 +356,106 @@ Provider には**タイマーに付随する副作用も移してある** — �
 - **`ThemeProvider` は `AuthGate` より外**。ログイン画面もテーマに従わせるため
 - `color-scheme` も切り替える。select の矢印やチェックボックスなどネイティブ部品のため
 
-### 機械置換しなかったもの
+### トークンがテーマを吸収する
 
-色指定は 570 箇所あり、大半は対応表で機械的に `dark:` を足した。次の 3 つは手で当てている。
+**`dark:` はコンポーネントに 1 つも書かない。** 面・線・文字・状態色はすべて
+セマンティックなトークンを通し、`.dark` で**変数の値だけ**差し替える。
 
-- **`bg-slate-800/900` の「ボタン」**（保存・モックログイン。`text-white` と対）。
-  反転させると**白文字が白背景に乗って読めなくなる**ので、`dark:bg-slate-700` 側へ寄せた
-- **ヒートマップの草** — ライトは「薄い → 濃い青」だが、暗い背景に濃い青を置くと沈む。
-  ダークは「暗い → 明るい青」に**向きを反転**させて濃淡の意味を保つ
-- **モーダルの暗幕** `bg-slate-900/40` — ダークでは `dark:bg-slate-950/70` へ深める
+Tailwind v4 のユーティリティは値を埋め込まず `var(--color-*)` を参照するので、
+これだけで追従する。
 
-色付きボタン（`bg-blue-600` など）と、その上の `text-white` は**両テーマ共通**なので触っていない。
+```css
+.bg-surface {
+  background-color: var(--color-surface);
+}
+```
+
+```html
+<!-- dark: を書かなくてもテーマで色が変わる -->
+<body class="bg-canvas text-fg"></body>
+```
+
+> ⚠️ **`@theme inline` にしてはいけない。**
+> `inline` を付けると値が展開されて `var()` 参照が消え、`.dark` の上書きが効かなくなる。
+> 素の `@theme static` を使う（`static` は「まだ使われていない変数」が削られるのを防ぐ）。
+
+反転が必要なものは、**反転をトークン側に閉じ込める**。
+
+- **ヒートマップの草** — ライトは「薄い → 濃い青」、ダークは「暗い → 明るい青」で向きが逆。
+  `--color-heat-0..4` を `.dark` で入れ替えるので、`Heatmap.tsx` に `dark:` は無い
+- **コードブロック** — ライトでも暗いのが意図なので `--color-code` を別に切った
+- **Toast** — 面ごと反転する塗り潰しなので `--color-solid` / `--color-solid-fg`
+
+### 置換で踏んだ落とし穴
+
+**不透明度が付いたクラスは対応表から漏れる。** `bg-white/90` は
+`bg-white` と別のクラスなので変換されず、対になる `dark:bg-slate-950/90` だけが
+消えて、**ダークでヘッダーが白いまま**になった。4 箇所あった。
+同種を探すときは `(bg|text|border)-[a-z]+-?[0-9]*/[0-9]+` で洗う。
+
+## デザイントークンと UI プリミティブ
+
+新しい UI を足すときは、まずここから使う。生のクラスを直書きしない。
+
+### トークン（`src/client/index.css`）
+
+| 種類       | トークン                                                                     | 使いどころ                                      |
+| ---------- | ---------------------------------------------------------------------------- | ----------------------------------------------- |
+| 面         | `canvas` / `surface` / `surface-2` / `surface-3`                             | 地 / カード / サイドバー / セグメントの溝       |
+| 線         | `line` / `line-strong`                                                       | カードの縁 / 入力欄・浮遊要素                   |
+| 文字       | `fg` / `fg-muted` / `fg-subtle`                                              | 本文 / 補助 / さらに弱い                        |
+| 行         | `row-hover` / `row-selected`                                                 | ホバー（無彩色）/ 選択（青み）                  |
+| アクセント | `accent` / `accent-hover` / `accent-soft` / `accent-text` / `accent-fg`      | `accent-fg` は塗り潰しの上に載る文字            |
+| 状態       | `success` / `warning` / `danger` と `-soft` / `-line`                        | バナー・判定ボタン                              |
+| 形         | `rounded-control`(8px) / `rounded-card`(12px)                                | 2 段だけ。`rounded-full` はドット・アバター専用 |
+| 文字サイズ | `text-title`(20) / `text-section`(16) / `text-body`(14) / `text-caption`(12) | 4 段だけ                                        |
+| 影         | `shadow-overlay`                                                             | **重なるものだけ。**カードは境界線で段を作る    |
+
+> **`cn.ts` の `extendTailwindMerge` を外さないこと。**
+> 設定が無いと tailwind-merge が `text-title`（サイズ）と `text-fg-muted`（色）を
+> 同じ群と見なし、**後に書いたほうが前を黙って消す**。
+> 「見出しだけ本文サイズに戻っている」という追いにくいバグになる。`cn.test.ts` が釘。
+
+### プリミティブ（`src/client/ui/`）
+
+`Button` / `IconButton` / `Card` / `CardSection` / `Field` / `Input` / `Select` /
+`Textarea` / `Modal` / `Popover` / `Segmented` / `Banner` / `EmptyState` /
+`selectableRow` / `LAYER`。
+
+- すべて `cn(base, variants, className)` の順。**呼び出し側の `className` が最後**なので上書きできる
+- ボタンの高さは `py-*` ではなく `h-*` で決める。行に並べたときに揃うのが保証される
+- `disabled` は **opacity に一本化**。グレーで塗る方式は `danger`/`success` で意味が消える
+- **`Modal` は `role="dialog"` を必ず出す。** `lib/keyboard.ts` がこれを見て
+  「何か開いていれば復習のキーを無視する」と判定している。消すと裏のカードが誤爆する
+- `SpeechPlayer` はモーダルではないので `role="dialog"` を**付けない**
+  （`ReviewTab` が `keyboard={!isSpeechOpen}` で明示的に切っている）
+
+### 選択とホバーを分ける（`selectableRow`）
+
+| 状態   | 表現                                                          |
+| ------ | ------------------------------------------------------------- |
+| 選択   | `row-selected`（青み）+ 左 2px のアクセントバー + `fg` の文字 |
+| ホバー | `row-hover`（無彩色）の面だけ。**バーは出さない**             |
+
+作り直す前はどちらも「薄い面」で、**開発中に選択中の項目を読み違えるほど**区別が付かなかった。
+バーは `::before` の絶対配置にしてある。`border-l` だと行幅が 2px 動き、
+ツリーのインデント（インライン `style` で padding を計算している）とずれる。
+
+### フォント
+
+Inter を自己ホストする（`@fontsource-variable/inter`）。外部ドメインへ取りに行かないので
+PWA でオフラインでも効く。
+
+> **登録されるファミリ名は `'Inter Variable'`。** `'Inter'` では一致しない。
+> 以前は `--font-sans` の先頭が `'Inter'` なのに `@font-face` も `<link>` も無く、
+> **一度も読み込まれていなかった**（canvas で測ると素の `sans-serif` と幅が 1px も違わなかった）。
+
+日本語の Web フォントは載せない。`@fontsource/noto-sans-jp` は 1 ウェイトで
+124 ファイル・2.79MB あり、`workbox.globPatterns` が `woff2` を含むため
+プリキャッシュに全部載って初回インストールが重くなる。日本語は各 OS の UI フォントで足りる。
+
+Inter も latin 以外の 6 サブセット（170KB）は使わないので `globIgnores` で
+プリキャッシュから外している（通常配信はされる）。
 
 ## ゴミ箱・復元
 
@@ -441,6 +530,8 @@ UPDATE では発火しない。以前より良くなっている。
 - `src/client/lib/pomodoro.test.ts` — `focusMs` は**記録される学習時間そのもの**
 - `src/shared/srs.test.ts` — 出題間隔。**間違っていても数週間後にしか症状が出ない**
 - `src/client/lib/note-draft.test.ts` — 下書き復元の判定。誤れば他端末の更新を巻き戻す
+- `src/client/lib/cn.test.ts` — 自前トークンの競合解決。設定が外れると
+  **見出しのサイズが黙って消える**（`text-title` と `text-fg-muted` が同じ群と誤認される）
 
 DOM やネットワークを触るものは対象外（`environment: 'node'`）。
 設定を `vite.config.ts` と分けているのは、テストのたびに Worker のビルドと SW 生成を
@@ -460,12 +551,13 @@ DOM やネットワークを触るものは対象外（`environment: 'node'`）�
 
 | チャンク           | サイズ               | 読み込まれる契機               |
 | ------------------ | -------------------- | ------------------------------ |
-| `index`            | 362 KB (gzip 110 KB) | 起動時                         |
+| `index`            | 382 KB (gzip 118 KB) | 起動時                         |
 | `MarkdownRenderer` | 156 KB (gzip 46 KB)  | ノートをプレビュー表示したとき |
 | `jszip`            | 96 KB (gzip 28 KB)   | ZIP を書き出すとき             |
 | `confetti`         | 11 KB (gzip 4 KB)    | 紙吹雪を出すとき               |
 
 分割前は単一チャンク 609 KB（gzip 189 KB）で、Vite の 500KB 警告が出続けていた。
+SW のプリキャッシュは 20 件 731 KiB（うち Inter latin が 48 KB）。
 起動直後に見えるのはタイマー画面なので、Markdown も ZIP も紙吹雪もその時点では要らない。
 
 ## 設計上の注意点
