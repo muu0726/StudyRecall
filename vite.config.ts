@@ -39,6 +39,13 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
+        // Inter は unicode-range で分割されており、この画面で実際に要るのは latin だけ。
+        // 残り 6 サブセット（170KB）は日本語＋英数字では一度も読まれないのに、
+        // プリキャッシュに入れると初回インストールでまとめて落としてしまう。
+        // 除外しても通常配信はされるので、必要になればその場で取りに行く。
+        globIgnores: [
+          '**/inter-{latin-ext,cyrillic,cyrillic-ext,greek,greek-ext,vietnamese}-*.woff2',
+        ],
         // API を SW の SPA フォールバックに巻き込ませない。
         // 除外しないと /api/* が index.html を返してしまう。
         navigateFallbackDenylist: [/^\/api\//],

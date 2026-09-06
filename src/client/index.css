@@ -1,6 +1,24 @@
 @import 'tailwindcss';
 
 /*
+ * Inter を自己ホストする（外部ドメインへ取りに行かないので PWA でオフラインでも効く）。
+ *
+ * これまで --font-sans は 'Inter' を先頭に並べていたが、@font-face も <link> も
+ * 無く、一度も読み込まれていなかった。canvas で実測したところ、
+ * このスタックは素の sans-serif と幅が 1px も違わなかった。
+ *
+ * @fontsource-variable が登録するファミリ名は **'Inter Variable'**。
+ * 'Inter' のままだと自己ホストしても一致せず、同じ症状が再発する。
+ *
+ * 日本語は Web フォントを載せない。Noto Sans JP は 1 ウェイトで 124 ファイル・
+ * 2.79MB あり、workbox の globPatterns が woff2 を含むのでプリキャッシュに
+ * 全部載って初回インストールが重くなる。日本語は各 OS の UI フォント
+ * （Hiragino / Yu Gothic UI / Noto Sans CJK）が既に十分で、
+ * 実際に壊れて見えていたのは英数字のほうだった。
+ */
+@import '@fontsource-variable/inter/wght.css';
+
+/*
  * Tailwind v4 の `dark:` は既定で prefers-color-scheme を見る。
  * 手動で切り替えたいので、<html> の .dark クラスを見る形に差し替える。
  * この 1 行が無いと ThemeProvider がクラスを付けても何も変わらない。
@@ -19,6 +37,11 @@
  *   下の `.dark` での上書きが効かなくなる。
  */
 @theme static {
+  /* 先頭は 'Inter Variable'。'Inter' では一致しない。 */
+  --font-sans:
+    'Inter Variable', 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', 'Yu Gothic UI', 'Meiryo',
+    system-ui, sans-serif;
+
   /* --- テーマで変わらないもの --- */
 
   /* 角丸は 2 段だけ。rounded-full はドット・アバター・バッジ専用。 */
@@ -128,7 +151,7 @@ body,
 }
 
 body {
-  @apply bg-canvas text-fg text-body antialiased;
+  @apply bg-canvas text-body text-fg antialiased;
 }
 
 /* フォームのネイティブ部品（select の矢印、チェックボックス等）もテーマに従わせる */
