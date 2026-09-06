@@ -36,17 +36,19 @@ export default function SpeechPlayer({ open, questions, onClose }: Props) {
   const progress = speech.total === 0 ? 0 : ((speech.index + 1) / speech.total) * 100;
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-[0_-4px_16px_rgba(15,23,42,0.08)]">
+    <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white shadow-[0_-4px_16px_rgba(15,23,42,0.08)] dark:border-slate-800 dark:bg-slate-900">
       <div className="mx-auto max-w-3xl px-4 py-3 md:max-w-5xl">
         {!speech.supported ? (
           <div className="flex items-center gap-3 text-sm text-amber-800 dark:text-amber-300">
             <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
-            <p className="flex-1">このブラウザは音声読み上げ（Web Speech API）に対応していません。</p>
+            <p className="flex-1">
+              このブラウザは音声読み上げ（Web Speech API）に対応していません。
+            </p>
             <button
               type="button"
               onClick={handleClose}
               aria-label="閉じる"
-              className="rounded-lg p-1 text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+              className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 dark:text-slate-500 dark:hover:bg-slate-800"
             >
               <X className="h-5 w-5" aria-hidden />
             </button>
@@ -60,14 +62,14 @@ export default function SpeechPlayer({ open, questions, onClose }: Props) {
               <p className="min-w-0 flex-1 truncate text-sm text-slate-700 dark:text-slate-300">
                 {speech.current?.question ?? '問題がありません'}
               </p>
-              <span className="shrink-0 text-xs text-slate-500 dark:text-slate-400 tabular-nums">
+              <span className="shrink-0 text-xs text-slate-500 tabular-nums dark:text-slate-400">
                 {speech.total === 0 ? '0 / 0' : `${speech.index + 1} / ${speech.total}`}
               </span>
               <button
                 type="button"
                 onClick={handleClose}
                 aria-label="音声再生を終了"
-                className="shrink-0 rounded-lg p-1 text-slate-400 dark:text-slate-500 transition hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-300"
+                className="shrink-0 rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
               >
                 <X className="h-5 w-5" aria-hidden />
               </button>
@@ -87,7 +89,7 @@ export default function SpeechPlayer({ open, questions, onClose }: Props) {
                   onClick={speech.previous}
                   disabled={speech.index === 0}
                   aria-label="前の問題"
-                  className="rounded-lg p-2 text-slate-600 dark:text-slate-400 transition hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30"
+                  className="rounded-lg p-2 text-slate-600 transition hover:bg-slate-100 disabled:opacity-30 dark:text-slate-400 dark:hover:bg-slate-800"
                 >
                   <SkipBack className="h-4 w-4" aria-hidden />
                 </button>
@@ -111,7 +113,7 @@ export default function SpeechPlayer({ open, questions, onClose }: Props) {
                   onClick={speech.next}
                   disabled={speech.index >= speech.total - 1}
                   aria-label="次の問題"
-                  className="rounded-lg p-2 text-slate-600 dark:text-slate-400 transition hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30"
+                  className="rounded-lg p-2 text-slate-600 transition hover:bg-slate-100 disabled:opacity-30 dark:text-slate-400 dark:hover:bg-slate-800"
                 >
                   <SkipForward className="h-4 w-4" aria-hidden />
                 </button>
@@ -156,7 +158,7 @@ function Segmented<T extends number>({
   return (
     <div className="flex items-center gap-1.5">
       <span className="text-xs text-slate-500 dark:text-slate-400">{label}</span>
-      <div className="flex rounded-lg bg-slate-100 dark:bg-slate-800 p-0.5">
+      <div className="flex rounded-lg bg-slate-100 p-0.5 dark:bg-slate-800">
         {options.map((option) => (
           <button
             key={option.value}
@@ -166,8 +168,8 @@ function Segmented<T extends number>({
             className={cn(
               'rounded-md px-2 py-1 text-xs font-medium transition',
               value === option.value
-                ? 'bg-white dark:bg-slate-900 text-blue-700 dark:text-blue-300 shadow-sm'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100',
+                ? 'bg-white text-blue-700 shadow-sm dark:bg-slate-900 dark:text-blue-300'
+                : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100',
             )}
           >
             {option.label}

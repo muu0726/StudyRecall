@@ -16,7 +16,9 @@ export default function MarkdownView({ content }: { content: string }) {
 
   return (
     <Suspense
-      fallback={<p className="text-sm text-slate-400 dark:text-slate-500">プレビューを準備しています…</p>}
+      fallback={
+        <p className="text-sm text-slate-400 dark:text-slate-500">プレビューを準備しています…</p>
+      }
     >
       <MarkdownRenderer content={content} />
     </Suspense>

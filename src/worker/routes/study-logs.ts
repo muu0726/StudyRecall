@@ -60,7 +60,9 @@ async function buildStats(db: Db, userId: string): Promise<StudyStats> {
       // 未学習（due_at が NULL）も出題対象に数える
       dueNow: sql<number>`coalesce(sum(case when ${quizQuestions.dueAt} is null or ${quizQuestions.dueAt} <= ${nowSec} then 1 else 0 end), 0)`,
       // まだ来ていないもののうち最も早い出題日
-      nextDueSec: sql<number | null>`min(case when ${quizQuestions.dueAt} > ${nowSec} then ${quizQuestions.dueAt} else null end)`,
+      nextDueSec: sql<
+        number | null
+      >`min(case when ${quizQuestions.dueAt} > ${nowSec} then ${quizQuestions.dueAt} else null end)`,
     })
     .from(quizQuestions)
     .where(eq(quizQuestions.userId, userId));

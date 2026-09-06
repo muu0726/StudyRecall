@@ -37,7 +37,9 @@ describe('sanitizeForPrompt', () => {
   });
 
   it('画像リンクを落とす', () => {
-    const out = sanitizeForPrompt('図を参照\n![OSI参照モデルの図](https://example.com/a.png)\n以上');
+    const out = sanitizeForPrompt(
+      '図を参照\n![OSI参照モデルの図](https://example.com/a.png)\n以上',
+    );
     expect(out).not.toContain('example.com');
     expect(out).toContain('図を参照');
     expect(out).toContain('以上');

@@ -108,8 +108,7 @@ export function getAncestorPath<T extends TreeNodeLike>(items: T[], id: string):
 }
 
 export type MoveRejection =
-  | { ok: true }
-  | { ok: false; reason: 'not-found' | 'cycle' | 'too-deep' };
+  { ok: true } | { ok: false; reason: 'not-found' | 'cycle' | 'too-deep' };
 
 /**
  * 移動が許されるか判定する。

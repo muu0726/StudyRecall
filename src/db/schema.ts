@@ -1,10 +1,4 @@
-import {
-  index,
-  integer,
-  sqliteTable,
-  text,
-  type AnySQLiteColumn,
-} from 'drizzle-orm/sqlite-core';
+import { index, integer, sqliteTable, text, type AnySQLiteColumn } from 'drizzle-orm/sqlite-core';
 
 /**
  * StudyRecall のスキーマ定義。
@@ -221,7 +215,9 @@ export const timerSessions = sqliteTable(
      * 集中/休憩のフェーズは elapsedMs から決定的に導出できるので、
      * この 1 列を共有するだけで全端末の表示が一致する。
      */
-    mode: text('mode', { enum: ['free', 'pomodoro'] }).notNull().default('free'),
+    mode: text('mode', { enum: ['free', 'pomodoro'] })
+      .notNull()
+      .default('free'),
     /** null なら稼働中。確定済みなら確定時刻が入る */
     completedAt: integer('completed_at', { mode: 'timestamp_ms' }),
     /** 確定時に作られた学習記録 */

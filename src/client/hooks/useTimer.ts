@@ -137,9 +137,7 @@ export function useTimer(): TimerState {
   const start = useCallback(
     async (mode: TimerMode = 'free') => {
       // 停止中のセッションがあるなら再開、無ければ新規開始
-      await run(() =>
-        session && !session.isRunning ? api.resumeTimer() : api.startTimer(mode),
-      );
+      await run(() => (session && !session.isRunning ? api.resumeTimer() : api.startTimer(mode)));
     },
     [run, session],
   );

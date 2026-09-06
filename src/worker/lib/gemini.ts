@@ -197,8 +197,7 @@ async function callGemini(
   if (!apiKey) {
     return {
       questions: [],
-      warning:
-        'GEMINI_API_KEY が未設定のため問題を生成できませんでした。内容は保存されています。',
+      warning: 'GEMINI_API_KEY が未設定のため問題を生成できませんでした。内容は保存されています。',
     };
   }
 

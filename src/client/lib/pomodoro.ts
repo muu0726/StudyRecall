@@ -1,8 +1,4 @@
-import {
-  POMODORO_BREAK_MS,
-  POMODORO_CYCLE_MS,
-  POMODORO_WORK_MS,
-} from '../../shared/types';
+import { POMODORO_BREAK_MS, POMODORO_CYCLE_MS, POMODORO_WORK_MS } from '../../shared/types';
 
 /**
  * ポモドーロの状態は「経過ミリ秒」から決定的に導出する。

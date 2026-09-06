@@ -144,12 +144,7 @@ describe('canMove', () => {
 
   it('移動する部分木の高さも数える（葉ではなく枝ごと動かす場合）', () => {
     // n1 > n2 > n3 の 3 階層。別に高さ 3 の部分木 s1 > s2 > s3
-    const items3 = [
-      ...chain(3),
-      node('s1'),
-      node('s2', 's1'),
-      node('s3', 's2'),
-    ];
+    const items3 = [...chain(3), node('s1'), node('s2', 's1'), node('s3', 's2')];
     // s1（高さ3）を n3（深さ3）の下へ → 3 + 3 = 6 で超過
     expect(canMove(items3, 's1', 'n3')).toEqual({ ok: false, reason: 'too-deep' });
     // s1 を n2（深さ2）の下へ → 2 + 3 = 5 でちょうど収まる

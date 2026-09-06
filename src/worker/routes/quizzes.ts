@@ -51,7 +51,11 @@ export const quizzesRoute = new Hono<AppEnv>()
       .where(and(...filters))
       // 期限が古い順＝いちばん忘れかけているものから。
       // 未学習（due_at が NULL）は SQLite の ASC で先頭に来るので、新しい問題が最優先になる。
-      .orderBy(asc(quizQuestions.dueAt), asc(quizQuestions.lastAnsweredAt), desc(quizQuestions.createdAt))
+      .orderBy(
+        asc(quizQuestions.dueAt),
+        asc(quizQuestions.lastAnsweredAt),
+        desc(quizQuestions.createdAt),
+      )
       .limit(QUIZ_LIMIT);
 
     return c.json({ questions: rows.map(toQuizQuestionDto) });

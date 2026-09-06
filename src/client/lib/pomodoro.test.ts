@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  POMODORO_BREAK_MS,
-  POMODORO_CYCLE_MS,
-  POMODORO_WORK_MS,
-} from '../../shared/types';
+import { POMODORO_BREAK_MS, POMODORO_CYCLE_MS, POMODORO_WORK_MS } from '../../shared/types';
 import { getPomodoroState, toRecordedMinutes } from './pomodoro';
 
 /**

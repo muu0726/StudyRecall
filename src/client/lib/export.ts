@@ -55,7 +55,10 @@ export function exportAnkiCsv(questions: QuizQuestionDTO[], filename: string): v
 
 /** ZIP のパスに使えない文字を落とす */
 function safeFileName(name: string): string {
-  const cleaned = name.replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, ' ').trim();
+  const cleaned = name
+    .replace(/[\\/:*?"<>|]/g, '_')
+    .replace(/\s+/g, ' ')
+    .trim();
   return cleaned.slice(0, 80) || 'untitled';
 }
 

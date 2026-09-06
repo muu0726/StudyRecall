@@ -438,7 +438,8 @@ export const notebooksRoute = new Hono<AppEnv>()
      * 親がまだゴミ箱に残っているなら、カテゴリ直下へ引き上げる。
      * そうしないと「復元したのにツリーのどこにも出てこない」状態になる。
      */
-    const parentStillTrashed = target.parentId !== null && trashed.some((n) => n.id === target.parentId);
+    const parentStillTrashed =
+      target.parentId !== null && trashed.some((n) => n.id === target.parentId);
     if (parentStillTrashed) {
       await db
         .update(notebooks)

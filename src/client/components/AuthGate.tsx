@@ -66,7 +66,9 @@ export default function AuthGate({ children }: Props) {
           <span className="rounded-2xl bg-blue-600 p-3 text-white">
             <BookOpenCheck className="h-7 w-7" aria-hidden />
           </span>
-          <h1 className="mt-4 text-2xl font-bold text-slate-900 dark:text-slate-100">StudyRecall</h1>
+          <h1 className="mt-4 text-2xl font-bold text-slate-900 dark:text-slate-100">
+            StudyRecall
+          </h1>
           <p className="mt-1.5 text-sm text-slate-500 dark:text-slate-400">
             学習を記録して、そのまま一問一答に。
             <br />
@@ -79,7 +81,7 @@ export default function AuthGate({ children }: Props) {
             type="button"
             onClick={() => void handleGoogle()}
             disabled={!config?.googleEnabled || busy !== null}
-            className="flex w-full items-center justify-center gap-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 shadow-sm transition hover:bg-slate-50 dark:hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-2.5 rounded-xl border border-slate-300 bg-white py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
           >
             {busy === 'google' ? (
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
@@ -91,8 +93,8 @@ export default function AuthGate({ children }: Props) {
 
           {config && !config.googleEnabled && (
             <p className="text-center text-xs text-slate-400 dark:text-slate-500">
-              Google ログインは未設定です。`.dev.vars` に GOOGLE_CLIENT_ID と
-              GOOGLE_CLIENT_SECRET を設定すると有効になります。
+              Google ログインは未設定です。`.dev.vars` に GOOGLE_CLIENT_ID と GOOGLE_CLIENT_SECRET
+              を設定すると有効になります。
             </p>
           )}
 
@@ -108,7 +110,7 @@ export default function AuthGate({ children }: Props) {
                 type="button"
                 onClick={() => void handleDevLogin()}
                 disabled={busy !== null}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-800 py-3 dark:bg-slate-700 dark:hover:bg-slate-600 text-sm font-semibold text-white transition hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-800 py-3 text-sm font-semibold text-white transition hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-700 dark:hover:bg-slate-600"
               >
                 {busy === 'dev' ? (
                   <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
@@ -124,14 +126,17 @@ export default function AuthGate({ children }: Props) {
           )}
 
           {config && !config.googleEnabled && !config.devLoginEnabled && (
-            <p className="flex items-center justify-center gap-2 rounded-xl bg-amber-50 dark:bg-amber-950 px-4 py-3 text-sm text-amber-800 dark:text-amber-300">
+            <p className="flex items-center justify-center gap-2 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-300">
               <LogIn className="h-4 w-4 shrink-0" aria-hidden />
               利用できるログイン手段がありません。
             </p>
           )}
 
           {error && (
-            <p className="rounded-xl bg-red-50 dark:bg-red-950 px-4 py-3 text-sm text-red-700 dark:text-red-300" role="alert">
+            <p
+              className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300"
+              role="alert"
+            >
               {error}
             </p>
           )}

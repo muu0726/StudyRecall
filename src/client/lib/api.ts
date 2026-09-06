@@ -185,10 +185,9 @@ export const api = {
     ),
 
   restoreNotebook: (id: string) =>
-    request<{ ok: true; restored: number; movedToRoot: boolean }>(
-      `/api/notebooks/${id}/restore`,
-      { method: 'POST' },
-    ),
+    request<{ ok: true; restored: number; movedToRoot: boolean }>(`/api/notebooks/${id}/restore`, {
+      method: 'POST',
+    }),
 
   purgeNotebook: (id: string) =>
     request<{ ok: true; purged: number }>(`/api/notebooks/${id}/purge`, { method: 'DELETE' }),

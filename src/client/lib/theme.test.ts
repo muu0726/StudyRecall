@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  isThemeSetting,
-  nextThemeSetting,
-  resolveTheme,
-  type ThemeSetting,
-} from './theme';
+import { isThemeSetting, nextThemeSetting, resolveTheme, type ThemeSetting } from './theme';
 
 /**
  * 間違えると「OS はダークなのに白いまま」「切り替えても戻らない」といった、

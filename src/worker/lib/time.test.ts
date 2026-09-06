@@ -7,8 +7,7 @@ import { startOfMonthJst, startOfTodayJst, startOfWeekJst } from './time';
  */
 
 /** JST での表示に直して確かめる */
-const asJst = (d: Date) =>
-  d.toLocaleString('sv-SE', { timeZone: 'Asia/Tokyo' }).replace(' ', 'T');
+const asJst = (d: Date) => d.toLocaleString('sv-SE', { timeZone: 'Asia/Tokyo' }).replace(' ', 'T');
 
 describe('startOfTodayJst', () => {
   it('JST の 0:00 を返す', () => {

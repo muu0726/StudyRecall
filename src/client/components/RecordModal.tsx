@@ -43,15 +43,17 @@ export default function RecordModal({
       aria-label="学習を記録する"
       className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-4 sm:items-center dark:bg-slate-950/70"
     >
-      <div className="max-h-full w-full max-w-lg overflow-y-auto rounded-2xl bg-white dark:bg-slate-900 shadow-xl">
-        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 px-5 py-4">
-          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">学習を記録する</h2>
+      <div className="max-h-full w-full max-w-lg overflow-y-auto rounded-2xl bg-white shadow-xl dark:bg-slate-900">
+        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-slate-800">
+          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+            学習を記録する
+          </h2>
           <button
             type="button"
             onClick={onClose}
             disabled={isSubmitting}
             aria-label="閉じる"
-            className="rounded-lg p-1 text-slate-400 dark:text-slate-500 transition hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-600 dark:hover:text-slate-400 disabled:opacity-50"
+            className="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-400"
           >
             <X className="h-5 w-5" aria-hidden />
           </button>
@@ -66,7 +68,10 @@ export default function RecordModal({
           }}
         >
           <div>
-            <label htmlFor="minutes" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+            <label
+              htmlFor="minutes"
+              className="block text-sm font-medium text-slate-700 dark:text-slate-300"
+            >
               学習時間（分）
             </label>
             <input
@@ -76,20 +81,25 @@ export default function RecordModal({
               max={1440}
               value={minutes}
               onChange={(event) => setMinutes(Number(event.target.value))}
-              className="mt-1.5 w-full rounded-xl border border-slate-300 dark:border-slate-700 px-3 py-2.5 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none"
+              className="mt-1.5 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none dark:border-slate-700"
             />
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">タイマーの計測値です。手動で微調整できます。</p>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              タイマーの計測値です。手動で微調整できます。
+            </p>
           </div>
 
           <div>
-            <label htmlFor="category" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+            <label
+              htmlFor="category"
+              className="block text-sm font-medium text-slate-700 dark:text-slate-300"
+            >
               カテゴリ
             </label>
             <select
               id="category"
               value={categoryId}
               onChange={(event) => setCategoryId(event.target.value)}
-              className="mt-1.5 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2.5 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none"
+              className="mt-1.5 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none dark:border-slate-700 dark:bg-slate-900"
             >
               {categories.length === 0 && <option value="">カテゴリがありません</option>}
               {categories.map((category) => (
@@ -101,7 +111,10 @@ export default function RecordModal({
           </div>
 
           <div>
-            <label htmlFor="notes" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+            <label
+              htmlFor="notes"
+              className="block text-sm font-medium text-slate-700 dark:text-slate-300"
+            >
               本日の学び・用語メモ
             </label>
             <textarea
@@ -109,8 +122,10 @@ export default function RecordModal({
               rows={7}
               value={notes}
               onChange={(event) => setNotes(event.target.value)}
-              placeholder={'例:\nTCPは3ウェイハンドシェイクで接続を確立する\nサブネットマスクはネットワーク部とホスト部を分ける\nARPはIPアドレスからMACアドレスを解決する'}
-              className="mt-1.5 w-full resize-y rounded-xl border border-slate-300 dark:border-slate-700 px-3 py-2.5 text-sm leading-relaxed focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none"
+              placeholder={
+                '例:\nTCPは3ウェイハンドシェイクで接続を確立する\nサブネットマスクはネットワーク部とホスト部を分ける\nARPはIPアドレスからMACアドレスを解決する'
+              }
+              className="mt-1.5 w-full resize-y rounded-xl border border-slate-300 px-3 py-2.5 text-sm leading-relaxed focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none dark:border-slate-700"
             />
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
               このメモから AI が最大5問の一問一答を作成します。
@@ -118,7 +133,10 @@ export default function RecordModal({
           </div>
 
           {error && (
-            <p className="rounded-xl bg-red-50 dark:bg-red-950 px-4 py-3 text-sm text-red-700 dark:text-red-300" role="alert">
+            <p
+              className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300"
+              role="alert"
+            >
               {error}
             </p>
           )}

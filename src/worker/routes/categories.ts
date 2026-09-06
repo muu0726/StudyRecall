@@ -26,7 +26,11 @@ function usageSelect() {
   };
 }
 
-const toUsage = (row: { studyLogs: number; notebooks: number; quizzes: number }): CategoryUsage => ({
+const toUsage = (row: {
+  studyLogs: number;
+  notebooks: number;
+  quizzes: number;
+}): CategoryUsage => ({
   studyLogs: Number(row.studyLogs),
   notebooks: Number(row.notebooks),
   quizzes: Number(row.quizzes),
@@ -77,7 +81,9 @@ export const categoriesRoute = new Hono<AppEnv>()
       return c.json({ error: 'name は必須です' }, 400);
     }
     const color =
-      typeof body?.color === 'string' && COLOR_PATTERN.test(body.color) ? body.color : DEFAULT_COLOR;
+      typeof body?.color === 'string' && COLOR_PATTERN.test(body.color)
+        ? body.color
+        : DEFAULT_COLOR;
 
     const db = getDb(c.env);
     const [row] = await db

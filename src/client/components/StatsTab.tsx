@@ -88,23 +88,28 @@ export default function StatsTab({ data }: Props) {
 
       {stats.quiz.dueNow === 0 && stats.quiz.nextDueAt && (
         <p className="text-xs text-slate-500 dark:text-slate-400">
-          次の出題は {formatDate(stats.quiz.nextDueAt)}
-          （{daysUntil(stats.quiz.nextDueAt, new Date())}日後）。
-          間隔は正解するほど伸びます。
+          次の出題は {formatDate(stats.quiz.nextDueAt)}（
+          {daysUntil(stats.quiz.nextDueAt, new Date())}日後）。 間隔は正解するほど伸びます。
         </p>
       )}
 
-      <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm">
-        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">科目別の学習時間</h2>
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+          科目別の学習時間
+        </h2>
         {stats.byCategory.length === 0 ? (
-          <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">カテゴリがまだありません。</p>
+          <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">
+            カテゴリがまだありません。
+          </p>
         ) : (
           <ul className="mt-4 space-y-3">
             {stats.byCategory.map((category) => (
               <li key={category.categoryId}>
                 <div className="flex items-baseline justify-between text-sm">
-                  <span className="font-medium text-slate-700 dark:text-slate-300">{category.name}</span>
-                  <span className="text-slate-500 dark:text-slate-400 tabular-nums">
+                  <span className="font-medium text-slate-700 dark:text-slate-300">
+                    {category.name}
+                  </span>
+                  <span className="text-slate-500 tabular-nums dark:text-slate-400">
                     {formatMinutes(category.totalMinutes)}
                   </span>
                 </div>
@@ -123,7 +128,7 @@ export default function StatsTab({ data }: Props) {
         )}
       </section>
 
-      <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm">
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">最近の学習記録</h2>
         {logs.length === 0 ? (
           <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">まだ記録がありません。</p>
@@ -137,16 +142,22 @@ export default function StatsTab({ data }: Props) {
                   aria-hidden
                 />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{log.categoryName}</p>
+                  <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
+                    {log.categoryName}
+                  </p>
                   {log.notes && (
-                    <p className="truncate text-xs text-slate-500 dark:text-slate-400">{log.notes.split('\n')[0]}</p>
+                    <p className="truncate text-xs text-slate-500 dark:text-slate-400">
+                      {log.notes.split('\n')[0]}
+                    </p>
                   )}
                 </div>
                 <div className="shrink-0 text-right">
-                  <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 tabular-nums">
+                  <p className="text-sm font-semibold text-slate-700 tabular-nums dark:text-slate-300">
                     {formatMinutes(log.durationMinutes)}
                   </p>
-                  <p className="text-xs text-slate-400 dark:text-slate-500">{formatDateTime(log.createdAt)}</p>
+                  <p className="text-xs text-slate-400 dark:text-slate-500">
+                    {formatDateTime(log.createdAt)}
+                  </p>
                 </div>
               </li>
             ))}
@@ -169,7 +180,7 @@ function SummaryCard({
   accent: string;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm">
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <div className={cn('inline-flex rounded-xl p-2', accent)}>{icon}</div>
       <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">{label}</p>
       <p className="mt-1 text-3xl font-bold text-slate-900 dark:text-slate-100">{value}</p>
@@ -193,12 +204,32 @@ function Badge({
     <div
       className={cn(
         'flex items-center gap-2.5 rounded-full border px-4 py-2 shadow-sm',
-        highlight ? 'border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950' : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900',
+        highlight
+          ? 'border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950'
+          : 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900',
       )}
     >
-      <span className={highlight ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'}>{icon}</span>
-      <span className={cn('text-sm', highlight ? 'text-blue-800 dark:text-blue-300' : 'text-slate-500 dark:text-slate-400')}>{label}</span>
-      <span className={cn('text-sm font-bold', highlight ? 'text-blue-900 dark:text-blue-200' : 'text-slate-900 dark:text-slate-100')}>
+      <span
+        className={
+          highlight ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'
+        }
+      >
+        {icon}
+      </span>
+      <span
+        className={cn(
+          'text-sm',
+          highlight ? 'text-blue-800 dark:text-blue-300' : 'text-slate-500 dark:text-slate-400',
+        )}
+      >
+        {label}
+      </span>
+      <span
+        className={cn(
+          'text-sm font-bold',
+          highlight ? 'text-blue-900 dark:text-blue-200' : 'text-slate-900 dark:text-slate-100',
+        )}
+      >
         {value}
       </span>
     </div>

@@ -27,9 +27,7 @@ export async function getMonthlyQuota(db: Db, userId: string): Promise<QuotaStat
   const [row] = await db
     .select({ used: sql<number>`count(*)` })
     .from(quizQuestions)
-    .where(
-      and(eq(quizQuestions.userId, userId), gte(quizQuestions.createdAt, startOfMonthJst())),
-    );
+    .where(and(eq(quizQuestions.userId, userId), gte(quizQuestions.createdAt, startOfMonthJst())));
 
   const used = Number(row?.used ?? 0);
   const remaining = Math.max(0, MONTHLY_GENERATION_LIMIT - used);

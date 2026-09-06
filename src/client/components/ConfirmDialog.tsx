@@ -36,11 +36,12 @@ export default function ConfirmDialog({
 }: Props) {
   if (!open) return null;
 
-  const lines = description === undefined ? [] : Array.isArray(description) ? description : [description];
+  const lines =
+    description === undefined ? [] : Array.isArray(description) ? description : [description];
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-end justify-center bg-slate-900/40 dark:bg-slate-950/70 p-4 sm:items-center"
+      className="fixed inset-0 z-[60] flex items-end justify-center bg-slate-900/40 p-4 sm:items-center dark:bg-slate-950/70"
       role="dialog"
       aria-modal="true"
       onClick={() => {
@@ -48,14 +49,16 @@ export default function ConfirmDialog({
       }}
     >
       <div
-        className="w-full max-w-sm overflow-hidden rounded-2xl bg-white dark:bg-slate-900 shadow-xl"
+        className="w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-xl dark:bg-slate-900"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-start gap-3 px-5 py-4">
           <span
             className={cn(
               'mt-0.5 shrink-0 rounded-lg p-1.5',
-              destructive ? 'bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400' : 'bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400',
+              destructive
+                ? 'bg-red-50 text-red-600 dark:bg-red-950 dark:text-red-400'
+                : 'bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400',
             )}
           >
             <AlertTriangle className="h-4 w-4" aria-hidden />
@@ -73,18 +76,18 @@ export default function ConfirmDialog({
             onClick={onCancel}
             disabled={isBusy}
             aria-label="閉じる"
-            className="shrink-0 rounded-lg p-1 text-slate-400 dark:text-slate-500 transition hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50"
+            className="shrink-0 rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 disabled:opacity-50 dark:text-slate-500 dark:hover:bg-slate-800"
           >
             <X className="h-5 w-5" aria-hidden />
           </button>
         </div>
 
-        <div className="flex gap-2 border-t border-slate-100 dark:border-slate-800 px-5 py-3">
+        <div className="flex gap-2 border-t border-slate-100 px-5 py-3 dark:border-slate-800">
           <button
             type="button"
             onClick={onCancel}
             disabled={isBusy}
-            className="flex-1 rounded-xl px-4 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-400 transition hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50"
+            className="flex-1 rounded-xl px-4 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-100 disabled:opacity-50 dark:text-slate-400 dark:hover:bg-slate-800"
           >
             {cancelLabel}
           </button>
