@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Loader2, Sparkles, X } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 import type { CategoryDTO } from '../../shared/types';
 import { api } from '../lib/api';
+import { Banner, Button, Field, Modal, Select, Textarea, Input } from '../ui';
 
 interface Props {
   open: boolean;
@@ -26,8 +27,6 @@ export default function AddTermModal({ open, categories, onClose, onAdded }: Pro
     setError(null);
   }, [open, categories]);
 
-  if (!open) return null;
-
   const canSubmit =
     !isSubmitting && categoryId !== '' && term.trim() !== '' && description.trim() !== '';
 
@@ -48,120 +47,77 @@ export default function AddTermModal({ open, categories, onClose, onAdded }: Pro
   };
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="用語を追加"
-      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-4 sm:items-center dark:bg-slate-950/70"
+    <Modal
+      open={open}
+      title="用語を追加"
+      onClose={onClose}
+      closeDisabled={isSubmitting}
+      bodyClassName="px-5 py-5"
     >
-      <div className="max-h-full w-full max-w-lg overflow-y-auto rounded-2xl bg-white shadow-xl dark:bg-slate-900">
-        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-slate-800">
-          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">用語を追加</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={isSubmitting}
-            aria-label="閉じる"
-            className="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-400"
+      <form
+        className="space-y-5"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (canSubmit) void handleSubmit();
+        }}
+      >
+        <Field label="カテゴリ" htmlFor="term-category">
+          <Select
+            id="term-category"
+            value={categoryId}
+            onChange={(event) => setCategoryId(event.target.value)}
           >
-            <X className="h-5 w-5" aria-hidden />
-          </button>
-        </div>
+            {categories.length === 0 && <option value="">カテゴリがありません</option>}
+            {categories.map((category) => (
+              <option key={category.id} value={category.id}>
+                {category.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
 
-        <form
-          className="space-y-5 px-5 py-5"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (canSubmit) void handleSubmit();
-          }}
+        <Field label="用語" htmlFor="term">
+          <Input
+            id="term"
+            type="text"
+            value={term}
+            onChange={(event) => setTerm(event.target.value)}
+            placeholder="例: 3ウェイハンドシェイク"
+          />
+        </Field>
+
+        <Field
+          label="説明"
+          htmlFor="term-description"
+          hint="この内容から AI が問題文・解説・ジャンルタグを作ります。"
         >
-          <div>
-            <label
-              htmlFor="term-category"
-              className="block text-sm font-medium text-slate-700 dark:text-slate-300"
-            >
-              カテゴリ
-            </label>
-            <select
-              id="term-category"
-              value={categoryId}
-              onChange={(event) => setCategoryId(event.target.value)}
-              className="mt-1.5 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none dark:border-slate-700 dark:bg-slate-900"
-            >
-              {categories.length === 0 && <option value="">カテゴリがありません</option>}
-              {categories.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          <Textarea
+            id="term-description"
+            rows={4}
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+            placeholder="例: TCPで接続を確立する手順。SYN → SYN-ACK → ACK の3段階でやり取りする。"
+          />
+        </Field>
 
-          <div>
-            <label
-              htmlFor="term"
-              className="block text-sm font-medium text-slate-700 dark:text-slate-300"
-            >
-              用語
-            </label>
-            <input
-              id="term"
-              type="text"
-              value={term}
-              onChange={(event) => setTerm(event.target.value)}
-              placeholder="例: 3ウェイハンドシェイク"
-              className="mt-1.5 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none dark:border-slate-700"
-            />
-          </div>
+        {error && (
+          <Banner tone="error" size="sm">
+            {error}
+          </Banner>
+        )}
 
-          <div>
-            <label
-              htmlFor="term-description"
-              className="block text-sm font-medium text-slate-700 dark:text-slate-300"
-            >
-              説明
-            </label>
-            <textarea
-              id="term-description"
-              rows={4}
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-              placeholder="例: TCPで接続を確立する手順。SYN → SYN-ACK → ACK の3段階でやり取りする。"
-              className="mt-1.5 w-full resize-y rounded-xl border border-slate-300 px-3 py-2.5 text-sm leading-relaxed focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none dark:border-slate-700"
-            />
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-              この内容から AI が問題文・解説・ジャンルタグを作ります。
-            </p>
-          </div>
-
-          {error && (
-            <p
-              className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300"
-              role="alert"
-            >
-              {error}
-            </p>
-          )}
-
-          <button
-            type="submit"
-            disabled={!canSubmit}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300 dark:disabled:bg-slate-700"
-          >
-            {isSubmitting ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                問題を作成しています…
-              </>
-            ) : (
-              <>
-                <Sparkles className="h-4 w-4" aria-hidden />
-                問題を作成して追加
-              </>
-            )}
-          </button>
-        </form>
-      </div>
-    </div>
+        <Button
+          type="submit"
+          variant="primary"
+          size="lg"
+          fullWidth
+          disabled={!canSubmit}
+          loading={isSubmitting}
+          icon={<Sparkles className="h-4 w-4" aria-hidden />}
+        >
+          {isSubmitting ? '問題を作成しています…' : '問題を作成して追加'}
+        </Button>
+      </form>
+    </Modal>
   );
 }

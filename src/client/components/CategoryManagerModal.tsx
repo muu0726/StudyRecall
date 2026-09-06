@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Check, Loader2, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { Check, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
 import type { CategoryDTO } from '../../shared/types';
 import { api, asCategoryInUse } from '../lib/api';
 import { cn } from '../lib/cn';
 import { useToast } from './Toast';
 import ConfirmDialog from './ConfirmDialog';
+import { Banner, Button, IconButton, Input, Modal } from '../ui';
 
 interface Props {
   open: boolean;
@@ -111,37 +112,15 @@ export default function CategoryManagerModal({ open, categories, onClose, onChan
   };
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="カテゴリの管理"
-      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-4 sm:items-center dark:bg-slate-950/70"
-    >
-      <div className="max-h-full w-full max-w-lg overflow-y-auto rounded-2xl bg-white shadow-xl dark:bg-slate-900">
-        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-slate-800">
-          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-            カテゴリの管理
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="閉じる"
-            className="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-400"
-          >
-            <X className="h-5 w-5" aria-hidden />
-          </button>
-        </div>
-
+    <>
+      <Modal open={open} title="カテゴリの管理" onClose={onClose} bodyClassName="px-0 py-0">
         {error && (
-          <p
-            className="mx-5 mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300"
-            role="alert"
-          >
+          <Banner tone="error" size="sm" className="mx-5 mt-4">
             {error}
-          </p>
+          </Banner>
         )}
 
-        <ul className="divide-y divide-slate-100 px-5 py-2 dark:divide-slate-800">
+        <ul className="divide-y divide-line px-5 py-2">
           {categories.map((category) => {
             const inUse =
               category.usage.studyLogs + category.usage.notebooks + category.usage.quizzes;
@@ -152,34 +131,26 @@ export default function CategoryManagerModal({ open, categories, onClose, onChan
               <li key={category.id} className="py-3">
                 {isEditing ? (
                   <div className="space-y-2.5">
-                    <input
+                    <Input
                       value={editName}
                       onChange={(event) => setEditName(event.target.value)}
                       aria-label="カテゴリ名"
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none dark:border-slate-700"
                     />
                     <ColorPicker value={editColor} onChange={setEditColor} />
                     <div className="flex gap-2">
-                      <button
-                        type="button"
+                      <Button
+                        variant="primary"
+                        className="flex-1"
                         onClick={() => void handleUpdate(category.id)}
-                        disabled={isBusy || editName.trim() === ''}
-                        className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-blue-600 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300 dark:disabled:bg-slate-700"
+                        disabled={editName.trim() === ''}
+                        loading={isBusy}
+                        icon={<Check className="h-3.5 w-3.5" aria-hidden />}
                       >
-                        {isBusy ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-                        ) : (
-                          <Check className="h-3.5 w-3.5" aria-hidden />
-                        )}
                         保存
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setEditingId(null)}
-                        className="rounded-lg px-4 py-2 text-sm font-medium text-slate-500 transition hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
-                      >
+                      </Button>
+                      <Button variant="ghost" onClick={() => setEditingId(null)}>
                         取消
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 ) : (
@@ -190,29 +161,25 @@ export default function CategoryManagerModal({ open, categories, onClose, onChan
                       aria-hidden
                     />
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-200">
-                        {category.name}
-                      </p>
-                      <p className="text-xs text-slate-400 dark:text-slate-500">
+                      <p className="truncate text-body font-medium text-fg">{category.name}</p>
+                      <p className="text-caption text-fg-subtle">
                         {inUse === 0
                           ? '未使用'
                           : `記録 ${category.usage.studyLogs} / ノート ${category.usage.notebooks} / 問題 ${category.usage.quizzes}`}
                       </p>
                     </div>
-                    <button
-                      type="button"
+                    <IconButton
+                      size="sm"
                       onClick={() => startEdit(category)}
                       aria-label={`${category.name} を編集`}
-                      className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
-                    >
-                      <Pencil className="h-4 w-4" aria-hidden />
-                    </button>
+                      icon={<Pencil className="h-4 w-4" aria-hidden />}
+                    />
                     <button
                       type="button"
                       onClick={() => setDeleteTarget(category)}
                       disabled={isBusy}
                       aria-label={`${category.name} を削除`}
-                      className="rounded-lg p-1.5 text-slate-400 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-40 dark:text-slate-500 dark:hover:bg-red-950"
+                      className="hover:bg-danger-soft hover:text-danger"
                     >
                       {isBusy ? (
                         <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
@@ -227,31 +194,27 @@ export default function CategoryManagerModal({ open, categories, onClose, onChan
           })}
         </ul>
 
-        <div className="space-y-2.5 border-t border-slate-100 px-5 py-4 dark:border-slate-800">
-          <p className="text-sm font-medium text-slate-700 dark:text-slate-300">カテゴリを追加</p>
-          <input
+        <div className="space-y-2.5 border-t border-line px-5 py-4">
+          <p className="text-body font-medium text-fg">カテゴリを追加</p>
+          <Input
             value={newName}
             onChange={(event) => setNewName(event.target.value)}
             placeholder="例: データベース"
             aria-label="新しいカテゴリ名"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none dark:border-slate-700"
           />
           <ColorPicker value={newColor} onChange={setNewColor} />
-          <button
-            type="button"
+          <Button
+            variant="primary"
+            fullWidth
             onClick={() => void handleCreate()}
-            disabled={isCreating || newName.trim() === ''}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300 dark:disabled:bg-slate-700"
+            disabled={newName.trim() === ''}
+            loading={isCreating}
+            icon={<Plus className="h-4 w-4" aria-hidden />}
           >
-            {isCreating ? (
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-            ) : (
-              <Plus className="h-4 w-4" aria-hidden />
-            )}
             追加
-          </button>
+          </Button>
         </div>
-      </div>
+      </Modal>
 
       <ConfirmDialog
         open={deleteTarget !== null}
@@ -263,7 +226,7 @@ export default function CategoryManagerModal({ open, categories, onClose, onChan
         }}
         onCancel={() => setDeleteTarget(null)}
       />
-    </div>
+    </>
   );
 }
 
@@ -279,7 +242,9 @@ function ColorPicker({ value, onChange }: { value: string; onChange: (color: str
           aria-pressed={value === color}
           className={cn(
             'h-6 w-6 rounded-full transition',
-            value === color ? 'ring-2 ring-slate-900 ring-offset-2' : 'hover:scale-110',
+            value === color
+              ? 'ring-2 ring-fg ring-offset-2 ring-offset-surface'
+              : 'hover:scale-110',
           )}
           style={{ backgroundColor: color }}
         />
