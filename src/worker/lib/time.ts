@@ -21,3 +21,14 @@ export function startOfWeekJst(now: Date = new Date()): Date {
   const daysSinceMonday = (jstDayOfWeek + 6) % 7;
   return new Date(todayStart.getTime() - daysSinceMonday * DAY_MS);
 }
+
+/**
+ * JST における今月 1 日 0:00 を UTC の Date として返す。
+ * 月次の生成上限を数える起点。
+ */
+export function startOfMonthJst(now: Date = new Date()): Date {
+  // +9h した時刻の UTC 年月が、JST の年月と一致する
+  const shifted = new Date(now.getTime() + JST_OFFSET_MS);
+  const monthStartShifted = Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth(), 1);
+  return new Date(monthStartShifted - JST_OFFSET_MS);
+}

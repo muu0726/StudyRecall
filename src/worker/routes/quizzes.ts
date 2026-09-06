@@ -6,6 +6,7 @@ import { toQuizQuestionDto } from '../lib/dto';
 import { newId } from '../lib/ids';
 import { quizSelectWithCategory } from '../lib/queries';
 import { generateQuizFromTerm } from '../lib/gemini';
+import { getMonthlyQuota, quotaWarning } from '../lib/quota';
 import { nextSchedule } from '../../shared/srs';
 import {
   MASTERY_THRESHOLD,
@@ -78,6 +79,12 @@ export const quizzesRoute = new Hono<AppEnv>()
       .limit(1);
 
     if (!category) return c.json({ error: '指定されたカテゴリが見つかりません' }, 404);
+
+    // 用語のクイック追加は生成が本体なので、上限に当たったら断る（保存するものが無い）
+    const quota = await getMonthlyQuota(db, userId);
+    if (quota.exceeded) {
+      return c.json({ error: quotaWarning(quota) }, 429);
+    }
 
     const { questions, warning } = await generateQuizFromTerm(
       c.env.GEMINI_API_KEY,

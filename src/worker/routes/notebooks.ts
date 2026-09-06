@@ -7,6 +7,7 @@ import { newId } from '../lib/ids';
 import { clampQuestionCount, generateQuizFromNotebook } from '../lib/gemini';
 import { canMove, collectSubtreeIds } from '../../shared/note-tree';
 import { buildPromptSource } from '../../shared/note-sanitize';
+import { getMonthlyQuota, quotaWarning } from '../lib/quota';
 import {
   DEFAULT_GENERATED_QUESTIONS,
   type CreateNotebookRequest,
@@ -503,6 +504,12 @@ export const notebooksRoute = new Hono<AppEnv>()
       console.log(
         `[generate-quiz] 本文を切り詰めました notebook=${notebook.id} ${notebook.content.length} -> ${source.text.length} 文字`,
       );
+    }
+
+    // ノートは既に保存されているので、上限のときは生成だけ飛ばして warning を返す
+    const quota = await getMonthlyQuota(db, userId);
+    if (quota.exceeded) {
+      return c.json({ questions: [], warning: quotaWarning(quota) });
     }
 
     const { questions: generated, warning } = await generateQuizFromNotebook(

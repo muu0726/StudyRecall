@@ -10,7 +10,10 @@ export default defineConfig({
     tailwindcss(),
     // cloudflare() より前に置く。後ろだと Worker 環境のビルドに巻き込まれる。
     VitePWA({
-      registerType: 'autoUpdate',
+      // 'autoUpdate' だと更新が当たるのは次の読み込みからで、
+      // デプロイ直後の 1 回目は古い画面が出る（実際に本番で踏んだ）。
+      // 'prompt' にして、更新があることをトーストで知らせる。
+      registerType: 'prompt',
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
         name: 'StudyRecall',

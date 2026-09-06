@@ -7,6 +7,15 @@
 /** 「わかった」がこの回数に達すると習得済みとみなす */
 export const MASTERY_THRESHOLD = 3;
 
+/**
+ * 1 ユーザーが 1 か月に生成できる問題数の上限（JST の月で数える）。
+ *
+ * 誰でもサインインできる状態で公開しているので、第三者の生成が
+ * API キーの持ち主に課金される。青天井だけは止めておく。
+ * 変えるときはこの定数を直して再デプロイする（管理 UI は持たない）。
+ */
+export const MONTHLY_GENERATION_LIMIT = 300;
+
 /** 1 回の生成で作れる問題数の上限 */
 export const MAX_GENERATED_QUESTIONS = 10;
 
@@ -108,6 +117,10 @@ export interface StudyStats {
     dueNow: number;
     /** まだ期限が来ていないもののうち、最も早い出題日。無ければ null */
     nextDueAt: string | null;
+    /** 今月これまでに生成した問題数（JST の月） */
+    generatedThisMonth: number;
+    /** 月次の上限 */
+    monthlyLimit: number;
   };
 }
 

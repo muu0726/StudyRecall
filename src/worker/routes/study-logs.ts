@@ -6,6 +6,8 @@ import { toQuizQuestionDto, toStudyLogDto } from '../lib/dto';
 import { newId } from '../lib/ids';
 import { startOfTodayJst, startOfWeekJst } from '../lib/time';
 import { generateQuizFromStudyLog } from '../lib/gemini';
+import { getMonthlyQuota, quotaWarning } from '../lib/quota';
+import { MONTHLY_GENERATION_LIMIT } from '../../shared/types';
 import type {
   CategoryTotal,
   CreateStudyLogRequest,
@@ -67,6 +69,9 @@ async function buildStats(db: Db, userId: string): Promise<StudyStats> {
   const quizMastered = Number(quiz?.mastered ?? 0);
   const nextDueSec = quiz?.nextDueSec ?? null;
 
+  // 今月の生成数（上限の目安として出す）
+  const monthly = await getMonthlyQuota(db, userId);
+
   return {
     todayMinutes: Number(duration?.today ?? 0),
     weekMinutes: Number(duration?.week ?? 0),
@@ -77,6 +82,8 @@ async function buildStats(db: Db, userId: string): Promise<StudyStats> {
       mastered: quizMastered,
       masteryRate: quizTotal === 0 ? 0 : quizMastered / quizTotal,
       dueNow: Number(quiz?.dueNow ?? 0),
+      generatedThisMonth: Number(monthly?.used ?? 0),
+      monthlyLimit: MONTHLY_GENERATION_LIMIT,
       nextDueAt: nextDueSec === null ? null : new Date(Number(nextDueSec) * 1000).toISOString(),
     },
   };
@@ -169,13 +176,21 @@ export const studyLogsRoute = new Hono<AppEnv>()
         .where(eq(timerSessions.id, timerSessionId));
     }
 
-    // 生成に失敗しても学習記録の保存は成功として扱う（generateQuizFromStudyLog は例外を投げない）
-    const { questions: generated, warning } = await generateQuizFromStudyLog(
-      c.env.GEMINI_API_KEY,
-      notes,
-      category.name,
-      QUESTIONS_PER_LOG,
-    );
+    /*
+     * 月次の上限を超えていたら生成だけを飛ばす。**学習記録は保存する。**
+     * 「生成の失敗が保存を巻き込まない」という既存の方針（API キー未設定・
+     * API エラーと同じ扱い）をそのまま当てる。
+     */
+    const quota = await getMonthlyQuota(db, userId);
+    const { questions: generated, warning } = quota.exceeded
+      ? { questions: [], warning: quotaWarning(quota) }
+      : // 生成に失敗しても保存は成功として扱う（generateQuizFromStudyLog は例外を投げない）
+        await generateQuizFromStudyLog(
+          c.env.GEMINI_API_KEY,
+          notes,
+          category.name,
+          QUESTIONS_PER_LOG,
+        );
 
     const savedQuestions =
       generated.length === 0

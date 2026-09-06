@@ -72,6 +72,20 @@ export default function StatsTab({ data }: Props) {
         />
       </section>
 
+      {/* 今月の生成量。上限に近づいたときだけ色を付ける。 */}
+      <p
+        className={cn(
+          'text-xs',
+          stats.quiz.generatedThisMonth >= stats.quiz.monthlyLimit * 0.8
+            ? 'text-amber-700 dark:text-amber-300'
+            : 'text-slate-500 dark:text-slate-400',
+        )}
+      >
+        今月の問題生成 {stats.quiz.generatedThisMonth} / {stats.quiz.monthlyLimit} 問
+        {stats.quiz.generatedThisMonth >= stats.quiz.monthlyLimit &&
+          '（上限に達しました。来月まで新しい問題は作れません）'}
+      </p>
+
       {stats.quiz.dueNow === 0 && stats.quiz.nextDueAt && (
         <p className="text-xs text-slate-500 dark:text-slate-400">
           次の出題は {formatDate(stats.quiz.nextDueAt)}

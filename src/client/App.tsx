@@ -5,6 +5,7 @@ import { api } from './lib/api';
 import { flushQuizResults, pendingCount } from './lib/offline-queue';
 import { useRevalidateOnFocus } from './hooks/useRevalidateOnFocus';
 import { useNotebooks } from './hooks/useNotebooks';
+import { usePwaUpdate } from './hooks/usePwaUpdate';
 import Sidebar, { VIEWS, type ViewId } from './components/Sidebar';
 import StudyTab from './components/StudyTab';
 import NotesTab from './components/NotesTab';
@@ -57,6 +58,9 @@ export default function App() {
   const [isCategoryOpen, setIsCategoryOpen] = useState(false);
   const [isAddTermOpen, setIsAddTermOpen] = useState(false);
   const [isTrashOpen, setIsTrashOpen] = useState(false);
+
+  // 新しいビルドが用意できたらトーストで知らせる（本番ビルドでのみ動く）
+  usePwaUpdate();
 
   /** ノートはサイドバーのツリーとノート画面の両方が描くので、状態はここで持つ */
   const notes = useNotebooks();
