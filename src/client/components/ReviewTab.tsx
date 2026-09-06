@@ -1,5 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { CalendarClock, Download, Headphones, Loader2, PartyPopper, RefreshCw } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  CalendarClock,
+  Check,
+  ChevronDown,
+  Download,
+  Headphones,
+  Loader2,
+  MoreHorizontal,
+  PartyPopper,
+  RefreshCw,
+} from 'lucide-react';
 import type { CategoryDTO, QuizQuestionDTO, TagCount } from '../../shared/types';
 import { api } from '../lib/api';
 import { submitQuizResultResilient } from '../lib/offline-queue';
@@ -12,6 +22,7 @@ import { daysUntil } from '../../shared/srs';
 import { formatDate } from '../lib/format';
 import FlashCard from './FlashCard';
 import SpeechPlayer from './SpeechPlayer';
+import { IconButton, Popover, Segmented, selectableRow } from '../ui';
 
 interface Props {
   categories: CategoryDTO[];
@@ -129,101 +140,112 @@ export default function ReviewTab({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        <button
-          type="button"
-          onClick={() => setIsSpeechOpen(true)}
-          disabled={questions.length === 0}
-          className="flex items-center gap-1.5 rounded-control border border-line-strong bg-surface px-3 py-2 text-body font-semibold text-fg transition hover:bg-row-hover disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          <Headphones className="h-4 w-4" aria-hidden />
-          ハンズフリー再生
-        </button>
+      {/*
+        フィルタは 1 行に畳む。3 行の chip を並べていた頃は、モバイル(375x812)で
+        設問が上から 779px の位置にあり、フィルタだけで 1 画面が埋まっていた。
+        条件は 1 つも減らしていない（カテゴリ / ジャンル / 出題範囲 / 未習得のみ）。
+        横に溢れたぶんはスクロールさせる。折り返すと結局縦に伸びるため。
+      */}
+      <div className="-mx-4 flex [scrollbar-width:none] items-center gap-2 overflow-x-auto px-4 pb-1 [&::-webkit-scrollbar]:hidden">
+        <Segmented
+          label="出題範囲"
+          size="sm"
+          className="shrink-0"
+          value={dueOnly ? 'due' : 'all'}
+          onChange={(value) => setDueOnly(value === 'due')}
+          options={[
+            { value: 'due', label: '今日の復習' },
+            { value: 'all', label: 'すべて' },
+          ]}
+        />
 
-        <button
-          type="button"
-          onClick={handleAnkiExport}
-          disabled={questions.length === 0}
-          className="flex items-center gap-1.5 rounded-control border border-line-strong bg-surface px-3 py-2 text-body font-semibold text-fg transition hover:bg-row-hover disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          <Download className="h-4 w-4" aria-hidden />
-          この条件をAnki出力（{questions.length}）
-        </button>
-      </div>
+        <FilterMenu
+          label="カテゴリ"
+          value={categoryId}
+          onChange={onCategoryChange}
+          options={categories.map((category) => ({
+            value: category.id,
+            label: category.name,
+            dot: category.color,
+          }))}
+        />
 
-      <section className="space-y-3 rounded-card border border-line bg-surface p-4">
-        {/* 上段: カテゴリ */}
-        <div>
-          <p className="mb-1.5 text-caption font-medium text-fg-muted">カテゴリ</p>
-          <div className="flex flex-wrap gap-2">
-            <FilterChip
-              label="すべて"
-              active={categoryId === ''}
-              onClick={() => onCategoryChange('')}
-            />
-            {categories.map((category) => (
-              <FilterChip
-                key={category.id}
-                label={category.name}
-                color={category.color}
-                active={categoryId === category.id}
-                onClick={() => onCategoryChange(category.id)}
-              />
-            ))}
-          </div>
-        </div>
+        <FilterMenu
+          label="ジャンル"
+          value={tag}
+          onChange={onTagChange}
+          emptyHint="まだタグがありません。問題を生成するとAIがジャンルを付けます。"
+          options={tags.map((item) => ({
+            value: item.tag,
+            label: `#${item.tag}`,
+            count: item.count,
+          }))}
+        />
 
-        {/* 下段: ジャンルタグ。カテゴリとは AND で効く。サイドバーの選択とも連動する。 */}
-        <div className="border-t border-line pt-3">
-          <p className="mb-1.5 text-caption font-medium text-fg-muted">ジャンル</p>
-          {tags.length === 0 ? (
-            <p className="text-caption text-fg-subtle">
-              まだタグがありません。問題を生成するとAIがジャンルを付けます。
-            </p>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              <FilterChip label="すべて" active={tag === ''} onClick={() => onTagChange('')} />
-              {tags.map((item) => (
-                <FilterChip
-                  key={item.tag}
-                  label={`#${item.tag} (${item.count})`}
-                  active={tag === item.tag}
-                  onClick={() => onTagChange(item.tag)}
-                />
-              ))}
-            </div>
+        {/* チェックボックス本体は残したまま、見た目だけチップに寄せる */}
+        <label
+          className={cn(
+            'flex h-8 shrink-0 cursor-pointer items-center gap-1.5 rounded-control border px-2.5 text-body transition',
+            unmasteredOnly
+              ? 'border-accent bg-accent-soft text-accent-text'
+              : 'border-line-strong text-fg-muted hover:bg-row-hover hover:text-fg',
           )}
-        </div>
+        >
+          <input
+            type="checkbox"
+            checked={unmasteredOnly}
+            onChange={(event) => setUnmasteredOnly(event.target.checked)}
+            className="sr-only"
+          />
+          <Check className={cn('h-3.5 w-3.5', !unmasteredOnly && 'opacity-30')} aria-hidden />
+          未習得のみ
+        </label>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3">
-          <div className="flex flex-wrap items-center gap-3">
-            {/* 出題範囲。既定は期限が来たものだけ。 */}
-            <div className="flex rounded-control bg-surface-3 p-0.5">
-              <ScopeButton active={dueOnly} onClick={() => setDueOnly(true)} label="今日の復習" />
-              <ScopeButton active={!dueOnly} onClick={() => setDueOnly(false)} label="すべて" />
-            </div>
-
-            <label className="flex cursor-pointer items-center gap-2 text-body text-fg">
-              <input
-                type="checkbox"
-                checked={unmasteredOnly}
-                onChange={(event) => setUnmasteredOnly(event.target.checked)}
-                className="h-4 w-4 rounded-control border-line-strong text-accent-text focus:ring-accent/35"
-              />
-              未習得（まだ不安）のみ
-            </label>
-          </div>
-
-          <button
-            type="button"
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          <IconButton
+            size="sm"
+            aria-label="再読み込み"
             onClick={() => void load()}
-            className="flex items-center gap-1.5 rounded-control px-2 py-1 text-body text-fg-muted transition hover:bg-row-hover hover:text-fg"
+            icon={<RefreshCw className="h-3.5 w-3.5" aria-hidden />}
+          />
+          <Popover
+            placement="bottom-end"
+            trigger={({ open, toggle }) => (
+              <IconButton
+                size="sm"
+                aria-label="この一覧の操作"
+                aria-expanded={open}
+                aria-haspopup="menu"
+                onClick={toggle}
+                icon={<MoreHorizontal className="h-4 w-4" aria-hidden />}
+              />
+            )}
           >
-            <RefreshCw className="h-3.5 w-3.5" aria-hidden />
-            再読み込み
-          </button>
+            {(close) => (
+              <>
+                <MenuItem
+                  icon={<Headphones className="h-4 w-4" aria-hidden />}
+                  label="ハンズフリー再生"
+                  disabled={questions.length === 0}
+                  onClick={() => {
+                    setIsSpeechOpen(true);
+                    close();
+                  }}
+                />
+                <MenuItem
+                  icon={<Download className="h-4 w-4" aria-hidden />}
+                  label={`この条件をAnki出力（${questions.length}）`}
+                  disabled={questions.length === 0}
+                  onClick={() => {
+                    handleAnkiExport();
+                    close();
+                  }}
+                />
+              </>
+            )}
+          </Popover>
         </div>
-      </section>
+      </div>
 
       {error && (
         <p className="rounded-card bg-danger-soft px-5 py-4 text-body text-danger" role="alert">
@@ -319,59 +341,152 @@ export default function ReviewTab({
   );
 }
 
-function ScopeButton({
-  active,
-  onClick,
-  label,
-}: {
-  active: boolean;
-  onClick: () => void;
+interface FilterOption {
+  value: string;
   label: string;
+  dot?: string;
+  count?: number;
+}
+
+/**
+ * 1 行に収まる絞り込み。**選択中かどうかがトリガのラベルで分かる**ので、
+ * 開かなくても今の条件が読める。中身は今までの chip と同じ並び。
+ */
+function FilterMenu({
+  label,
+  value,
+  options,
+  onChange,
+  emptyHint,
+}: {
+  label: string;
+  value: string;
+  options: FilterOption[];
+  onChange: (value: string) => void;
+  emptyHint?: string;
+}) {
+  const selected = options.find((option) => option.value === value);
+
+  return (
+    <Popover
+      role="listbox"
+      trigger={({ open, toggle }) => (
+        <button
+          type="button"
+          onClick={toggle}
+          aria-expanded={open}
+          aria-haspopup="listbox"
+          aria-label={selected ? `${label}: ${selected.label}` : `${label}で絞り込む`}
+          className={cn(
+            'flex h-8 shrink-0 items-center gap-1.5 rounded-control border px-2.5 text-body transition',
+            selected
+              ? 'border-accent bg-accent-soft text-accent-text'
+              : 'border-line-strong text-fg-muted hover:bg-row-hover hover:text-fg',
+          )}
+        >
+          {selected?.dot && (
+            <span
+              className="h-2 w-2 shrink-0 rounded-full"
+              style={{ backgroundColor: selected.dot }}
+              aria-hidden
+            />
+          )}
+          <span className="max-w-[9rem] truncate">{selected ? selected.label : label}</span>
+          <ChevronDown className="h-3.5 w-3.5 shrink-0" aria-hidden />
+        </button>
+      )}
+    >
+      {(close) => (
+        <div className="max-h-72 overflow-y-auto">
+          {options.length === 0 && emptyHint ? (
+            <p className="px-3 py-2 text-caption leading-relaxed text-fg-subtle">{emptyHint}</p>
+          ) : (
+            <>
+              <OptionRow
+                label="すべて"
+                selected={value === ''}
+                onClick={() => {
+                  onChange('');
+                  close();
+                }}
+              />
+              {options.map((option) => (
+                <OptionRow
+                  key={option.value}
+                  label={option.label}
+                  dot={option.dot}
+                  count={option.count}
+                  selected={value === option.value}
+                  onClick={() => {
+                    onChange(option.value);
+                    close();
+                  }}
+                />
+              ))}
+            </>
+          )}
+        </div>
+      )}
+    </Popover>
+  );
+}
+
+function OptionRow({
+  label,
+  dot,
+  count,
+  selected,
+  onClick,
+}: {
+  label: string;
+  dot?: string;
+  count?: number;
+  selected: boolean;
+  onClick: () => void;
 }) {
   return (
     <button
       type="button"
+      role="option"
+      aria-selected={selected}
       onClick={onClick}
-      aria-pressed={active}
-      className={cn(
-        'rounded-control px-3 py-1 text-body font-medium transition',
-        active ? 'bg-surface text-accent-text' : 'text-fg-muted hover:text-fg',
-      )}
+      className={selectableRow(selected, 'flex w-full items-center gap-2 px-3 py-1.5 text-body')}
     >
-      {label}
+      {dot && (
+        <span
+          className="h-2 w-2 shrink-0 rounded-full"
+          style={{ backgroundColor: dot }}
+          aria-hidden
+        />
+      )}
+      <span className="min-w-0 flex-1 truncate text-left">{label}</span>
+      {count !== undefined && (
+        <span className="shrink-0 text-caption text-fg-subtle tabular-nums">{count}</span>
+      )}
     </button>
   );
 }
 
-function FilterChip({
+function MenuItem({
+  icon,
   label,
-  color,
-  active,
+  disabled,
   onClick,
 }: {
+  icon: ReactNode;
   label: string;
-  color?: string;
-  active: boolean;
+  disabled?: boolean;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
+      role="menuitem"
+      disabled={disabled}
       onClick={onClick}
-      className={cn(
-        'flex items-center gap-1.5 rounded-full px-3 py-1.5 text-body font-medium transition',
-        active
-          ? 'bg-accent text-accent-fg'
-          : 'bg-surface-3 text-fg-muted hover:bg-row-hover hover:text-fg',
-      )}
+      className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-body text-fg transition hover:bg-row-hover disabled:cursor-not-allowed disabled:opacity-40"
     >
-      {color && (
-        <span
-          className="h-2 w-2 rounded-full"
-          style={{ backgroundColor: active ? '#ffffff' : color }}
-          aria-hidden
-        />
-      )}
+      <span className="shrink-0 text-fg-muted">{icon}</span>
       {label}
     </button>
   );

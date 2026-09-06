@@ -8,6 +8,7 @@ export { Field, Input, Select, Textarea } from './Field';
 export type { InputProps, SelectProps, TextareaProps } from './Field';
 export { LAYER } from './layers';
 export { Modal } from './Modal';
+export { Popover } from './Popover';
 export type { ModalTone } from './Modal';
 export { selectableRow } from './rowStyles';
 export { Segmented } from './Segmented';
