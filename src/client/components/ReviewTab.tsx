@@ -22,7 +22,7 @@ import { daysUntil } from '../../shared/srs';
 import { formatDate } from '../lib/format';
 import FlashCard from './FlashCard';
 import SpeechPlayer from './SpeechPlayer';
-import { IconButton, Popover, Segmented, selectableRow } from '../ui';
+import { Banner, IconButton, Popover, Segmented, selectableRow } from '../ui';
 
 interface Props {
   categories: CategoryDTO[];
@@ -247,11 +247,7 @@ export default function ReviewTab({
         </div>
       </div>
 
-      {error && (
-        <p className="rounded-card bg-danger-soft px-5 py-4 text-body text-danger" role="alert">
-          {error}
-        </p>
-      )}
+      {error && <Banner tone="error">{error}</Banner>}
 
       {isLoading ? (
         <div className="flex items-center justify-center gap-2 py-16 text-body text-fg-muted">
@@ -331,6 +327,9 @@ export default function ReviewTab({
           </button>
         </div>
       )}
+
+      {/* 再生バーは fixed。これが無いと最後のカードの判定ボタンがバーの下に隠れる。 */}
+      {isSpeechOpen && <div className="h-40" aria-hidden />}
 
       <SpeechPlayer
         open={isSpeechOpen}

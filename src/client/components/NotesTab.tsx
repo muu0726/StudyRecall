@@ -1,15 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import {
-  AlertTriangle,
-  Eye,
-  FilePlus2,
-  Loader2,
-  PanelLeft,
-  Pencil,
-  Save,
-  Sparkles,
-  Trash2,
-} from 'lucide-react';
+import { Eye, FilePlus2, Loader2, PanelLeft, Pencil, Save, Sparkles, Trash2 } from 'lucide-react';
 import type { CategoryDTO, NotebookDTO, QuizQuestionDTO } from '../../shared/types';
 import { DEFAULT_GENERATED_QUESTIONS, MAX_GENERATED_QUESTIONS } from '../../shared/types';
 import { api, asNotebookConflict } from '../lib/api';
@@ -17,6 +7,7 @@ import { getAncestorPath } from '../../shared/note-tree';
 import { MAX_PROMPT_CHARS, willTruncate } from '../../shared/note-sanitize';
 import { submitQuizResultResilient } from '../lib/offline-queue';
 import { cn } from '../lib/cn';
+import { Banner } from '../ui';
 import { useRevalidateOnFocus } from '../hooks/useRevalidateOnFocus';
 import { clearDraft, decideRecovery, readDraft, saveDraft } from '../lib/note-draft';
 import { useToast } from './Toast';
@@ -393,11 +384,7 @@ export default function NotesTab({
 
   return (
     <div className="space-y-4">
-      {error && (
-        <p className="rounded-card bg-danger-soft px-5 py-4 text-body text-danger" role="alert">
-          {error}
-        </p>
-      )}
+      {error && <Banner tone="error">{error}</Banner>}
 
       <div className="rounded-card border border-line bg-surface">
         {/* パンくず。どの階層にいるか一目で分かるようにする */}
@@ -581,26 +568,18 @@ export default function NotesTab({
       </div>
 
       {remoteChanged && (
-        <div
-          className="flex items-start gap-3 rounded-card border border-warning-line bg-warning-soft px-5 py-4 text-body text-warning"
-          role="alert"
-        >
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+        <Banner tone="warning">
           <p>
             他の端末でこのノートが更新されています。編集中の内容はそのまま残していますが、
             保存すると競合の確認になります。
           </p>
-        </div>
+        </Banner>
       )}
 
       {warning && (
-        <div
-          className="flex items-start gap-3 rounded-card border border-warning-line bg-warning-soft px-5 py-4 text-body text-warning"
-          role="alert"
-        >
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+        <Banner tone="warning">
           <p>{warning}</p>
-        </div>
+        </Banner>
       )}
 
       <section className="space-y-3">

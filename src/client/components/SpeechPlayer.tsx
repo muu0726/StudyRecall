@@ -2,6 +2,7 @@ import { AlertTriangle, Pause, Play, SkipBack, SkipForward, X } from 'lucide-rea
 import type { QuizQuestionDTO } from '../../shared/types';
 import { useSpeechQueue, type SpeechRate, type ThinkingSeconds } from '../hooks/useSpeechQueue';
 import { cn } from '../lib/cn';
+import { LAYER } from '../ui';
 
 interface Props {
   open: boolean;
@@ -36,8 +37,15 @@ export default function SpeechPlayer({ open, questions, onClose }: Props) {
   const progress = speech.total === 0 ? 0 : ((speech.index + 1) / speech.total) * 100;
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface shadow-[0_-4px_16px_rgba(15,23,42,0.08)]">
-      <div className="mx-auto max-w-3xl px-4 py-3 md:max-w-5xl">
+    <div
+      className={cn(
+        // ドロワー(z-40)より下げる。モバイルでサイドバーを開いたとき、
+        // 暗幕の上に再生バーだけが残って操作できそうに見えてしまう。
+        'fixed inset-x-0 bottom-0 border-t border-line bg-surface/95 backdrop-blur',
+        LAYER.speechBar,
+      )}
+    >
+      <div className="mx-auto max-w-6xl px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         {!speech.supported ? (
           <div className="flex items-center gap-3 text-body text-warning">
             <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />

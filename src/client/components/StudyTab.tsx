@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react';
 import {
-  AlertTriangle,
   Clock,
   Coffee,
   Loader2,
@@ -17,6 +16,7 @@ import { submitQuizResultResilient } from '../lib/offline-queue';
 import { useTimerContext } from '../contexts/TimerProvider';
 import { formatDuration } from '../lib/format';
 import { cn } from '../lib/cn';
+import { Banner } from '../ui';
 import { useToast } from './Toast';
 import FlashCard from './FlashCard';
 
@@ -220,13 +220,9 @@ export default function StudyTab({ categories, onRecorded }: Props) {
       </section>
 
       {timer.generateWarning && (
-        <div
-          className="flex items-start gap-3 rounded-card border border-warning-line bg-warning-soft px-5 py-4 text-body text-warning"
-          role="alert"
-        >
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+        <Banner tone="warning">
           <p>{timer.generateWarning}</p>
-        </div>
+        </Banner>
       )}
 
       {timer.generated.length > 0 && (
