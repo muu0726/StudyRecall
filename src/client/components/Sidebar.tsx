@@ -66,6 +66,7 @@ interface Props {
   notebooks: NotebookDTO[];
   notebooksLoading: boolean;
   selectedNoteId: string | null;
+  openNoteIds: ReadonlySet<string>;
   /** ノートを開く。ノート画面へ切り替え、モバイルではドロワーも閉じる。 */
   onSelectNote: (notebook: NotebookDTO) => void;
   onCreateNote: (categoryId: string, parentId?: string) => void;
@@ -136,6 +137,7 @@ function SidebarBody({
   notebooks,
   notebooksLoading,
   selectedNoteId,
+  openNoteIds,
   onSelectNote,
   onCreateNote,
   onMoveNote,
@@ -268,6 +270,7 @@ function SidebarBody({
                   notebooks={notebooks}
                   categories={categories}
                   selectedId={selectedNoteId}
+                  openIds={openNoteIds}
                   onSelect={onSelectNote}
                   onCreateChild={(parent) => onCreateNote(parent.categoryId, parent.id)}
                   onCreateRoot={(categoryId) => onCreateNote(categoryId)}

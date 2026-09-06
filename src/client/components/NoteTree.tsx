@@ -42,7 +42,10 @@ export interface MoveIntent {
 interface Props {
   notebooks: NotebookDTO[];
   categories: CategoryDTO[];
+  /** いま前面に出ているノート */
   selectedId: string | null;
+  /** タブとして開いているノート。アクティブでなくても印を付ける */
+  openIds?: ReadonlySet<string>;
   onSelect: (notebook: NotebookDTO) => void;
   onCreateChild: (parent: NotebookDTO) => void;
   onCreateRoot: (categoryId: string) => void;
@@ -81,6 +84,7 @@ export default function NoteTree({
   notebooks,
   categories,
   selectedId,
+  openIds,
   onSelect,
   onCreateChild,
   onCreateRoot,
@@ -226,11 +230,28 @@ export default function NoteTree({
               onClick={() => onSelect(node)}
               className="flex min-w-0 flex-1 items-center gap-1.5 py-1.5 text-left"
             >
-              <FileText className="h-3.5 w-3.5 shrink-0 text-fg-subtle" aria-hidden />
+              {/*
+                3 状態。アクティブ = 面 + 濃い文字、開いているだけ = 文字とアイコンだけ濃く、
+                閉じている = 既定。開いているだけのものに面を付けると、
+                どれが前面か分からなくなる。
+              */}
+              <FileText
+                className={cn(
+                  'h-3.5 w-3.5 shrink-0',
+                  node.id === selectedId || openIds?.has(node.id)
+                    ? 'text-accent-text'
+                    : 'text-fg-subtle',
+                )}
+                aria-hidden
+              />
               <span
                 className={cn(
                   'truncate text-body',
-                  node.id === selectedId ? 'font-semibold text-accent-text' : 'text-fg',
+                  node.id === selectedId
+                    ? 'font-semibold text-accent-text'
+                    : openIds?.has(node.id)
+                      ? 'font-medium text-fg'
+                      : 'text-fg',
                 )}
               >
                 {node.title}

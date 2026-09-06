@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FolderTree, Loader2, Menu, Trash2 } from 'lucide-react';
 import type { CategoryDTO, NotebookDTO, StudyLogsResponse, TagCount } from '../shared/types';
 import { api } from './lib/api';
@@ -205,6 +205,7 @@ export default function App() {
   };
 
   const { syncWithExisting } = tabs;
+  const openNoteIdSet = useMemo(() => new Set(tabs.openIds), [tabs.openIds]);
 
   /**
    * 削除・他端末での消失に追随して、存在しないノートのタブを畳む。
@@ -238,6 +239,7 @@ export default function App() {
           notebooks={notes.notebooks}
           notebooksLoading={notes.isLoading}
           selectedNoteId={tabs.activeId}
+          openNoteIds={openNoteIdSet}
           onSelectNote={handleSelectNote}
           onCreateNote={(categoryId, parentId) => void handleCreateNote(categoryId, parentId)}
           onMoveNote={(intent) => void notes.move(intent)}

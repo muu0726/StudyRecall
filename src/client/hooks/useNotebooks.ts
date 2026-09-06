@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import type { NotebookDTO } from '../../shared/types';
 import { collectSubtreeIds } from '../../shared/note-tree';
 import { api } from '../lib/api';
+import { clearDraft } from '../lib/note-draft';
 import { useToast } from '../components/Toast';
 import type { MoveIntent } from '../components/NoteTree';
 
@@ -118,6 +119,9 @@ export function useNotebooks() {
     async (id: string) => {
       try {
         const { purged } = await api.purgeNotebook(id);
+        // 完全削除のときだけ端末の下書きも捨てる。ゴミ箱へ移すだけなら
+        // 戻せるので消さない（復元したときに書きかけが残っていてほしい）。
+        clearDraft(id);
         showToast(`${purged} 件を完全に削除しました`, { kind: 'success' });
         return purged;
       } catch (purgeError) {
