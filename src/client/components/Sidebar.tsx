@@ -156,7 +156,7 @@ function SidebarBody({
       {/* ヘッダー: ロゴ + 用語を追加 */}
       <div className={cn('shrink-0 px-3 pt-3', collapsed && 'px-2')}>
         <div className={cn('flex items-center gap-2.5 px-1', collapsed && 'justify-center px-0')}>
-          <span className="shrink-0 rounded-control bg-accent p-2 text-white">
+          <span className="shrink-0 rounded-control bg-accent p-2 text-accent-fg">
             <BookOpenCheck className="h-5 w-5" aria-hidden />
           </span>
           {!collapsed && (
@@ -204,7 +204,7 @@ function SidebarBody({
           onClick={onAddTerm}
           title="用語を追加"
           className={cn(
-            'mt-3 flex w-full items-center justify-center gap-1.5 rounded-control bg-accent text-body font-semibold text-white transition hover:bg-accent-hover',
+            'mt-3 flex w-full items-center justify-center gap-1.5 rounded-control bg-accent text-body font-semibold text-accent-fg transition hover:bg-accent-hover',
             collapsed ? 'p-2.5' : 'px-3 py-2.5',
           )}
         >

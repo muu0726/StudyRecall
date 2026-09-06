@@ -2,6 +2,7 @@ import { Coffee, Loader2, Pause, Play, Square, Timer } from 'lucide-react';
 import { getPomodoroState } from '../lib/pomodoro';
 import { formatClock } from '../lib/format';
 import { cn } from '../lib/cn';
+import { LAYER } from '../ui';
 import { useTimerContext } from '../contexts/TimerProvider';
 
 /**
@@ -10,16 +11,20 @@ import { useTimerContext } from '../contexts/TimerProvider';
  * タイマー画面には同じ情報が大きく出ているので、そこでは出さない（重複を防ぐ）。
  * 表示の判定は呼び出し側（App）が `visible` で渡す。
  *
- * z-40 なのは、モーダル（z-50）に覆われてほしいから。z-50 にすると
- * 記録モーダルの暗幕の上にピルだけが浮いて、操作できそうに見えてしまう。
+ * 既定は variant="inline" で、App のヘッダー右端に収まる。ヘッダーは常時表示なので
+ * 情報は落ちず、**画面に浮かべたときの「h1 と重なる」問題が構造的に消える**。
+ * floating は画面右上に浮かせる従来の形（今は使っていないが、
+ * ヘッダーを持たない画面が増えたときのために残してある）。
  */
 
 interface Props {
   /** タイマー画面を開いているあいだは false にして重複表示を防ぐ */
   visible: boolean;
+  /** inline = ヘッダーの中。floating = 画面右上に浮かせる */
+  variant?: 'inline' | 'floating';
 }
 
-export default function FloatingMiniTimer({ visible }: Props) {
+export default function FloatingMiniTimer({ visible, variant = 'inline' }: Props) {
   const timer = useTimerContext();
 
   // セッションが無い＝計測していないので何も出さない
@@ -36,9 +41,10 @@ export default function FloatingMiniTimer({ visible }: Props) {
       aria-live="off"
       aria-label={`学習タイマー ${timer.isRunning ? '計測中' : '一時停止中'}`}
       className={cn(
-        'fixed top-3 right-3 z-40 flex items-center gap-2 rounded-full py-1.5 pr-1.5 pl-3 sm:top-4 sm:right-4 sm:gap-2.5 sm:pl-3.5',
-        'border border-slate-200 bg-white/90 shadow-lg backdrop-blur-md',
-        'dark:border-slate-800 dark:bg-slate-900/90',
+        'flex items-center gap-2 rounded-full py-1 pr-1 pl-3 sm:gap-2.5 sm:pl-3.5',
+        'border border-line-strong bg-surface/90 backdrop-blur-md',
+        variant === 'floating' &&
+          cn('fixed top-3 right-3 sm:top-4 sm:right-4', 'shadow-overlay', LAYER.floating),
       )}
     >
       {/* 計測中は緑が脈打つ。一時停止は黄で止まる。 */}
@@ -55,7 +61,7 @@ export default function FloatingMiniTimer({ visible }: Props) {
       </span>
 
       {/* 狭い画面ではラベルを畳んで時間だけにする */}
-      <span className="hidden items-center gap-1 text-xs font-medium text-slate-500 sm:flex dark:text-slate-400">
+      <span className="hidden items-center gap-1 text-caption font-medium text-fg-muted sm:flex">
         {pomodoro ? (
           pomodoro.phase === 'work' ? (
             <Timer className="h-3 w-3" aria-hidden />
@@ -68,7 +74,7 @@ export default function FloatingMiniTimer({ visible }: Props) {
         {label}
       </span>
 
-      <span className="font-mono text-sm font-bold text-slate-900 tabular-nums dark:text-slate-100">
+      <span className="font-mono text-body font-bold text-fg tabular-nums">
         {formatClock(timer.elapsedMs)}
       </span>
 
@@ -79,7 +85,7 @@ export default function FloatingMiniTimer({ visible }: Props) {
           disabled={timer.isSyncing}
           aria-label={timer.isRunning ? '一時停止' : '再開'}
           title={timer.isRunning ? '一時停止' : '再開'}
-          className="rounded-full p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 disabled:opacity-40 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+          className="rounded-full p-1.5 text-fg-muted transition hover:bg-row-hover hover:text-fg disabled:opacity-40"
         >
           {timer.isSyncing ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
@@ -96,7 +102,7 @@ export default function FloatingMiniTimer({ visible }: Props) {
           disabled={timer.isSyncing}
           aria-label="学習を記録して終了"
           title="学習を記録して終了"
-          className="rounded-full bg-emerald-600 p-1.5 text-white transition hover:bg-emerald-700 disabled:opacity-40"
+          className="rounded-full bg-success p-1.5 text-accent-fg transition hover:opacity-90 disabled:opacity-40"
         >
           <Square className="h-3.5 w-3.5" aria-hidden />
         </button>

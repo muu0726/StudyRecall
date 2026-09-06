@@ -73,9 +73,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 }
 
 const KIND_STYLE: Record<ToastKind, string> = {
-  info: 'bg-slate-800 text-white dark:bg-slate-600',
-  success: 'bg-emerald-600 text-white',
-  error: 'bg-red-600 text-white',
+  info: 'bg-solid text-solid-fg',
+  success: 'bg-success text-accent-fg',
+  error: 'bg-danger text-accent-fg',
 };
 
 const KIND_ICON: Record<ToastKind, typeof Info> = {
@@ -89,12 +89,12 @@ function ToastRow({ toast, onDismiss }: { toast: ToastItem; onDismiss: () => voi
   return (
     <div
       className={cn(
-        'pointer-events-auto flex w-full max-w-md items-center gap-3 rounded-xl px-4 py-3 shadow-lg',
+        'pointer-events-auto flex w-full max-w-md items-center gap-3 rounded-control px-4 py-3 shadow-overlay',
         KIND_STYLE[toast.kind],
       )}
     >
       <Icon className="h-4 w-4 shrink-0" aria-hidden />
-      <p className="min-w-0 flex-1 text-sm">{toast.message}</p>
+      <p className="min-w-0 flex-1 text-body">{toast.message}</p>
 
       {toast.action && (
         <button
@@ -103,7 +103,7 @@ function ToastRow({ toast, onDismiss }: { toast: ToastItem; onDismiss: () => voi
             toast.action?.onClick();
             onDismiss();
           }}
-          className="flex shrink-0 items-center gap-1 rounded-lg bg-white/20 px-2.5 py-1 text-xs font-semibold transition hover:bg-white/30"
+          className="flex shrink-0 items-center gap-1 rounded-control bg-white/20 px-2.5 py-1 text-caption font-semibold transition hover:bg-white/30"
         >
           <RotateCw className="h-3 w-3" aria-hidden />
           {toast.action.label}
@@ -114,7 +114,7 @@ function ToastRow({ toast, onDismiss }: { toast: ToastItem; onDismiss: () => voi
         type="button"
         onClick={onDismiss}
         aria-label="閉じる"
-        className="shrink-0 rounded p-0.5 opacity-70 transition hover:opacity-100"
+        className="shrink-0 rounded-control p-0.5 opacity-70 transition hover:opacity-100"
       >
         <X className="h-4 w-4" aria-hidden />
       </button>

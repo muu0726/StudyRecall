@@ -63,12 +63,12 @@ export default function StudyTab({ categories, onRecorded }: Props) {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="flex items-center justify-center gap-2 text-sm font-medium text-slate-500 dark:text-slate-400">
+      <section className="rounded-card border border-line bg-surface p-8 text-center">
+        <div className="flex items-center justify-center gap-2 text-body font-medium text-fg-muted">
           <Clock className="h-4 w-4" aria-hidden />
           学習タイマー
           {timer.sessionId && (
-            <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+            <span className="rounded-full bg-accent-soft px-2 py-0.5 text-caption font-medium text-accent-text">
               全端末で共有中
             </span>
           )}
@@ -77,7 +77,7 @@ export default function StudyTab({ categories, onRecorded }: Props) {
         {/* 未開始のときだけモードを選べる。走行中はサーバーの mode が正。 */}
         {timer.sessionId === null ? (
           <div className="mt-4 flex justify-center">
-            <div className="flex rounded-xl bg-slate-100 p-0.5 dark:bg-slate-800">
+            <div className="flex rounded-control bg-surface-3 p-0.5">
               {(['free', 'pomodoro'] as const).map((m) => (
                 <button
                   key={m}
@@ -85,10 +85,10 @@ export default function StudyTab({ categories, onRecorded }: Props) {
                   onClick={() => timer.setDesiredMode(m)}
                   aria-pressed={timer.desiredMode === m}
                   className={cn(
-                    'rounded-lg px-3.5 py-1.5 text-sm font-medium transition',
+                    'rounded-control px-3.5 py-1.5 text-body font-medium transition',
                     timer.desiredMode === m
-                      ? 'bg-white text-blue-700 shadow-sm dark:bg-slate-900 dark:text-blue-300'
-                      : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100',
+                      ? 'bg-surface text-accent-text'
+                      : 'text-fg-muted hover:text-fg',
                   )}
                 >
                   {m === 'free' ? 'フリー計測' : 'ポモドーロ'}
@@ -102,10 +102,10 @@ export default function StudyTab({ categories, onRecorded }: Props) {
             <div className="mt-4 flex items-center justify-center gap-2">
               <span
                 className={cn(
-                  'flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold',
+                  'flex items-center gap-1.5 rounded-full px-3 py-1 text-body font-semibold',
                   pomodoro.phase === 'work'
-                    ? 'bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
-                    : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
+                    ? 'bg-accent-soft text-accent-text'
+                    : 'bg-success-soft text-success',
                 )}
               >
                 {pomodoro.phase === 'work' ? (
@@ -118,19 +118,17 @@ export default function StudyTab({ categories, onRecorded }: Props) {
                   残り {formatDuration(pomodoro.remainingMs)}
                 </span>
               </span>
-              <span className="text-xs text-slate-500 dark:text-slate-400">
-                🍅 {pomodoro.completedPomodoros}
-              </span>
+              <span className="text-caption text-fg-muted">🍅 {pomodoro.completedPomodoros}</span>
             </div>
           )
         )}
 
-        <p className="mt-4 font-mono text-5xl font-bold tracking-tight text-slate-900 tabular-nums sm:text-6xl dark:text-slate-100">
+        <p className="mt-4 font-mono text-5xl font-bold tracking-tight text-fg tabular-nums sm:text-6xl">
           {formatDuration(timer.elapsedMs)}
         </p>
 
         {isPomodoro && pomodoro && (
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+          <p className="mt-1 text-caption text-fg-muted">
             記録される集中時間 {formatDuration(pomodoro.focusMs)}（休憩は除外）
           </p>
         )}
@@ -141,7 +139,7 @@ export default function StudyTab({ categories, onRecorded }: Props) {
               type="button"
               onClick={() => void timer.pauseTimer()}
               disabled={isBusy}
-              className="flex items-center gap-2 rounded-xl bg-slate-800 px-6 py-3 text-sm font-semibold text-white transition hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-700 dark:hover:bg-slate-600"
+              className="flex items-center gap-2 rounded-control bg-solid px-6 py-3 text-body font-semibold text-solid-fg transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isBusy ? (
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
@@ -155,7 +153,7 @@ export default function StudyTab({ categories, onRecorded }: Props) {
               type="button"
               onClick={() => void timer.startTimer()}
               disabled={isBusy}
-              className="flex items-center gap-2 rounded-xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex items-center gap-2 rounded-control bg-accent px-6 py-3 text-body font-semibold text-accent-fg transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isBusy ? (
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
@@ -170,7 +168,7 @@ export default function StudyTab({ categories, onRecorded }: Props) {
             type="button"
             onClick={() => void timer.resetTimer()}
             disabled={isBusy || timer.sessionId === null}
-            className="flex items-center gap-2 rounded-xl border border-slate-300 px-6 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+            className="flex items-center gap-2 rounded-control border border-line-strong px-6 py-3 text-body font-semibold text-fg transition hover:bg-row-hover disabled:cursor-not-allowed disabled:opacity-40"
           >
             <RotateCcw className="h-4 w-4" aria-hidden />
             リセット
@@ -180,15 +178,15 @@ export default function StudyTab({ categories, onRecorded }: Props) {
             type="button"
             onClick={() => void timer.openCompleteModal()}
             disabled={isBusy || categories.length === 0}
-            className="flex items-center gap-2 rounded-xl bg-emerald-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 dark:disabled:bg-slate-700"
+            className="flex items-center gap-2 rounded-control bg-success px-6 py-3 text-body font-semibold text-accent-fg transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45"
           >
             <Square className="h-4 w-4" aria-hidden />
             記録する
           </button>
         </div>
 
-        <div className="mt-6 flex flex-wrap items-center justify-center gap-2 border-t border-slate-100 pt-4 dark:border-slate-800">
-          <span className="text-xs text-slate-500 dark:text-slate-400">集中サウンド</span>
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-2 border-t border-line pt-4">
+          <span className="text-caption text-fg-muted">集中サウンド</span>
           {([null, 'white', 'brown'] as const).map((kind) => (
             <button
               key={kind ?? 'off'}
@@ -196,10 +194,10 @@ export default function StudyTab({ categories, onRecorded }: Props) {
               onClick={() => timer.setSoundKind(kind)}
               aria-pressed={timer.soundKind === kind}
               className={cn(
-                'flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition',
+                'flex items-center gap-1.5 rounded-control px-2.5 py-1 text-caption font-medium transition',
                 timer.soundKind === kind
-                  ? 'bg-slate-800 text-white dark:bg-slate-600'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700',
+                  ? 'bg-solid text-solid-fg'
+                  : 'bg-surface-3 text-fg-muted hover:bg-row-hover',
               )}
             >
               {kind === null ? (
@@ -213,9 +211,9 @@ export default function StudyTab({ categories, onRecorded }: Props) {
         </div>
 
         {timer.error ? (
-          <p className="mt-4 text-xs text-red-600 dark:text-red-400">{timer.error}</p>
+          <p className="mt-4 text-caption text-danger">{timer.error}</p>
         ) : (
-          <p className="mt-4 text-xs text-slate-500 dark:text-slate-400">
+          <p className="mt-4 text-caption text-fg-muted">
             タイマーはサーバーに保存され、どの端末からでも続きを操作できます。
           </p>
         )}
@@ -223,7 +221,7 @@ export default function StudyTab({ categories, onRecorded }: Props) {
 
       {timer.generateWarning && (
         <div
-          className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200"
+          className="flex items-start gap-3 rounded-card border border-warning-line bg-warning-soft px-5 py-4 text-body text-warning"
           role="alert"
         >
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
@@ -234,14 +232,14 @@ export default function StudyTab({ categories, onRecorded }: Props) {
       {timer.generated.length > 0 && (
         <section ref={previewRef} className="scroll-mt-6 space-y-4">
           <div className="flex items-baseline justify-between">
-            <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">生成された問題</h2>
-            <span className="text-sm text-slate-500 dark:text-slate-400">
+            <h2 className="text-lg font-bold text-fg">生成された問題</h2>
+            <span className="text-body text-fg-muted">
               残り {remaining.length} / {timer.generated.length} 問
             </span>
           </div>
 
           {remaining.length === 0 ? (
-            <p className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-6 text-center text-sm font-medium text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300">
+            <p className="rounded-card border border-success-line bg-success-soft px-5 py-6 text-center text-body font-medium text-success">
               この回の問題はすべて確認しました。復習タブでいつでも解き直せます。
             </p>
           ) : (

@@ -34,13 +34,13 @@ export default function StatsTab({ data }: Props) {
           icon={<Clock className="h-5 w-5" aria-hidden />}
           label="本日の学習時間"
           value={formatMinutes(stats.todayMinutes)}
-          accent="bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300"
+          accent="bg-accent-soft text-accent-text"
         />
         <SummaryCard
           icon={<CalendarDays className="h-5 w-5" aria-hidden />}
           label="今週の学習時間"
           value={formatMinutes(stats.weekMinutes)}
-          accent="bg-sky-50 dark:bg-sky-950 text-sky-700 dark:text-sky-300"
+          accent="bg-surface-3 text-fg-muted"
         />
       </section>
 
@@ -75,10 +75,10 @@ export default function StatsTab({ data }: Props) {
       {/* 今月の生成量。上限に近づいたときだけ色を付ける。 */}
       <p
         className={cn(
-          'text-xs',
+          'text-caption',
           stats.quiz.generatedThisMonth >= stats.quiz.monthlyLimit * 0.8
-            ? 'text-amber-700 dark:text-amber-300'
-            : 'text-slate-500 dark:text-slate-400',
+            ? 'text-warning'
+            : 'text-fg-muted',
         )}
       >
         今月の問題生成 {stats.quiz.generatedThisMonth} / {stats.quiz.monthlyLimit} 問
@@ -87,33 +87,27 @@ export default function StatsTab({ data }: Props) {
       </p>
 
       {stats.quiz.dueNow === 0 && stats.quiz.nextDueAt && (
-        <p className="text-xs text-slate-500 dark:text-slate-400">
+        <p className="text-caption text-fg-muted">
           次の出題は {formatDate(stats.quiz.nextDueAt)}（
           {daysUntil(stats.quiz.nextDueAt, new Date())}日後）。 間隔は正解するほど伸びます。
         </p>
       )}
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-          科目別の学習時間
-        </h2>
+      <section className="rounded-card border border-line bg-surface p-5">
+        <h2 className="text-body font-semibold text-fg">科目別の学習時間</h2>
         {stats.byCategory.length === 0 ? (
-          <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">
-            カテゴリがまだありません。
-          </p>
+          <p className="mt-4 text-body text-fg-muted">カテゴリがまだありません。</p>
         ) : (
           <ul className="mt-4 space-y-3">
             {stats.byCategory.map((category) => (
               <li key={category.categoryId}>
-                <div className="flex items-baseline justify-between text-sm">
-                  <span className="font-medium text-slate-700 dark:text-slate-300">
-                    {category.name}
-                  </span>
-                  <span className="text-slate-500 tabular-nums dark:text-slate-400">
+                <div className="flex items-baseline justify-between text-body">
+                  <span className="font-medium text-fg">{category.name}</span>
+                  <span className="text-fg-muted tabular-nums">
                     {formatMinutes(category.totalMinutes)}
                   </span>
                 </div>
-                <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-surface-3">
                   <div
                     className="h-full rounded-full transition-all"
                     style={{
@@ -128,12 +122,12 @@ export default function StatsTab({ data }: Props) {
         )}
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">最近の学習記録</h2>
+      <section className="rounded-card border border-line bg-surface p-5">
+        <h2 className="text-body font-semibold text-fg">最近の学習記録</h2>
         {logs.length === 0 ? (
-          <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">まだ記録がありません。</p>
+          <p className="mt-4 text-body text-fg-muted">まだ記録がありません。</p>
         ) : (
-          <ul className="mt-3 divide-y divide-slate-100 dark:divide-slate-800">
+          <ul className="mt-3 divide-y divide-line">
             {logs.slice(0, 10).map((log) => (
               <li key={log.id} className="flex items-center gap-3 py-3">
                 <span
@@ -142,22 +136,18 @@ export default function StatsTab({ data }: Props) {
                   aria-hidden
                 />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
-                    {log.categoryName}
-                  </p>
+                  <p className="text-body font-medium text-fg">{log.categoryName}</p>
                   {log.notes && (
-                    <p className="truncate text-xs text-slate-500 dark:text-slate-400">
+                    <p className="truncate text-caption text-fg-muted">
                       {log.notes.split('\n')[0]}
                     </p>
                   )}
                 </div>
                 <div className="shrink-0 text-right">
-                  <p className="text-sm font-semibold text-slate-700 tabular-nums dark:text-slate-300">
+                  <p className="text-body font-semibold text-fg tabular-nums">
                     {formatMinutes(log.durationMinutes)}
                   </p>
-                  <p className="text-xs text-slate-400 dark:text-slate-500">
-                    {formatDateTime(log.createdAt)}
-                  </p>
+                  <p className="text-caption text-fg-subtle">{formatDateTime(log.createdAt)}</p>
                 </div>
               </li>
             ))}
@@ -180,10 +170,10 @@ function SummaryCard({
   accent: string;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-      <div className={cn('inline-flex rounded-xl p-2', accent)}>{icon}</div>
-      <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">{label}</p>
-      <p className="mt-1 text-3xl font-bold text-slate-900 dark:text-slate-100">{value}</p>
+    <div className="rounded-card border border-line bg-surface p-5">
+      <div className={cn('inline-flex rounded-control p-2', accent)}>{icon}</div>
+      <p className="mt-3 text-body text-fg-muted">{label}</p>
+      <p className="mt-1 text-3xl font-bold text-fg">{value}</p>
     </div>
   );
 }
@@ -203,33 +193,15 @@ function Badge({
   return (
     <div
       className={cn(
-        'flex items-center gap-2.5 rounded-full border px-4 py-2 shadow-sm',
-        highlight
-          ? 'border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950'
-          : 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900',
+        'flex items-center gap-2.5 rounded-full border px-4 py-2',
+        highlight ? 'border-blue-200 bg-accent-soft' : 'border-line bg-surface',
       )}
     >
-      <span
-        className={
-          highlight ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'
-        }
-      >
-        {icon}
-      </span>
-      <span
-        className={cn(
-          'text-sm',
-          highlight ? 'text-blue-800 dark:text-blue-300' : 'text-slate-500 dark:text-slate-400',
-        )}
-      >
+      <span className={highlight ? 'text-accent-text' : 'text-fg-subtle'}>{icon}</span>
+      <span className={cn('text-body', highlight ? 'text-accent-text' : 'text-fg-muted')}>
         {label}
       </span>
-      <span
-        className={cn(
-          'text-sm font-bold',
-          highlight ? 'text-blue-900 dark:text-blue-200' : 'text-slate-900 dark:text-slate-100',
-        )}
-      >
+      <span className={cn('text-body font-bold', highlight ? 'text-accent-text' : 'text-fg')}>
         {value}
       </span>
     </div>

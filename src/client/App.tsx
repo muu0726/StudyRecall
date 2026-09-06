@@ -19,6 +19,8 @@ import TrashDialog from './components/TrashDialog';
 import { useToast } from './components/Toast';
 import { TimerProvider } from './contexts/TimerProvider';
 import FloatingMiniTimer from './components/FloatingMiniTimer';
+import { cn } from './lib/cn';
+import { LAYER } from './ui';
 
 const VIEW_KEY = 'studyrecall:view';
 const COLLAPSED_KEY = 'studyrecall:sidebar-collapsed';
@@ -227,25 +229,33 @@ export default function App() {
 
         {/* 右側だけがスクロールする。サイドバーは常に見えたままになる。 */}
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="sticky top-0 z-20 flex shrink-0 items-center gap-2 border-b border-slate-200 bg-white/90 px-4 py-3 backdrop-blur dark:border-slate-800 dark:bg-slate-950/90">
+          <header
+            className={cn(
+              'sticky top-0 flex h-[52px] shrink-0 items-center gap-2 border-b border-line bg-canvas/90 px-4 backdrop-blur',
+              LAYER.header,
+            )}
+          >
             <button
               type="button"
               onClick={() => setDrawerOpen(true)}
               aria-label="メニューを開く"
-              className="rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 md:hidden dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+              className="rounded-control p-1.5 text-fg-muted transition hover:bg-row-hover hover:text-fg md:hidden"
             >
               <Menu className="h-5 w-5" aria-hidden />
             </button>
-            <h1 className="min-w-0 truncate text-base font-bold text-slate-900 dark:text-slate-100">
-              {currentView.title}
-            </h1>
+            <h1 className="min-w-0 truncate text-title text-fg">{currentView.title}</h1>
+
+            {/* 右の空白を埋める。浮かせていた頃は h1 と重なっていた。 */}
+            <div className="ml-auto flex shrink-0 items-center gap-2">
+              <FloatingMiniTimer visible={view !== 'timer'} />
+            </div>
           </header>
 
           <main className="min-h-0 flex-1 overflow-y-auto">
             <div className="mx-auto max-w-6xl px-4 py-6">
               {(error ?? notes.error) && (
                 <p
-                  className="mb-6 rounded-2xl bg-red-50 px-5 py-4 text-sm text-red-700 dark:bg-red-950 dark:text-red-300"
+                  className="mb-6 rounded-card bg-danger-soft px-5 py-4 text-body text-danger"
                   role="alert"
                 >
                   {error ?? notes.error}
@@ -253,7 +263,7 @@ export default function App() {
               )}
 
               {isLoading ? (
-                <div className="flex items-center justify-center gap-2 py-20 text-sm text-slate-500 dark:text-slate-400">
+                <div className="flex items-center justify-center gap-2 py-20 text-body text-fg-muted">
                   <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
                   読み込み中…
                 </div>
@@ -301,14 +311,14 @@ export default function App() {
         {/* ツリーの ⋯ メニュー。モバイルでも確実に移動・削除できる導線。 */}
         {menuFor && (
           <div
-            className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/30 p-4 sm:items-center dark:bg-slate-950/60"
+            className="fixed inset-0 z-50 flex items-end justify-center bg-overlay p-4 sm:items-center"
             onClick={() => setMenuFor(null)}
           >
             <div
-              className="w-full max-w-xs overflow-hidden rounded-2xl bg-white shadow-xl dark:bg-slate-900"
+              className="w-full max-w-xs overflow-hidden rounded-card bg-surface shadow-overlay"
               onClick={(event) => event.stopPropagation()}
             >
-              <p className="truncate border-b border-slate-100 px-4 py-3 text-sm font-semibold text-slate-900 dark:border-slate-800 dark:text-slate-100">
+              <p className="truncate border-b border-line px-4 py-3 text-body font-semibold text-fg">
                 {menuFor.title}
               </p>
               <button
@@ -317,7 +327,7 @@ export default function App() {
                   setMoveTarget(menuFor);
                   setMenuFor(null);
                 }}
-                className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-slate-700 transition hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800"
+                className="flex w-full items-center gap-2 px-4 py-3 text-left text-body text-fg transition hover:bg-row-hover"
               >
                 <FolderTree className="h-4 w-4" aria-hidden />
                 移動する
@@ -328,7 +338,7 @@ export default function App() {
                   setDeleteTarget(menuFor);
                   setMenuFor(null);
                 }}
-                className="flex w-full items-center gap-2 border-t border-slate-100 px-4 py-3 text-left text-sm text-red-600 transition hover:bg-red-50 dark:border-slate-800 dark:text-red-400 dark:hover:bg-red-950"
+                className="flex w-full items-center gap-2 border-t border-line px-4 py-3 text-left text-body text-danger transition hover:bg-danger-soft"
               >
                 <Trash2 className="h-4 w-4" aria-hidden />
                 削除する
@@ -395,7 +405,6 @@ export default function App() {
         />
 
         {/* タイマー画面には同じ情報が大きく出ているので、そこでは出さない */}
-        <FloatingMiniTimer visible={view !== 'timer'} />
       </div>
     </TimerProvider>
   );

@@ -74,6 +74,20 @@
   --color-solid: #1e242c; /* Toast など、面ごと反転させるもの */
   --color-solid-fg: #f4f6f8;
 
+  /* コードブロックはライトでも暗いのが意図。専用トークンにして dark: を消す */
+  /*
+   * ヒートマップの 5 段。ライトは「薄い→濃い青」、ダークは「暗い→明るい青」で
+   * **向きが反転する**。反転をここに閉じ込めると Heatmap 側から dark: が消える。
+   */
+  --color-heat-0: #e8eaec;
+  --color-heat-1: #bfdbfe;
+  --color-heat-2: #60a5fa;
+  --color-heat-3: #2563eb;
+  --color-heat-4: #1e40af;
+
+  --color-code: #14181e;
+  --color-code-fg: #e5e9ef;
+
   /* --- 線 --- */
   --color-line: #e5e7ea; /* 弱い境界（カードの縁） */
   --color-line-strong: #d2d6db; /* 強い境界（入力欄・浮遊要素） */
@@ -118,6 +132,12 @@
   --color-surface-3: #1c2026;
   --color-overlay: rgb(0 0 0 / 0.7);
   --color-solid: #2b323c;
+
+  --color-heat-0: #1c2026;
+  --color-heat-1: #1e3a8a;
+  --color-heat-2: #1d4ed8;
+  --color-heat-3: #3b82f6;
+  --color-heat-4: #93c5fd;
   --color-solid-fg: #f4f6f8;
 
   --color-line: #23272e;

@@ -59,49 +59,41 @@ export default function FlashCard({
   }, [keyboard, revealed, disabled, onAnswer]);
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-      <div className="flex items-center gap-2 border-b border-slate-100 px-5 py-3 dark:border-slate-800">
+    <div className="overflow-hidden rounded-card border border-line bg-surface">
+      <div className="flex items-center gap-2 border-b border-line px-5 py-3">
         <span
           className="h-2.5 w-2.5 shrink-0 rounded-full"
           style={{ backgroundColor: question.categoryColor }}
           aria-hidden
         />
-        <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-          {question.categoryName}
-        </span>
+        <span className="text-caption font-medium text-fg-muted">{question.categoryName}</span>
         {question.isMastered && (
-          <span className="ml-auto rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+          <span className="ml-auto rounded-full bg-success-soft px-2 py-0.5 text-caption font-medium text-success">
             習得済み
           </span>
         )}
       </div>
 
       <div className="px-5 py-6">
-        <p className="text-lg leading-relaxed font-medium text-slate-900 dark:text-slate-100">
-          {question.question}
-        </p>
+        <p className="text-lg leading-relaxed font-medium text-fg">{question.question}</p>
 
         {!revealed ? (
           <button
             type="button"
             onClick={() => setRevealed(true)}
-            className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-slate-100 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+            className="mt-6 flex w-full items-center justify-center gap-2 rounded-control bg-surface-3 py-3 text-body font-medium text-fg transition hover:bg-row-hover"
           >
             <Eye className="h-4 w-4" aria-hidden />
             答えを見る
           </button>
         ) : (
           <div className="mt-6 space-y-4">
-            <div className="rounded-xl bg-blue-50 px-4 py-3 dark:bg-blue-950">
-              <p className="text-xs font-medium text-blue-500 dark:text-blue-400">答え</p>
-              <p className="mt-1 text-xl font-bold text-blue-900 dark:text-blue-200">
-                {question.answer}
-              </p>
+            <div className="rounded-control bg-accent-soft px-4 py-3">
+              <p className="text-caption font-medium text-accent-text">答え</p>
+              <p className="mt-1 text-xl font-bold text-accent-text">{question.answer}</p>
             </div>
             {question.explanation && (
-              <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-400">
-                {question.explanation}
-              </p>
+              <p className="text-body leading-relaxed text-fg-muted">{question.explanation}</p>
             )}
 
             <div className="grid grid-cols-2 gap-3 pt-1">
@@ -110,8 +102,8 @@ export default function FlashCard({
                 disabled={disabled}
                 onClick={() => onAnswer(false)}
                 className={cn(
-                  'flex items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 py-3 text-sm font-semibold text-amber-800 transition dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300',
-                  'hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50',
+                  'flex items-center justify-center gap-2 rounded-control border border-warning-line bg-warning-soft py-3 text-body font-semibold text-warning transition',
+                  'hover:bg-warning-soft disabled:cursor-not-allowed disabled:opacity-50',
                 )}
               >
                 <RotateCcw className="h-4 w-4" aria-hidden />
@@ -122,8 +114,8 @@ export default function FlashCard({
                 disabled={disabled}
                 onClick={() => onAnswer(true)}
                 className={cn(
-                  'flex items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3 text-sm font-semibold text-white transition',
-                  'hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50',
+                  'flex items-center justify-center gap-2 rounded-control bg-success py-3 text-body font-semibold text-accent-fg transition',
+                  'hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50',
                 )}
               >
                 <Check className="h-4 w-4" aria-hidden />
@@ -135,11 +127,11 @@ export default function FlashCard({
       </div>
 
       {question.tags.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 border-t border-slate-100 px-5 py-2.5 dark:border-slate-800">
+        <div className="flex flex-wrap gap-1.5 border-t border-line px-5 py-2.5">
           {question.tags.map((tag) => (
             <span
               key={tag}
-              className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400"
+              className="rounded-full bg-surface-3 px-2 py-0.5 text-caption font-medium text-fg-muted"
             >
               #{tag}
             </span>
@@ -147,7 +139,7 @@ export default function FlashCard({
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-4 border-t border-slate-100 px-5 py-2 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+      <div className="flex flex-wrap items-center gap-4 border-t border-line px-5 py-2 text-caption text-fg-subtle">
         <span>わかった {question.correctCount}回</span>
         <span>まだ不安 {question.incorrectCount}回</span>
         {/* いまの出題間隔。伸びているほど定着している。 */}
@@ -164,7 +156,7 @@ export default function FlashCard({
               : [['Space', '答えを見る']]
             ).map(([key, label]) => (
               <span key={key} className="flex items-center gap-1">
-                <kbd className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono text-[10px] text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+                <kbd className="rounded-control border border-line bg-surface-2 px-1.5 py-0.5 font-mono text-[10px] text-fg-muted">
                   {key}
                 </kbd>
                 {label}

@@ -11,15 +11,11 @@ const MarkdownRenderer = lazy(() => import('./MarkdownRenderer'));
 
 export default function MarkdownView({ content }: { content: string }) {
   if (!content.trim()) {
-    return <p className="text-sm text-slate-400 dark:text-slate-500">本文がまだありません。</p>;
+    return <p className="text-body text-fg-subtle">本文がまだありません。</p>;
   }
 
   return (
-    <Suspense
-      fallback={
-        <p className="text-sm text-slate-400 dark:text-slate-500">プレビューを準備しています…</p>
-      }
-    >
+    <Suspense fallback={<p className="text-body text-fg-subtle">プレビューを準備しています…</p>}>
       <MarkdownRenderer content={content} />
     </Suspense>
   );
