@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { defineConfig } from 'vitest/config';
 
 /**
@@ -9,7 +10,13 @@ import { defineConfig } from 'vitest/config';
  * とくに shared/note-tree はサーバーとクライアントが同じ実装を使っているので、
  * ここが壊れると両方が同時に壊れる。
  */
+const { version } = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
+
 export default defineConfig({
+  // vite.config.ts と同じ値を入れておく。無いと version.ts の import で落ちる。
+  define: {
+    __APP_VERSION__: JSON.stringify(version),
+  },
   test: {
     include: ['src/**/*.test.ts'],
     environment: 'node',

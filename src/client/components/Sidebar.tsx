@@ -26,6 +26,7 @@ import { api } from '../lib/api';
 import { authClient } from '../lib/auth-client';
 import { exportAnkiCsv, exportNotebooksZip, todayStamp } from '../lib/export';
 import { cn } from '../lib/cn';
+import { APP_VERSION, formatVersion } from '../lib/version';
 import { LAYER, Segmented, selectableRow } from '../ui';
 import { useToast } from './Toast';
 import NoteTree, { type MoveIntent } from './NoteTree';
@@ -160,8 +161,15 @@ function SidebarBody({
             <BookOpenCheck className="h-5 w-5" aria-hidden />
           </span>
           {!collapsed && (
-            <span className="min-w-0 flex-1 truncate text-section font-bold text-fg">
-              StudyRecall
+            <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
+              <span className="truncate text-section font-bold text-fg">StudyRecall</span>
+              {/* 公開されている中身と表示が食い違わないよう、package.json の version をそのまま出す */}
+              <span
+                className="shrink-0 text-caption text-fg-subtle tabular-nums"
+                title={`バージョン ${APP_VERSION}`}
+              >
+                {formatVersion(APP_VERSION)}
+              </span>
             </span>
           )}
           {showCollapseToggle && !collapsed && (
