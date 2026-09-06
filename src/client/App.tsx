@@ -6,6 +6,7 @@ import { flushQuizResults, pendingCount } from './lib/offline-queue';
 import { useRevalidateOnFocus } from './hooks/useRevalidateOnFocus';
 import { useNotebooks } from './hooks/useNotebooks';
 import { useNoteTabs } from './hooks/useNoteTabs';
+import { useNoteSaver } from './hooks/useNoteSaver';
 import { usePwaUpdate } from './hooks/usePwaUpdate';
 import Sidebar, { VIEWS, type ViewId } from './components/Sidebar';
 import StudyTab from './components/StudyTab';
@@ -72,19 +73,12 @@ export default function App() {
   const tabs = useNoteTabs();
 
   /**
-   * タブに未保存の点を出すためだけの集合。編集中の本文そのものは持たない
-   * （持つとノート画面と二重管理になる）。
+   * 保存の予約・楽観ロックのトークン・競合を、エディタより長生きさせる。
+   * タブを切り替えるとエディタはアンマウントされるので、ここに無いと
+   * 保留中の保存が消える。未保存の点もここが持つ集合から出す。
    */
-  const [dirtyNoteIds, setDirtyNoteIds] = useState<ReadonlySet<string>>(() => new Set());
-  const handleDirtyChange = useCallback((id: string, dirty: boolean) => {
-    setDirtyNoteIds((previous) => {
-      if (previous.has(id) === dirty) return previous;
-      const next = new Set(previous);
-      if (dirty) next.add(id);
-      else next.delete(id);
-      return next;
-    });
-  }, []);
+  const { replace: replaceNotebook } = notes;
+  const saver = useNoteSaver({ onSaved: replaceNotebook });
 
   /** ツリーの ⋯ から開くメニューと、その先の移動・削除ダイアログ */
   const [menuFor, setMenuFor] = useState<NotebookDTO | null>(null);
@@ -192,15 +186,25 @@ export default function App() {
 
   /** ツリーからノートを開く。タブが無ければ足し、あればそれをアクティブにする。 */
   const handleSelectNote = (notebook: NotebookDTO) => {
+    // 切り替える前に、いま開いているノートの保留を送る（待たない）
+    if (tabs.activeId && tabs.activeId !== notebook.id) void saver.flush(tabs.activeId);
     tabs.open(notebook.id);
     goTo('notes');
   };
 
-  // NotesTab の effect 依存に入るので、毎レンダー新しい関数にしない
-  const { close: closeTab, syncWithExisting } = tabs;
-  const clearNoteSelection = useCallback(() => {
-    if (tabs.activeId) closeTab(tabs.activeId);
-  }, [closeTab, tabs.activeId]);
+  /** タブを閉じる前に保留を送る。失敗しても端末に退避があるので閉じてよい */
+  const handleCloseTab = (id: string) => {
+    void saver.flush(id);
+    tabs.close(id);
+  };
+
+  /** タブの切り替え。前のノートの保留を送ってから移る */
+  const handleActivateTab = (id: string) => {
+    if (tabs.activeId && tabs.activeId !== id) void saver.flush(tabs.activeId);
+    tabs.activate(id);
+  };
+
+  const { syncWithExisting } = tabs;
 
   /**
    * 削除・他端末での消失に追随して、存在しないノートのタブを畳む。
@@ -310,24 +314,22 @@ export default function App() {
                         notebooks={notes.notebooks}
                         openIds={tabs.openIds}
                         activeId={tabs.activeId}
-                        dirtyIds={dirtyNoteIds}
-                        onActivate={tabs.activate}
-                        onClose={tabs.close}
+                        dirtyIds={saver.dirtyIds}
+                        onActivate={handleActivateTab}
+                        onClose={handleCloseTab}
                       />
                       <NotesTab
                         categories={categories}
                         notebooks={notes.notebooks}
-                        selectedId={tabs.activeId}
-                        onReplace={notes.replace}
-                        onClearSelection={clearNoteSelection}
+                        activeId={tabs.activeId}
+                        saver={saver}
                         onCreate={() => {
                           const first = categories[0];
                           if (first) void handleCreateNote(first.id);
                         }}
                         onRequestDelete={setDeleteTarget}
                         onOpenExplorer={() => setDrawerOpen(true)}
-                        onChanged={() => void refresh()}
-                        onDirtyChange={handleDirtyChange}
+                        onQuizChanged={() => void refresh()}
                       />
                     </>
                   )}
@@ -418,6 +420,7 @@ export default function App() {
           isBusy={notes.isDeleting}
           onConfirm={() => {
             if (!deleteTarget) return;
+            saver.cancel(deleteTarget.id);
             void notes.remove(deleteTarget).then(() => setDeleteTarget(null));
           }}
           onCancel={() => setDeleteTarget(null)}
