@@ -169,6 +169,14 @@ export const notebooks = sqliteTable(
     }),
     /** 兄弟間の並び順。小さいほど上。 */
     sortOrder: integer('sort_order').notNull().default(0),
+    /**
+     * ゴミ箱。null なら生きている。
+     *
+     * 物理削除にすると、親を消したときに子孫ごと取り返しがつかなくなる。
+     * 論理削除なら FK の `onDelete: 'set null'` が発火しないので、
+     * **生成済みの問題との紐付けが保たれたまま復元できる**（物理削除より良くなる）。
+     */
+    deletedAt: integer('deleted_at', { mode: 'timestamp_ms' }),
     title: text('title').notNull(),
     content: text('content').notNull(),
     // ミリ秒精度。updatedAt は楽観的ロックのトークンに使うため、秒精度だと
@@ -185,6 +193,8 @@ export const notebooks = sqliteTable(
     index('notebooks_user_updated_idx').on(t.userId, t.updatedAt),
     // ツリーの子取得と並び替えを支える
     index('notebooks_user_parent_order_idx').on(t.userId, t.parentId, t.sortOrder),
+    // 生きているノートの絞り込みとゴミ箱の一覧
+    index('notebooks_user_deleted_idx').on(t.userId, t.deletedAt),
   ],
 );
 

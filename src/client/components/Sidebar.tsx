@@ -17,6 +17,7 @@ import {
   Monitor,
   Moon,
   Sun,
+  Trash2,
   Timer,
   X,
 } from 'lucide-react';
@@ -75,6 +76,7 @@ interface Props {
   onSelectTag: (tag: string) => void;
   onAddTerm: () => void;
   onManageCategories: () => void;
+  onOpenTrash: () => void;
   collapsed: boolean;
   onToggleCollapsed: () => void;
   /** モバイルのドロワーが開いているか */
@@ -141,6 +143,7 @@ function SidebarBody({
   onSelectTag,
   onAddTerm,
   onManageCategories,
+  onOpenTrash,
   collapsed,
   onToggleCollapsed,
   onCloseDrawer,
@@ -327,6 +330,19 @@ function SidebarBody({
         <ThemeToggle collapsed={collapsed} />
 
         <ExportMenu collapsed={collapsed} />
+
+        <button
+          type="button"
+          onClick={onOpenTrash}
+          title="ゴミ箱"
+          className={cn(
+            'mt-0.5 flex w-full items-center gap-2.5 rounded-lg text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100',
+            collapsed ? 'justify-center p-2.5' : 'px-3 py-2',
+          )}
+        >
+          <Trash2 className="h-4 w-4 shrink-0" aria-hidden />
+          {!collapsed && 'ゴミ箱'}
+        </button>
 
         <button
           type="button"

@@ -14,6 +14,7 @@ import CategoryManagerModal from './components/CategoryManagerModal';
 import AddTermModal from './components/AddTermModal';
 import MoveNoteDialog from './components/MoveNoteDialog';
 import ConfirmDialog from './components/ConfirmDialog';
+import TrashDialog from './components/TrashDialog';
 import { useToast } from './components/Toast';
 import { TimerProvider } from './contexts/TimerProvider';
 import FloatingMiniTimer from './components/FloatingMiniTimer';
@@ -55,6 +56,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [isCategoryOpen, setIsCategoryOpen] = useState(false);
   const [isAddTermOpen, setIsAddTermOpen] = useState(false);
+  const [isTrashOpen, setIsTrashOpen] = useState(false);
 
   /** ノートはサイドバーのツリーとノート画面の両方が描くので、状態はここで持つ */
   const notes = useNotebooks();
@@ -209,6 +211,10 @@ export default function App() {
             setIsCategoryOpen(true);
             setDrawerOpen(false);
           }}
+          onOpenTrash={() => {
+            setIsTrashOpen(true);
+            setDrawerOpen(false);
+          }}
           collapsed={collapsed}
           onToggleCollapsed={() => setCollapsed((previous) => !previous)}
           drawerOpen={drawerOpen}
@@ -341,12 +347,13 @@ export default function App() {
 
         <ConfirmDialog
           open={deleteTarget !== null}
-          title={`「${deleteTarget?.title ?? ''}」を削除しますか？`}
+          title={`「${deleteTarget?.title ?? ''}」をゴミ箱に移しますか？`}
+          confirmLabel="ゴミ箱に移す"
           description={[
             ...(deleteTarget && notes.descendantCount(deleteTarget.id) > 0
               ? [`子ノート ${notes.descendantCount(deleteTarget.id)} 件も一緒に削除されます。`]
               : []),
-            '生成された問題は復習画面に残ります。',
+            '生成された問題は復習画面に残ります。ゴミ箱からいつでも戻せます。',
           ]}
           isBusy={notes.isDeleting}
           onConfirm={() => {
@@ -361,6 +368,13 @@ export default function App() {
           categories={categories}
           onClose={() => setIsCategoryOpen(false)}
           onChanged={() => void refresh()}
+        />
+
+        <TrashDialog
+          open={isTrashOpen}
+          onClose={() => setIsTrashOpen(false)}
+          onRestore={(id) => notes.restore(id)}
+          onPurge={(id) => notes.purge(id)}
         />
 
         <AddTermModal

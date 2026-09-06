@@ -88,7 +88,49 @@ export function useNotebooks() {
     [isMoving, reload, showToast],
   );
 
-  /** 子孫ごと消える。開いていたノートが消えたら選択も外す。 */
+  /** ゴミ箱から戻す。部分木ごと復元される。 */
+  const restore = useCallback(
+    async (id: string) => {
+      try {
+        const result = await api.restoreNotebook(id);
+        await reload();
+        setSelectedId(id);
+        showToast(
+          result.movedToRoot
+            ? // 親がまだゴミ箱に残っていた場合。黙って場所を変えると探す羽目になる。
+              `${result.restored} 件を復元しました（親がゴミ箱にあるためカテゴリ直下に置きました）`
+            : `${result.restored} 件のノートを復元しました`,
+          { kind: 'success' },
+        );
+        return result;
+      } catch (restoreError) {
+        showToast(restoreError instanceof Error ? restoreError.message : String(restoreError), {
+          kind: 'error',
+        });
+        return null;
+      }
+    },
+    [reload, showToast],
+  );
+
+  /** ゴミ箱から完全に消す。ここだけは戻せない。 */
+  const purge = useCallback(
+    async (id: string) => {
+      try {
+        const { purged } = await api.purgeNotebook(id);
+        showToast(`${purged} 件を完全に削除しました`, { kind: 'success' });
+        return purged;
+      } catch (purgeError) {
+        showToast(purgeError instanceof Error ? purgeError.message : String(purgeError), {
+          kind: 'error',
+        });
+        return null;
+      }
+    },
+    [showToast],
+  );
+
+  /** ゴミ箱へ移す。子孫ごと入る。開いていたノートが消えたら選択も外す。 */
   const remove = useCallback(
     async (note: NotebookDTO) => {
       if (isDeleting) return null;
@@ -98,7 +140,11 @@ export function useNotebooks() {
         const { deleted } = await api.deleteNotebook(note.id);
         await reload();
         setSelectedId((current) => (current && removed.has(current) ? null : current));
-        showToast(`${deleted} 件のノートを削除しました`, { kind: 'success' });
+        // その場で戻せるようにする。ゴミ箱を開きに行かせない。
+        showToast(`${deleted} 件のノートをゴミ箱に移しました`, {
+          kind: 'success',
+          action: { label: '元に戻す', onClick: () => void restore(note.id) },
+        });
         return deleted;
       } catch (deleteError) {
         showToast(deleteError instanceof Error ? deleteError.message : String(deleteError), {
@@ -109,7 +155,7 @@ export function useNotebooks() {
         setIsDeleting(false);
       }
     },
-    [isDeleting, reload, showToast],
+    [isDeleting, reload, showToast, restore],
   );
 
   /** 保存後の差し替え。順序は sortOrder が正なので中身だけ入れ替える。 */
@@ -133,6 +179,8 @@ export function useNotebooks() {
     create,
     move,
     remove,
+    restore,
+    purge,
     replace,
     descendantCount,
     isMoving,

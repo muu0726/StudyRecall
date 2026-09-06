@@ -50,6 +50,13 @@
       "when": 1788621598981,
       "tag": "0008_black_the_stranger",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1788671517635,
+      "tag": "0009_bizarre_mandroid",
+      "breakpoints": true
     }
   ]
 }

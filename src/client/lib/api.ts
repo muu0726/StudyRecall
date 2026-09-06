@@ -8,6 +8,7 @@ import type {
   CreateStudyLogResponse,
   GenerateNotebookQuizResponse,
   ManualAddQuizResponse,
+  NotebookDTO,
   NotebookResponse,
   NotebooksResponse,
   QuizResultResponse,
@@ -174,8 +175,23 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
+  /** ゴミ箱へ移す（論理削除）。完全に消すのは purgeNotebook。 */
   deleteNotebook: (id: string) =>
     request<DeleteNotebookResponse>(`/api/notebooks/${id}`, { method: 'DELETE' }),
+
+  listTrash: () =>
+    request<{ notebooks: NotebookDTO[]; totals: Record<string, number> }>(
+      '/api/notebooks/trash/list',
+    ),
+
+  restoreNotebook: (id: string) =>
+    request<{ ok: true; restored: number; movedToRoot: boolean }>(
+      `/api/notebooks/${id}/restore`,
+      { method: 'POST' },
+    ),
+
+  purgeNotebook: (id: string) =>
+    request<{ ok: true; purged: number }>(`/api/notebooks/${id}/purge`, { method: 'DELETE' }),
 
   moveNotebook: (id: string, body: MoveNotebookRequest) =>
     request<NotebookResponse>(`/api/notebooks/${id}/move`, {
