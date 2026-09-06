@@ -69,7 +69,12 @@ export default function MoveNoteDialog({
     });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 dark:bg-slate-950/70 p-4 sm:items-center">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="ノートの移動先を選ぶ"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-4 sm:items-center dark:bg-slate-950/70"
+    >
       <div className="max-h-full w-full max-w-md overflow-y-auto rounded-2xl bg-white dark:bg-slate-900 shadow-xl">
         <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 px-5 py-4">
           <div className="min-w-0">

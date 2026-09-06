@@ -282,10 +282,17 @@ export default function ReviewTab({
             </span>
           </div>
 
+          {/*
+            1 画面に 1 枚しか出ないので、ここだけキー操作を有効にする。
+            ハンズフリー再生中は切る。あちらは下部バーで（モーダルではないので
+            role="dialog" の判定に引っかからない）、独自のキューで読み上げている。
+            裏でカードの判定が飛ぶと、聞いている内容と記録がずれる。
+          */}
           <FlashCard
             key={current.id}
             question={current}
             disabled={isSubmitting}
+            keyboard={!isSpeechOpen}
             onAnswer={(correct) => void handleAnswer(correct)}
           />
         </>

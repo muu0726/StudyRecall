@@ -1,20 +1,62 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Check, Eye, RotateCcw } from 'lucide-react';
 import type { QuizQuestionDTO } from '../../shared/types';
 import { cn } from '../lib/cn';
+import { readShortcutContext, shouldHandleShortcut } from '../lib/keyboard';
 
 interface Props {
   question: QuizQuestionDTO;
   onAnswer: (correct: boolean) => void;
   disabled?: boolean;
+  /**
+   * キーボード操作を有効にする。**1 画面に 1 枚のときだけ渡す。**
+   * タイマー画面とノート画面はカードを縦に並べるので、全部が同じキーを
+   * 取り合って「どれが反応したか分からない」状態になる。
+   */
+  keyboard?: boolean;
 }
 
 /**
  * 表＝問題文、タップで裏＝正解＋解説。
  * 問題を切り替えるときは親で key={question.id} を指定して開閉状態をリセットする。
  */
-export default function FlashCard({ question, onAnswer, disabled = false }: Props) {
+export default function FlashCard({
+  question,
+  onAnswer,
+  disabled = false,
+  keyboard = false,
+}: Props) {
   const [revealed, setRevealed] = useState(false);
+
+  useEffect(() => {
+    if (!keyboard) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!shouldHandleShortcut(readShortcutContext(event))) return;
+
+      // 答えを見る。Space は既定のスクロールを止める。
+      if (event.key === ' ' || event.key === 'Enter') {
+        if (!revealed) {
+          event.preventDefault();
+          setRevealed(true);
+        }
+        return;
+      }
+
+      // 判定は答えを見てからだけ。伏せたまま押せると当てずっぽうが記録される。
+      if (!revealed || disabled) return;
+      if (event.key === '1' || event.key === 'ArrowLeft') {
+        event.preventDefault();
+        onAnswer(false);
+      } else if (event.key === '2' || event.key === 'ArrowRight') {
+        event.preventDefault();
+        onAnswer(true);
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [keyboard, revealed, disabled, onAnswer]);
 
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
@@ -39,7 +81,7 @@ export default function FlashCard({ question, onAnswer, disabled = false }: Prop
           <button
             type="button"
             onClick={() => setRevealed(true)}
-            className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-slate-100 dark:bg-slate-800 py-3 dark:bg-slate-700 dark:hover:bg-slate-600 text-sm font-medium text-slate-700 dark:text-slate-300 transition hover:bg-slate-200 dark:hover:bg-slate-700"
+            className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-slate-100 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
           >
             <Eye className="h-4 w-4" aria-hidden />
             答えを見る
@@ -97,11 +139,31 @@ export default function FlashCard({ question, onAnswer, disabled = false }: Prop
         </div>
       )}
 
-      <div className="flex flex-wrap gap-4 border-t border-slate-100 dark:border-slate-800 px-5 py-2 text-xs text-slate-400 dark:text-slate-500">
+      <div className="flex flex-wrap items-center gap-4 border-t border-slate-100 px-5 py-2 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
         <span>わかった {question.correctCount}回</span>
         <span>まだ不安 {question.incorrectCount}回</span>
         {/* いまの出題間隔。伸びているほど定着している。 */}
         {question.intervalDays > 0 && <span>出題間隔 {question.intervalDays}日</span>}
+
+        {/* キー操作のヒント。狭い画面では場所を取るだけなので出さない。 */}
+        {keyboard && (
+          <span className="ml-auto hidden items-center gap-1.5 sm:flex">
+            {(revealed
+              ? [
+                  ['1', 'まだ不安'],
+                  ['2', 'わかった'],
+                ]
+              : [['Space', '答えを見る']]
+            ).map(([key, label]) => (
+              <span key={key} className="flex items-center gap-1">
+                <kbd className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono text-[10px] text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+                  {key}
+                </kbd>
+                {label}
+              </span>
+            ))}
+          </span>
+        )}
       </div>
     </div>
   );

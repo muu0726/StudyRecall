@@ -25,7 +25,12 @@ export default function ConflictDialog({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 dark:bg-slate-950/70 p-4 sm:items-center">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="編集の競合"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-4 sm:items-center dark:bg-slate-950/70"
+    >
       <div className="max-h-full w-full max-w-lg overflow-y-auto rounded-2xl bg-white dark:bg-slate-900 shadow-xl">
         <div className="flex items-start gap-3 border-b border-slate-100 dark:border-slate-800 px-5 py-4">
           <span className="mt-0.5 rounded-lg bg-amber-50 dark:bg-amber-950 p-1.5 text-amber-600 dark:text-amber-400">
