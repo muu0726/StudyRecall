@@ -232,10 +232,31 @@ export default function NoteEditor({
       {error && <Banner tone="error">{error}</Banner>}
 
       <div className="rounded-card border border-line bg-surface">
-        {/* パンくず。どの階層にいるか一目で分かるようにする */}
+        <div className="px-4 py-4">
+          {mode === 'edit' ? (
+            <textarea
+              value={draftContent}
+              onChange={(event) => {
+                setDraftContent(event.target.value);
+                schedule({ content: event.target.value });
+              }}
+              rows={22}
+              aria-label="ノート本文（Markdown）"
+              placeholder={
+                '# 見出し\n\n- 箇条書き\n- **太字** や `コード` が使えます\n\nMarkdown で書けます。'
+              }
+              className="w-full resize-y rounded-control border border-line-strong px-3.5 py-3 font-mono text-body leading-relaxed focus:border-accent focus:ring-2 focus:ring-accent/35 focus:outline-none"
+            />
+          ) : (
+            <div className="min-h-96">
+              <MarkdownView content={draftContent} />
+            </div>
+          )}
+        </div>
+        {/* 本文の下に置く操作エリア。パンくず → タイトル → 生成と保存の順。 */}
         <nav
           aria-label="階層"
-          className="flex flex-wrap items-center gap-1 border-b border-line px-4 pt-3 text-caption text-fg-muted"
+          className="flex flex-wrap items-center gap-1 border-t border-line px-4 py-2.5 text-caption text-fg-muted"
         >
           <span className="font-medium" style={{ color: notebook.categoryColor }}>
             {notebook.categoryName}
@@ -248,7 +269,7 @@ export default function NoteEditor({
           ))}
         </nav>
 
-        <div className="flex items-center gap-2 border-b border-line px-4 py-3">
+        <div className="flex items-center gap-2 border-t border-line px-4 py-3">
           <button
             type="button"
             onClick={onOpenExplorer}
@@ -279,8 +300,15 @@ export default function NoteEditor({
           </button>
         </div>
 
-        {/* 問題生成は画面上部に置く。本文が長くなっても下まで探しに行かなくて済む。 */}
-        <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-2.5">
+        {promptWillTruncate && (
+          <p className="border-t border-line px-4 py-2 text-caption text-fg-subtle">
+            ※ トークン節約のため、ノート冒頭の約{MAX_PROMPT_CHARS.toLocaleString()}
+            文字から重要ポイントを抽出して問題を生成します
+          </p>
+        )}
+
+        {/* 生成された問題はさらに下に並ぶので、押すボタンと結果が近い。 */}
+        <div className="flex flex-wrap items-center gap-2 border-t border-line px-4 py-2.5">
           <select
             value={draftCategoryId}
             onChange={(event) => {
@@ -387,35 +415,6 @@ export default function NoteEditor({
               保存
             </button>
           </div>
-        </div>
-
-        {promptWillTruncate && (
-          <p className="border-b border-line px-4 py-2 text-caption text-fg-subtle">
-            ※ トークン節約のため、ノート冒頭の約{MAX_PROMPT_CHARS.toLocaleString()}
-            文字から重要ポイントを抽出して問題を生成します
-          </p>
-        )}
-
-        <div className="px-4 py-4">
-          {mode === 'edit' ? (
-            <textarea
-              value={draftContent}
-              onChange={(event) => {
-                setDraftContent(event.target.value);
-                schedule({ content: event.target.value });
-              }}
-              rows={22}
-              aria-label="ノート本文（Markdown）"
-              placeholder={
-                '# 見出し\n\n- 箇条書き\n- **太字** や `コード` が使えます\n\nMarkdown で書けます。'
-              }
-              className="w-full resize-y rounded-control border border-line-strong px-3.5 py-3 font-mono text-body leading-relaxed focus:border-accent focus:ring-2 focus:ring-accent/35 focus:outline-none"
-            />
-          ) : (
-            <div className="min-h-96">
-              <MarkdownView content={draftContent} />
-            </div>
-          )}
         </div>
       </div>
 
