@@ -70,6 +70,9 @@
   --color-surface: #ffffff; /* カード・モーダル */
   --color-surface-2: #f1f2f4; /* サイドバー・下部バー */
   --color-surface-3: #e8eaec; /* セグメントの溝・入れ子 */
+  --color-overlay: rgb(15 18 22 / 0.4); /* モーダルの暗幕 */
+  --color-solid: #1e242c; /* Toast など、面ごと反転させるもの */
+  --color-solid-fg: #f4f6f8;
 
   /* --- 線 --- */
   --color-line: #e5e7ea; /* 弱い境界（カードの縁） */
@@ -113,6 +116,9 @@
   --color-surface: #16191e;
   --color-surface-2: #101317;
   --color-surface-3: #1c2026;
+  --color-overlay: rgb(0 0 0 / 0.7);
+  --color-solid: #2b323c;
+  --color-solid-fg: #f4f6f8;
 
   --color-line: #23272e;
   --color-line-strong: #343a43;
