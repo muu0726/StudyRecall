@@ -182,15 +182,13 @@ export default function NoteTree({
               if (dropTarget?.id === node.id) handleDrop(node.id, dropTarget.position);
             }}
             className={cn(
-              'group relative flex items-center gap-1 rounded-lg pr-1 transition',
-              node.id === selectedId
-                ? 'bg-blue-50 dark:bg-blue-950'
-                : 'hover:bg-slate-100 dark:hover:bg-slate-800',
+              'group relative flex items-center gap-1 rounded-control pr-1 transition',
+              node.id === selectedId ? 'bg-accent-soft' : 'hover:bg-row-hover',
               draggingId === node.id && 'opacity-40',
               // 中央に落とすと子になる。枠で示す。
               dropTarget?.id === node.id &&
                 dropTarget.position === 'inside' &&
-                (isDropInvalid ? 'ring-2 ring-red-400' : 'ring-2 ring-blue-500'),
+                (isDropInvalid ? 'ring-2 ring-danger' : 'ring-2 ring-accent'),
             )}
             style={{ paddingLeft: `${8 + (depth - 1) * 12}px` }}
           >
@@ -212,7 +210,7 @@ export default function NoteTree({
               aria-label={isExpanded ? '折りたたむ' : '展開する'}
               aria-expanded={isExpanded}
               className={cn(
-                'shrink-0 rounded p-0.5 text-slate-400 transition hover:bg-slate-200 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-slate-700 dark:hover:text-slate-300',
+                'shrink-0 rounded-control p-0.5 text-fg-subtle transition hover:bg-row-hover hover:text-fg',
                 !hasChildren && 'invisible',
               )}
             >
@@ -228,16 +226,11 @@ export default function NoteTree({
               onClick={() => onSelect(node)}
               className="flex min-w-0 flex-1 items-center gap-1.5 py-1.5 text-left"
             >
-              <FileText
-                className="h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-slate-500"
-                aria-hidden
-              />
+              <FileText className="h-3.5 w-3.5 shrink-0 text-fg-subtle" aria-hidden />
               <span
                 className={cn(
-                  'truncate text-sm',
-                  node.id === selectedId
-                    ? 'font-semibold text-blue-800 dark:text-blue-300'
-                    : 'text-slate-700 dark:text-slate-300',
+                  'truncate text-body',
+                  node.id === selectedId ? 'font-semibold text-accent-text' : 'text-fg',
                 )}
               >
                 {node.title}
@@ -254,7 +247,7 @@ export default function NoteTree({
                   onCreateChild(node);
                 }}
                 aria-label={`${node.title} に子ノートを追加`}
-                className="rounded p-1 text-slate-400 transition hover:bg-slate-200 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+                className="rounded-control p-1 text-fg-subtle transition hover:bg-row-hover hover:text-fg"
               >
                 <Plus className="h-3.5 w-3.5" aria-hidden />
               </button>
@@ -262,7 +255,7 @@ export default function NoteTree({
                 type="button"
                 onClick={() => onOpenMenu(node)}
                 aria-label={`${node.title} のメニュー`}
-                className="rounded p-1 text-slate-400 transition hover:bg-slate-200 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+                className="rounded-control p-1 text-fg-subtle transition hover:bg-row-hover hover:text-fg"
               >
                 <MoreHorizontal className="h-3.5 w-3.5" aria-hidden />
               </button>
@@ -283,7 +276,7 @@ export default function NoteTree({
 
         return (
           <section key={category.id}>
-            <div className="group flex items-center gap-0.5 rounded-lg pr-1 transition hover:bg-slate-100 dark:hover:bg-slate-800">
+            <div className="group flex items-center gap-0.5 rounded-control pr-1 transition hover:bg-row-hover">
               <button
                 type="button"
                 onClick={() => toggleCategory(category.id)}
@@ -291,15 +284,9 @@ export default function NoteTree({
                 className="flex min-w-0 flex-1 items-center gap-1 py-1.5 pl-1 text-left"
               >
                 {isOpen ? (
-                  <ChevronDown
-                    className="h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-slate-500"
-                    aria-hidden
-                  />
+                  <ChevronDown className="h-3.5 w-3.5 shrink-0 text-fg-subtle" aria-hidden />
                 ) : (
-                  <ChevronRight
-                    className="h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-slate-500"
-                    aria-hidden
-                  />
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-fg-subtle" aria-hidden />
                 )}
                 {isOpen ? (
                   <FolderOpen
@@ -314,10 +301,10 @@ export default function NoteTree({
                     aria-hidden
                   />
                 )}
-                <span className="min-w-0 flex-1 truncate text-xs font-semibold text-slate-600 dark:text-slate-400">
+                <span className="min-w-0 flex-1 truncate text-caption font-semibold text-fg-muted">
                   {category.name}
                 </span>
-                <span className="shrink-0 text-[11px] text-slate-400 tabular-nums dark:text-slate-500">
+                <span className="shrink-0 text-[11px] text-fg-subtle tabular-nums">
                   {inCategory.length}
                 </span>
               </button>
@@ -334,7 +321,7 @@ export default function NoteTree({
                   onCreateRoot(category.id);
                 }}
                 aria-label={`${category.name} にノートを追加`}
-                className="shrink-0 rounded p-1 text-slate-400 transition hover:bg-slate-200 hover:text-slate-700 md:opacity-0 md:group-focus-within:opacity-100 md:group-hover:opacity-100 dark:text-slate-500 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+                className="shrink-0 rounded-control p-1 text-fg-subtle transition hover:bg-row-hover hover:text-fg md:opacity-0 md:group-focus-within:opacity-100 md:group-hover:opacity-100"
               >
                 <Plus className="h-3.5 w-3.5" aria-hidden />
               </button>
@@ -342,9 +329,7 @@ export default function NoteTree({
 
             {isOpen &&
               (tree.length === 0 ? (
-                <p className="py-1 pl-6 text-xs text-slate-400 dark:text-slate-500">
-                  ノートがありません
-                </p>
+                <p className="py-1 pl-6 text-caption text-fg-subtle">ノートがありません</p>
               ) : (
                 <ul>{renderNodes(tree)}</ul>
               ))}

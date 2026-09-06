@@ -26,6 +26,7 @@ import { api } from '../lib/api';
 import { authClient } from '../lib/auth-client';
 import { exportAnkiCsv, exportNotebooksZip, todayStamp } from '../lib/export';
 import { cn } from '../lib/cn';
+import { LAYER, Segmented, selectableRow } from '../ui';
 import { useToast } from './Toast';
 import NoteTree, { type MoveIntent } from './NoteTree';
 import { useTheme } from '../contexts/ThemeProvider';
@@ -102,7 +103,7 @@ export default function Sidebar(props: Props) {
       {/* PC: 常時表示 */}
       <aside
         className={cn(
-          'hidden shrink-0 border-r border-slate-200 bg-white transition-[width] duration-200 md:block dark:border-slate-800 dark:bg-slate-900',
+          'hidden shrink-0 border-r border-line bg-surface-2 transition-[width] duration-200 md:block',
           props.collapsed ? 'w-16' : 'w-[260px]',
         )}
       >
@@ -111,14 +112,10 @@ export default function Sidebar(props: Props) {
 
       {/* モバイル: ドロワー */}
       {drawerOpen && (
-        <div className="fixed inset-0 z-40 md:hidden">
+        <div className={cn('fixed inset-0 md:hidden', LAYER.drawer)}>
+          <div className="absolute inset-0 bg-overlay" onClick={onCloseDrawer} aria-hidden />
           <div
-            className="absolute inset-0 bg-slate-900/40 dark:bg-slate-950/70"
-            onClick={onCloseDrawer}
-            aria-hidden
-          />
-          <div
-            className="absolute inset-y-0 left-0 w-72 max-w-[85vw] bg-white shadow-xl dark:bg-slate-900"
+            className="absolute inset-y-0 left-0 w-72 max-w-[85vw] bg-surface-2 shadow-overlay"
             role="dialog"
             aria-modal="true"
             aria-label="メニュー"
@@ -159,11 +156,11 @@ function SidebarBody({
       {/* ヘッダー: ロゴ + 用語を追加 */}
       <div className={cn('shrink-0 px-3 pt-3', collapsed && 'px-2')}>
         <div className={cn('flex items-center gap-2.5 px-1', collapsed && 'justify-center px-0')}>
-          <span className="shrink-0 rounded-xl bg-blue-600 p-2 text-white">
+          <span className="shrink-0 rounded-control bg-accent p-2 text-white">
             <BookOpenCheck className="h-5 w-5" aria-hidden />
           </span>
           {!collapsed && (
-            <span className="min-w-0 flex-1 truncate text-base font-bold text-slate-900 dark:text-slate-100">
+            <span className="min-w-0 flex-1 truncate text-section font-bold text-fg">
               StudyRecall
             </span>
           )}
@@ -173,7 +170,7 @@ function SidebarBody({
               onClick={onToggleCollapsed}
               aria-label="サイドバーを折りたたむ"
               title="サイドバーを折りたたむ"
-              className="shrink-0 rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+              className="shrink-0 rounded-control p-1 text-fg-subtle transition hover:bg-row-hover hover:text-fg"
             >
               <ChevronLeft className="h-4 w-4" aria-hidden />
             </button>
@@ -183,7 +180,7 @@ function SidebarBody({
               type="button"
               onClick={onCloseDrawer}
               aria-label="メニューを閉じる"
-              className="shrink-0 rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+              className="shrink-0 rounded-control p-1 text-fg-subtle transition hover:bg-row-hover hover:text-fg"
             >
               <X className="h-5 w-5" aria-hidden />
             </button>
@@ -196,7 +193,7 @@ function SidebarBody({
             onClick={onToggleCollapsed}
             aria-label="サイドバーを開く"
             title="サイドバーを開く"
-            className="mt-2 flex w-full justify-center rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+            className="mt-2 flex w-full justify-center rounded-control p-1.5 text-fg-subtle transition hover:bg-row-hover hover:text-fg"
           >
             <ChevronRight className="h-4 w-4" aria-hidden />
           </button>
@@ -207,7 +204,7 @@ function SidebarBody({
           onClick={onAddTerm}
           title="用語を追加"
           className={cn(
-            'mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl bg-blue-600 text-sm font-semibold text-white transition hover:bg-blue-700',
+            'mt-3 flex w-full items-center justify-center gap-1.5 rounded-control bg-accent text-body font-semibold text-white transition hover:bg-accent-hover',
             collapsed ? 'p-2.5' : 'px-3 py-2.5',
           )}
         >
@@ -226,12 +223,12 @@ function SidebarBody({
                 onClick={() => onSelectView(id)}
                 aria-current={view === id ? 'page' : undefined}
                 title={title}
-                className={cn(
-                  'flex w-full items-center gap-2.5 rounded-lg text-sm font-medium transition',
-                  collapsed ? 'justify-center p-2.5' : 'px-3 py-2',
-                  view === id
-                    ? 'bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
-                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100',
+                className={selectableRow(
+                  view === id,
+                  cn(
+                    'flex w-full items-center gap-2.5 text-body',
+                    collapsed ? 'justify-center p-2.5' : 'px-3 py-2',
+                  ),
                 )}
               >
                 <Icon className="h-4 w-4 shrink-0" aria-hidden />
@@ -244,18 +241,18 @@ function SidebarBody({
         {/* ノートのファイルツリー。ここから直接開ける（メイン側に一覧ペインは無い）。 */}
         {!collapsed && (
           <div className="mt-6">
-            <p className="px-3 text-xs font-semibold tracking-wide text-slate-400 uppercase dark:text-slate-500">
+            <p className="px-3 text-caption font-semibold tracking-wide text-fg-subtle uppercase">
               ノート
             </p>
 
             <div className="mt-1.5">
               {notebooksLoading ? (
-                <p className="flex items-center gap-1.5 px-3 py-2 text-xs text-slate-400 dark:text-slate-500">
+                <p className="flex items-center gap-1.5 px-3 py-2 text-caption text-fg-subtle">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
                   読み込み中…
                 </p>
               ) : categories.length === 0 ? (
-                <p className="px-3 py-2 text-xs leading-relaxed text-slate-400 dark:text-slate-500">
+                <p className="px-3 py-2 text-caption leading-relaxed text-fg-subtle">
                   カテゴリがありません。下の「カテゴリを管理」から追加してください。
                 </p>
               ) : (
@@ -279,7 +276,7 @@ function SidebarBody({
                 if (first) onCreateNote(first.id);
               }}
               disabled={categories.length === 0}
-              className="mt-1 flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+              className="mt-1 flex w-full items-center gap-2 rounded-control px-3 py-1.5 text-body font-medium text-fg-muted transition hover:bg-row-hover hover:text-fg disabled:cursor-not-allowed disabled:opacity-40"
             >
               <FilePlus2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
               新規ノート
@@ -290,11 +287,11 @@ function SidebarBody({
         {/* ジャンル。AI が付けたタグからそのまま絞り込み復習へ飛べる。 */}
         {!collapsed && (
           <div className="mt-6">
-            <p className="px-3 text-xs font-semibold tracking-wide text-slate-400 uppercase dark:text-slate-500">
+            <p className="px-3 text-caption font-semibold tracking-wide text-fg-subtle uppercase">
               ジャンル
             </p>
             {tags.length === 0 ? (
-              <p className="mt-2 px-3 text-xs leading-relaxed text-slate-400 dark:text-slate-500">
+              <p className="mt-2 px-3 text-caption leading-relaxed text-fg-subtle">
                 まだタグがありません。問題を生成するとAIがジャンルを付けます。
               </p>
             ) : (
@@ -307,19 +304,14 @@ function SidebarBody({
                         type="button"
                         onClick={() => onSelectTag(tag)}
                         aria-current={isActive ? 'page' : undefined}
-                        className={cn(
-                          'flex w-full items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition',
-                          isActive
-                            ? 'bg-blue-50 font-medium text-blue-700 dark:bg-blue-950 dark:text-blue-300'
-                            : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100',
+                        className={selectableRow(
+                          isActive,
+                          'flex w-full items-center gap-1.5 px-3 py-1.5 text-body',
                         )}
                       >
-                        <Hash
-                          className="h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-slate-500"
-                          aria-hidden
-                        />
+                        <Hash className="h-3.5 w-3.5 shrink-0 text-fg-subtle" aria-hidden />
                         <span className="min-w-0 flex-1 truncate text-left">{tag}</span>
-                        <span className="shrink-0 text-xs text-slate-400 tabular-nums dark:text-slate-500">
+                        <span className="shrink-0 text-caption text-fg-subtle tabular-nums">
                           {count}
                         </span>
                       </button>
@@ -333,12 +325,7 @@ function SidebarBody({
       </nav>
 
       {/* フッター: ツールとアカウント */}
-      <div
-        className={cn(
-          'shrink-0 border-t border-slate-200 p-3 dark:border-slate-800',
-          collapsed && 'p-2',
-        )}
-      >
+      <div className={cn('shrink-0 border-t border-line p-3', collapsed && 'p-2')}>
         <ThemeToggle collapsed={collapsed} />
 
         <ExportMenu collapsed={collapsed} />
@@ -348,7 +335,7 @@ function SidebarBody({
           onClick={onOpenTrash}
           title="ゴミ箱"
           className={cn(
-            'mt-0.5 flex w-full items-center gap-2.5 rounded-lg text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100',
+            'mt-0.5 flex w-full items-center gap-2.5 rounded-control text-body font-medium text-fg-muted transition hover:bg-row-hover hover:text-fg',
             collapsed ? 'justify-center p-2.5' : 'px-3 py-2',
           )}
         >
@@ -361,7 +348,7 @@ function SidebarBody({
           onClick={onManageCategories}
           title="カテゴリを管理"
           className={cn(
-            'mt-0.5 flex w-full items-center gap-2.5 rounded-lg text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100',
+            'mt-0.5 flex w-full items-center gap-2.5 rounded-control text-body font-medium text-fg-muted transition hover:bg-row-hover hover:text-fg',
             collapsed ? 'justify-center p-2.5' : 'px-3 py-2',
           )}
         >
@@ -397,7 +384,7 @@ function ThemeToggle({ collapsed }: { collapsed: boolean }) {
         onClick={cycle}
         aria-label={`テーマ: ${active.label}（クリックで切り替え）`}
         title={`テーマ: ${active.label}`}
-        className="mb-0.5 flex w-full justify-center rounded-lg p-2.5 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+        className="mb-0.5 flex w-full justify-center rounded-control p-2.5 text-fg-muted transition hover:bg-row-hover hover:text-fg"
       >
         <Icon className="h-4 w-4" aria-hidden />
       </button>
@@ -405,30 +392,20 @@ function ThemeToggle({ collapsed }: { collapsed: boolean }) {
   }
 
   return (
-    <div
-      role="group"
-      aria-label="テーマ"
-      className="mb-1 flex rounded-lg bg-slate-100 p-0.5 dark:bg-slate-800"
-    >
-      {THEME_OPTIONS.map(({ value, label, icon: Icon }) => (
-        <button
-          key={value}
-          type="button"
-          onClick={() => setSetting(value)}
-          aria-pressed={setting === value}
-          aria-label={label}
-          title={label}
-          className={cn(
-            'flex flex-1 items-center justify-center rounded-md py-1.5 transition',
-            setting === value
-              ? 'bg-white text-blue-700 shadow-sm dark:bg-slate-700 dark:text-blue-300'
-              : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100',
-          )}
-        >
-          <Icon className="h-4 w-4" aria-hidden />
-        </button>
-      ))}
-    </div>
+    <Segmented
+      label="テーマ"
+      size="sm"
+      fullWidth
+      className="mb-1"
+      value={setting}
+      onChange={setSetting}
+      options={THEME_OPTIONS.map(({ value, label, icon: Icon }) => ({
+        value,
+        ariaLabel: label,
+        title: label,
+        label: <Icon className="h-4 w-4" aria-hidden />,
+      }))}
+    />
   );
 }
 
@@ -476,7 +453,7 @@ function ExportMenu({ collapsed }: { collapsed: boolean }) {
         aria-haspopup="menu"
         title="データエクスポート"
         className={cn(
-          'flex w-full items-center gap-2.5 rounded-lg text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100',
+          'flex w-full items-center gap-2.5 rounded-control text-body font-medium text-fg-muted transition hover:bg-row-hover hover:text-fg',
           collapsed ? 'justify-center p-2.5' : 'px-3 py-2',
         )}
       >
@@ -494,7 +471,7 @@ function ExportMenu({ collapsed }: { collapsed: boolean }) {
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} aria-hidden />
           <div
             role="menu"
-            className="absolute bottom-full left-0 z-20 mb-1 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-800 dark:bg-slate-900"
+            className="absolute bottom-full left-0 z-20 mb-1 w-56 overflow-hidden rounded-control border border-line bg-surface py-1 shadow-overlay"
           >
             <MenuItem
               icon={<Download className="h-4 w-4" aria-hidden />}
@@ -532,7 +509,7 @@ function MenuItem({
       role="menuitem"
       onClick={onClick}
       disabled={busy}
-      className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:text-slate-300 dark:hover:bg-slate-800"
+      className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-body text-fg transition hover:bg-row-hover disabled:opacity-50"
     >
       {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : icon}
       {label}
@@ -548,7 +525,7 @@ function AccountRow({ collapsed }: { collapsed: boolean }) {
   return (
     <div
       className={cn(
-        'mt-2 flex items-center gap-2 border-t border-slate-100 pt-2 dark:border-slate-800',
+        'mt-2 flex items-center gap-2 border-t border-line pt-2',
         collapsed && 'flex-col gap-1',
       )}
     >
@@ -561,7 +538,7 @@ function AccountRow({ collapsed }: { collapsed: boolean }) {
         />
       ) : (
         <span
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-200 text-sm font-semibold text-slate-600 dark:bg-slate-700 dark:text-slate-400"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-3 text-body font-semibold text-fg-muted"
           aria-hidden
         >
           {displayName.slice(0, 1).toUpperCase()}
@@ -569,9 +546,7 @@ function AccountRow({ collapsed }: { collapsed: boolean }) {
       )}
 
       {!collapsed && (
-        <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-700 dark:text-slate-300">
-          {displayName}
-        </span>
+        <span className="min-w-0 flex-1 truncate text-body font-medium text-fg">{displayName}</span>
       )}
 
       <button
@@ -579,7 +554,7 @@ function AccountRow({ collapsed }: { collapsed: boolean }) {
         onClick={() => void authClient.signOut()}
         aria-label="ログアウト"
         title="ログアウト"
-        className="shrink-0 rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+        className="shrink-0 rounded-control p-1.5 text-fg-subtle transition hover:bg-row-hover hover:text-fg"
       >
         <LogOut className="h-4 w-4" aria-hidden />
       </button>
