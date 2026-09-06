@@ -1,5 +1,6 @@
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkMark from '../lib/remark-mark';
 
 /**
  * Markdown の実描画。react-markdown と remark-gfm を引き込む重い側。
@@ -12,7 +13,7 @@ export default function MarkdownRenderer({ content }: { content: string }) {
   return (
     <div className="text-body leading-relaxed text-fg">
       <Markdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={[remarkGfm, remarkMark]}
         components={{
           h1: (props) => <h1 className="mt-6 mb-3 text-2xl font-bold text-fg" {...props} />,
           h2: (props) => (
@@ -22,6 +23,10 @@ export default function MarkdownRenderer({ content }: { content: string }) {
             />
           ),
           h3: (props) => <h3 className="mt-5 mb-2 text-section font-bold text-fg" {...props} />,
+          // ==テキスト== のマーカー。Tailwind の preflight で <mark> の既定色は
+          // 消えているので、背景も文字色も明示する。文字色をトークンに従わせておくと
+          // ライトでもダークでも必ず読める。
+          mark: (props) => <mark className="rounded-[2px] bg-hl px-0.5 text-fg" {...props} />,
           p: (props) => <p className="my-3" {...props} />,
           ul: (props) => <ul className="my-3 list-disc space-y-1 pl-5" {...props} />,
           ol: (props) => <ol className="my-3 list-decimal space-y-1 pl-5" {...props} />,

@@ -65,6 +65,17 @@ describe('sanitizeForPrompt', () => {
     expect(out).not.toMatch(/\n{3,}/);
   });
 
+  it('マーカーの記号だけ外して中身は残す', () => {
+    // 記号は出題に使えないノイズだが、囲まれた語そのものは本文の一部
+    expect(sanitizeForPrompt('TCPは==3ウェイハンドシェイク==で接続する')).toBe(
+      'TCPは3ウェイハンドシェイクで接続する',
+    );
+  });
+
+  it('前後に空白のある == は記法ではないので触らない', () => {
+    expect(sanitizeForPrompt('a == b == c')).toBe('a == b == c');
+  });
+
   it('落とすものが無ければそのまま返す', () => {
     expect(sanitizeForPrompt('ただの本文')).toBe('ただの本文');
   });

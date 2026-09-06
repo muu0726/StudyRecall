@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Eye, Loader2, PanelLeft, Pencil, Save, Sparkles, Trash2 } from 'lucide-react';
+import { Eye, Highlighter, Loader2, PanelLeft, Pencil, Save, Sparkles, Trash2 } from 'lucide-react';
 import type { CategoryDTO, NotebookDTO, QuizQuestionDTO } from '../../shared/types';
 import { DEFAULT_GENERATED_QUESTIONS, MAX_GENERATED_QUESTIONS } from '../../shared/types';
 import { api } from '../lib/api';
@@ -10,6 +10,7 @@ import { cn } from '../lib/cn';
 import { Banner } from '../ui';
 import { useRevalidateOnFocus } from '../hooks/useRevalidateOnFocus';
 import { decideRecovery, readDraft } from '../lib/note-draft';
+import { toggleMarker } from '../lib/markdown-edit';
 import type { NoteSaver } from '../hooks/useNoteSaver';
 import { useToast } from './Toast';
 import ConflictDialog from './ConflictDialog';
@@ -100,13 +101,31 @@ export default function NoteEditor({
   // マウント時に 1 度だけ。ロックトークンを saver に預け、復元のトーストを出す
   useEffect(() => {
     saver.register(noteId, notebook.updatedAt);
-    if (initial.recovery !== null) {
-      showToast(
-        initial.recovery === 'restore'
-          ? '保存前の下書きを復元しました'
-          : '保存前の下書きを復元しました。その間に別の端末でも更新されています',
-        { kind: initial.recovery === 'restore' ? 'success' : 'info' },
-      );
+    if (initial.recovery === null) return;
+
+    showToast(
+      initial.recovery === 'restore'
+        ? '保存前の下書きを復元しました'
+        : '保存前の下書きを復元しました。その間に別の端末でも更新されています',
+      { kind: initial.recovery === 'restore' ? 'success' : 'info' },
+    );
+
+    /*
+     * 復元した下書きをサーバーにも載せる。
+     *
+     * 保存の予約は「入力があったとき」にしか立たないので、これが無いと
+     * **復元した内容が端末に留まったまま**になる（次に何か打つまで保存されない）。
+     *
+     * ただし restore-stale のときは載せない。退避してからサーバー側も動いており、
+     * そのまま送ると他端末の更新を踏み潰す。remoteChanged を立てて、
+     * ユーザーが保存を押した時点で競合の解決へ回す。
+     */
+    if (initial.recovery === 'restore') {
+      saver.schedule(noteId, {
+        title: initial.source.title,
+        content: initial.source.content,
+        categoryId: initial.source.categoryId,
+      });
     }
     // マウント時だけ走らせたい
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -132,6 +151,7 @@ export default function NoteEditor({
    * 一覧が更新されたら、他端末で変わっていないか見る。
    * **自分の保存で更新された場合は黙る**（saver が持つトークンと突き合わせる）。
    */
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
   const isDirtyRef = useRef(isDirty);
   isDirtyRef.current = isDirty;
   useEffect(() => {
@@ -165,6 +185,27 @@ export default function NoteEditor({
       return;
     }
     saver.schedule(noteId, { title: title.trim() || NEW_NOTE_TITLE, content, categoryId });
+  };
+
+  /**
+   * 選択範囲を `==…==` で囲む（もう一度で外す）。
+   *
+   * React の制御コンポーネントは値を書き戻すときにキャレットを末尾へ飛ばすので、
+   * 描画の後に選択範囲を戻す。**setDraftContent と schedule の両方を呼ぶこと**。
+   * 片方だけだと自動保存が走らない。
+   */
+  const applyMarker = () => {
+    const textarea = bodyRef.current;
+    if (!textarea) return;
+
+    const result = toggleMarker(draftContent, textarea.selectionStart, textarea.selectionEnd);
+    setDraftContent(result.text);
+    schedule({ content: result.text });
+
+    requestAnimationFrame(() => {
+      textarea.focus();
+      textarea.setSelectionRange(result.selectionStart, result.selectionEnd);
+    });
   };
 
   // ノート一覧は App が取り直すので、ここで面倒を見るのは生成済み問題だけ
@@ -235,15 +276,24 @@ export default function NoteEditor({
         <div className="px-4 py-4">
           {mode === 'edit' ? (
             <textarea
+              ref={bodyRef}
               value={draftContent}
               onChange={(event) => {
                 setDraftContent(event.target.value);
                 schedule({ content: event.target.value });
               }}
+              onKeyDown={(event) => {
+                // 日本語入力の変換中は拾わない（変換確定の Enter などと取り合わない）
+                if (event.nativeEvent.isComposing) return;
+                if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'm') {
+                  event.preventDefault();
+                  applyMarker();
+                }
+              }}
               rows={22}
               aria-label="ノート本文（Markdown）"
               placeholder={
-                '# 見出し\n\n- 箇条書き\n- **太字** や `コード` が使えます\n\nMarkdown で書けます。'
+                '# 見出し\n\n- 箇条書き\n- **太字** や `コード` が使えます\n- 選択して Ctrl+M で ==マーカー==\n\nMarkdown で書けます。'
               }
               className="w-full resize-y rounded-control border border-line-strong px-3.5 py-3 font-mono text-body leading-relaxed focus:border-accent focus:ring-2 focus:ring-accent/35 focus:outline-none"
             />
@@ -330,6 +380,19 @@ export default function NoteEditor({
               </option>
             ))}
           </select>
+
+          <button
+            type="button"
+            // mousedown を止めないと textarea からフォーカスが外れ、選択範囲が読めなくなる
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={applyMarker}
+            disabled={mode !== 'edit'}
+            title="選択範囲にマーカー（Ctrl+M）"
+            aria-label="選択範囲にマーカー"
+            className="rounded-control border border-line-strong bg-surface p-1.5 text-fg-muted transition hover:bg-row-hover hover:text-fg disabled:cursor-not-allowed disabled:opacity-45"
+          >
+            <Highlighter className="h-4 w-4" aria-hidden />
+          </button>
 
           <div className="flex rounded-control bg-surface-3 p-0.5">
             <ModeButton

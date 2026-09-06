@@ -79,6 +79,9 @@
    * ヒートマップの 5 段。ライトは「薄い→濃い青」、ダークは「暗い→明るい青」で
    * **向きが反転する**。反転をここに閉じ込めると Heatmap 側から dark: が消える。
    */
+  /* ノートのマーカー（==テキスト==）。文字色は --color-fg のままにして読めるようにする */
+  --color-hl: #fdf0b4;
+
   --color-heat-0: #e8eaec;
   --color-heat-1: #bfdbfe;
   --color-heat-2: #60a5fa;
@@ -132,6 +135,8 @@
   --color-surface-3: #1c2026;
   --color-overlay: rgb(0 0 0 / 0.7);
   --color-solid: #2b323c;
+
+  --color-hl: #5a4a18;
 
   --color-heat-0: #1c2026;
   --color-heat-1: #1e3a8a;

@@ -32,6 +32,9 @@ export function sanitizeForPrompt(content: string): string {
       .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
       // HTML の img タグ（Markdown に直接書かれることがある）
       .replace(/<img\b[^>]*>/gi, '')
+      // マーカー（==テキスト==）の記号だけ外す。
+      // 中身は本文の一部なので残す。記号は出題に使えないノイズ。
+      .replace(/==(?!\s)([^=]+?)(?<!\s)==/g, '$1')
       // 上の除去で空行だらけになるので畳む
       .replace(/\n{3,}/g, '\n\n')
       .trim()
