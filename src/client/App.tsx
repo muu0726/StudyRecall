@@ -5,10 +5,12 @@ import { api } from './lib/api';
 import { flushQuizResults, pendingCount } from './lib/offline-queue';
 import { useRevalidateOnFocus } from './hooks/useRevalidateOnFocus';
 import { useNotebooks } from './hooks/useNotebooks';
+import { useNoteTabs } from './hooks/useNoteTabs';
 import { usePwaUpdate } from './hooks/usePwaUpdate';
 import Sidebar, { VIEWS, type ViewId } from './components/Sidebar';
 import StudyTab from './components/StudyTab';
 import NotesTab from './components/NotesTab';
+import NoteTabs from './components/NoteTabs';
 import ReviewTab from './components/ReviewTab';
 import StatsTab from './components/StatsTab';
 import CategoryManagerModal from './components/CategoryManagerModal';
@@ -66,6 +68,23 @@ export default function App() {
 
   /** ノートはサイドバーのツリーとノート画面の両方が描くので、状態はここで持つ */
   const notes = useNotebooks();
+  /** どのノートを開いているか。取得とは関係しないので useNotebooks とは分けてある */
+  const tabs = useNoteTabs();
+
+  /**
+   * タブに未保存の点を出すためだけの集合。編集中の本文そのものは持たない
+   * （持つとノート画面と二重管理になる）。
+   */
+  const [dirtyNoteIds, setDirtyNoteIds] = useState<ReadonlySet<string>>(() => new Set());
+  const handleDirtyChange = useCallback((id: string, dirty: boolean) => {
+    setDirtyNoteIds((previous) => {
+      if (previous.has(id) === dirty) return previous;
+      const next = new Set(previous);
+      if (dirty) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }, []);
 
   /** ツリーの ⋯ から開くメニューと、その先の移動・削除ダイアログ */
   const [menuFor, setMenuFor] = useState<NotebookDTO | null>(null);
@@ -171,19 +190,32 @@ export default function App() {
     goTo('review');
   };
 
-  /** ツリーからノートを開く。ノート画面へ切り替え、モバイルではドロワーを閉じる。 */
+  /** ツリーからノートを開く。タブが無ければ足し、あればそれをアクティブにする。 */
   const handleSelectNote = (notebook: NotebookDTO) => {
-    notes.select(notebook.id);
+    tabs.open(notebook.id);
     goTo('notes');
   };
 
   // NotesTab の effect 依存に入るので、毎レンダー新しい関数にしない
-  const { select: selectNote } = notes;
-  const clearNoteSelection = useCallback(() => selectNote(null), [selectNote]);
+  const { close: closeTab, syncWithExisting } = tabs;
+  const clearNoteSelection = useCallback(() => {
+    if (tabs.activeId) closeTab(tabs.activeId);
+  }, [closeTab, tabs.activeId]);
+
+  /**
+   * 削除・他端末での消失に追随して、存在しないノートのタブを畳む。
+   * 取得前（空配列）には何もしない規則は syncTabs 側に入れてある。
+   */
+  useEffect(() => {
+    syncWithExisting(new Set(notes.notebooks.map((notebook) => notebook.id)));
+  }, [notes.notebooks, syncWithExisting]);
 
   const handleCreateNote = async (categoryId: string, parentId?: string) => {
     const created = await notes.create(categoryId, parentId);
-    if (created) goTo('notes');
+    if (created) {
+      tabs.open(created.id);
+      goTo('notes');
+    }
   };
 
   const currentView = VIEWS.find((v) => v.id === view) ?? VIEWS[0];
@@ -201,7 +233,7 @@ export default function App() {
           categories={categories}
           notebooks={notes.notebooks}
           notebooksLoading={notes.isLoading}
-          selectedNoteId={notes.selectedId}
+          selectedNoteId={tabs.activeId}
           onSelectNote={handleSelectNote}
           onCreateNote={(categoryId, parentId) => void handleCreateNote(categoryId, parentId)}
           onMoveNote={(intent) => void notes.move(intent)}
@@ -273,20 +305,31 @@ export default function App() {
                     <StudyTab categories={categories} onRecorded={() => void refresh()} />
                   )}
                   {view === 'notes' && (
-                    <NotesTab
-                      categories={categories}
-                      notebooks={notes.notebooks}
-                      selectedId={notes.selectedId}
-                      onReplace={notes.replace}
-                      onClearSelection={clearNoteSelection}
-                      onCreate={() => {
-                        const first = categories[0];
-                        if (first) void handleCreateNote(first.id);
-                      }}
-                      onRequestDelete={setDeleteTarget}
-                      onOpenExplorer={() => setDrawerOpen(true)}
-                      onChanged={() => void refresh()}
-                    />
+                    <>
+                      <NoteTabs
+                        notebooks={notes.notebooks}
+                        openIds={tabs.openIds}
+                        activeId={tabs.activeId}
+                        dirtyIds={dirtyNoteIds}
+                        onActivate={tabs.activate}
+                        onClose={tabs.close}
+                      />
+                      <NotesTab
+                        categories={categories}
+                        notebooks={notes.notebooks}
+                        selectedId={tabs.activeId}
+                        onReplace={notes.replace}
+                        onClearSelection={clearNoteSelection}
+                        onCreate={() => {
+                          const first = categories[0];
+                          if (first) void handleCreateNote(first.id);
+                        }}
+                        onRequestDelete={setDeleteTarget}
+                        onOpenExplorer={() => setDrawerOpen(true)}
+                        onChanged={() => void refresh()}
+                        onDirtyChange={handleDirtyChange}
+                      />
+                    </>
                   )}
                   {view === 'review' && (
                     <ReviewTab

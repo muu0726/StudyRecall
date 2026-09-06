@@ -41,6 +41,8 @@ interface Props {
   /** モバイルでサイドバー（ツリー）を開く */
   onOpenExplorer: () => void;
   onChanged: () => void;
+  /** タブに未保存の点を出すための報告。本文そのものは App へ渡さない */
+  onDirtyChange: (id: string, dirty: boolean) => void;
 }
 
 export default function NotesTab({
@@ -53,6 +55,7 @@ export default function NotesTab({
   onRequestDelete,
   onOpenExplorer,
   onChanged,
+  onDirtyChange,
 }: Props) {
   const { showToast } = useToast();
   const [error, setError] = useState<string | null>(null);
@@ -103,6 +106,12 @@ export default function NotesTab({
    * 下書きに対して見るので、書いている最中に閾値を超えた時点で現れる。
    */
   const promptWillTruncate = willTruncate(draftContent);
+
+  // タブの未保存マーク。選択が外れたときに点が残らないよう、id ごとに報告する
+  useEffect(() => {
+    if (!selectedId) return;
+    onDirtyChange(selectedId, isDirty);
+  }, [selectedId, isDirty, onDirtyChange]);
 
   // 開いた瞬間の一覧だけを読みたいので ref 経由にする（一覧の更新で下書きを作り直さない）
   const notebooksRef = useRef(notebooks);
