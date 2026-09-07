@@ -5,7 +5,7 @@ import { getDb, type AppEnv, type Db } from '../lib/db';
 import { toQuizQuestionDto, toStudyLogDto } from '../lib/dto';
 import { newId } from '../lib/ids';
 import { startOfTodayJst, startOfWeekJst } from '../lib/time';
-import { generateQuizFromStudyLog } from '../lib/gemini';
+import { CONTENT_KEPT, generateQuizFromStudyLog } from '../lib/gemini';
 import { getMonthlyQuota, quotaWarning } from '../lib/quota';
 import { MONTHLY_GENERATION_LIMIT } from '../../shared/types';
 import type {
@@ -222,7 +222,8 @@ export const studyLogsRoute = new Hono<AppEnv>()
       questions: savedQuestions.map((q) =>
         toQuizQuestionDto({ ...q, categoryName: category.name, categoryColor: category.color }),
       ),
-      ...(warning ? { warning } : {}),
+      // 学習記録は保存済みなので、生成が失敗してもそれを伝える
+      ...(warning ? { warning: `${warning}${CONTENT_KEPT}` } : {}),
     };
 
     return c.json(response, 201);

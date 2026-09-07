@@ -4,7 +4,7 @@ import { categories, notebooks, quizQuestions } from '../../db/schema';
 import { getDb, type AppEnv, type Db } from '../lib/db';
 import { toNotebookDto, toQuizQuestionDto } from '../lib/dto';
 import { newId } from '../lib/ids';
-import { clampQuestionCount, generateQuizFromNotebook } from '../lib/gemini';
+import { CONTENT_KEPT, clampQuestionCount, generateQuizFromNotebook } from '../lib/gemini';
 import { canMove, collectSubtreeIds } from '../../shared/note-tree';
 import { buildPromptSource } from '../../shared/note-sanitize';
 import { getMonthlyQuota, quotaWarning } from '../lib/quota';
@@ -549,7 +549,8 @@ export const notebooksRoute = new Hono<AppEnv>()
           categoryColor: notebook.categoryColor,
         }),
       ),
-      ...(warning ? { warning } : {}),
+      // ノートは保存済みなので、生成が失敗してもそれを伝える
+      ...(warning ? { warning: `${warning}${CONTENT_KEPT}` } : {}),
     };
     return c.json(response, 201);
   });

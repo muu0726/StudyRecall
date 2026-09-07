@@ -1,11 +1,16 @@
 import { GoogleGenAI, ThinkingLevel, Type } from '@google/genai';
 import { MAX_GENERATED_QUESTIONS } from '../../shared/types';
+import { describeGeminiError, isRetryable, retryDelayMs } from './gemini-error';
 
 /**
  * 学習メモ・ノート本文・単一用語から一問一答を生成する。
  *
  * 呼び出し側の前提: この関数群は例外を投げない。失敗しても { questions: [], warning }
  * を返し、学習記録やノートの保存という主機能を AI 側の障害に巻き込ませない。
+ *
+ * **warning は「生成できなかった理由」だけを書く。** 元の入力が保存されたかどうかは
+ * 呼び出し側の事情で、用語のクイック追加のように保存しない経路もある。
+ * 保存された旨を添えたい経路は CONTENT_KEPT を自分で足す。
  */
 
 export interface GeneratedQuestion {
@@ -26,9 +31,32 @@ export interface GenerateQuizResult {
 const MODEL = 'gemini-3.6-flash';
 const MAX_TAGS_PER_QUESTION = 3;
 const TIMEOUT_MS = 60_000;
-/** 高負荷時の 503/429 は一時的なことが多いので一度だけ待って再試行する */
-const RETRY_STATUSES = [429, 503];
-const RETRY_DELAY_MS = 1_200;
+/** 最初の 1 回を含めた試行回数。高負荷は数秒で解けることが多い */
+const MAX_ATTEMPTS = 3;
+/** 再試行の待ち時間。指数的に伸ばす */
+const BACKOFF_MS = [1_000, 3_000];
+/** 殺到したクライアントが同じ瞬間に再送しないよう散らす */
+const JITTER_RATIO = 0.3;
+/** 残り時間がこれを切ったら投げ直さない。締め切り直前の再試行は timeout に化けるだけ */
+const MIN_ATTEMPT_BUDGET_MS = 8_000;
+
+/** 生成は失敗したが、元の入力は保存されている経路で warning に足す */
+export const CONTENT_KEPT = '内容は保存されています。';
+
+/**
+ * 次に待つ時間。投げ直さないなら null。
+ *
+ * サーバーが RetryInfo で待ち時間を指定してきたらそちらに従う。
+ * ただし残り時間に収まらないなら諦める（待った末に timeout で落ちるより、
+ * 混雑していると伝えて操作を返すほうがよい）。
+ */
+function nextDelayMs(error: unknown, attempt: number, remainingMs: number): number | null {
+  if (!isRetryable(error)) return null;
+  const base = BACKOFF_MS[attempt] ?? BACKOFF_MS[BACKOFF_MS.length - 1];
+  const jittered = Math.round(base * (1 + (Math.random() * 2 - 1) * JITTER_RATIO));
+  const wait = retryDelayMs(error) ?? jittered;
+  return wait + MIN_ATTEMPT_BUDGET_MS <= remainingMs ? wait : null;
+}
 
 const RESPONSE_SCHEMA = {
   type: Type.OBJECT,
@@ -197,7 +225,7 @@ async function callGemini(
   if (!apiKey) {
     return {
       questions: [],
-      warning: 'GEMINI_API_KEY が未設定のため問題を生成できませんでした。内容は保存されています。',
+      warning: 'GEMINI_API_KEY が未設定のため問題を生成できませんでした。',
     };
   }
 
@@ -220,41 +248,38 @@ async function callGemini(
         },
       });
 
+    const startedAt = Date.now();
     let response: Awaited<ReturnType<typeof callOnce>>;
-    try {
-      response = await callOnce();
-    } catch (firstError) {
-      const status = (firstError as { status?: number })?.status;
-      const isRetryable =
-        (typeof status === 'number' && RETRY_STATUSES.includes(status)) ||
-        RETRY_STATUSES.some((code) => String(firstError).includes(String(code)));
-      if (!isRetryable) throw firstError;
-      console.warn('[gemini] retrying after transient error:', firstError);
-      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
-      response = await callOnce();
+    for (let attempt = 0; ; attempt++) {
+      try {
+        response = await callOnce();
+        break;
+      } catch (error) {
+        const remaining = TIMEOUT_MS - (Date.now() - startedAt);
+        const wait = attempt < MAX_ATTEMPTS - 1 ? nextDelayMs(error, attempt, remaining) : null;
+        if (wait === null) throw error;
+        console.warn(`[gemini] retrying in ${wait}ms (${attempt + 1}/${MAX_ATTEMPTS - 1}):`, error);
+        await new Promise((resolve) => setTimeout(resolve, wait));
+      }
     }
 
     const text = response.text;
     if (!text) {
-      return { questions: [], warning: 'AI からの応答が空でした。内容は保存されています。' };
+      return { questions: [], warning: 'AI からの応答が空でした。' };
     }
 
     const questions = coerceQuestions(parseJsonSafely(text), maxQuestions);
     if (questions.length === 0) {
       return {
         questions: [],
-        warning:
-          'AI の応答から問題を抽出できませんでした。入力に用語が少ない可能性があります。内容は保存されています。',
+        warning: 'AI の応答から問題を抽出できませんでした。入力に用語が少ない可能性があります。',
       };
     }
     return { questions };
   } catch (error) {
+    // 生の中身はここに残す。画面には出さないが、調べるときに要る。
     console.error('[gemini] generation failed:', error);
-    const message = error instanceof Error ? error.message : String(error);
-    return {
-      questions: [],
-      warning: `問題の生成に失敗しました（${message}）。内容は保存されています。`,
-    };
+    return { questions: [], warning: describeGeminiError(error) };
   }
 }
 
