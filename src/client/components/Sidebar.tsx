@@ -6,6 +6,7 @@ import {
   ChevronRight,
   Download,
   FileArchive,
+  FolderPlus,
   Hash,
   Layers,
   Loader2,
@@ -70,6 +71,8 @@ interface Props {
   /** ノートを開く。ノート画面へ切り替え、モバイルではドロワーも閉じる。 */
   onSelectNote: (notebook: NotebookDTO) => void;
   onCreateNote: (categoryId: string, parentId?: string) => void;
+  /** フォルダ（カテゴリ）を作るダイアログを開く */
+  onCreateCategory: () => void;
   onMoveNote: (intent: MoveIntent) => void;
   onOpenNoteMenu: (notebook: NotebookDTO) => void;
 
@@ -140,6 +143,7 @@ function SidebarBody({
   openNoteIds,
   onSelectNote,
   onCreateNote,
+  onCreateCategory,
   onMoveNote,
   onOpenNoteMenu,
   tags,
@@ -251,9 +255,25 @@ function SidebarBody({
         {/* ノートのファイルツリー。ここから直接開ける（メイン側に一覧ペインは無い）。 */}
         {!collapsed && (
           <div className="mt-6">
-            <p className="px-3 text-caption font-semibold tracking-wide text-fg-subtle uppercase">
-              ノート
-            </p>
+            {/*
+              ＋ はホバーで出さず常に見せる。ツリーのフォルダ行の ＋ を隠しているのは
+              行が何十個も並ぶからで、ここは節の見出しに 1 つ。しかも**フォルダを作る
+              唯一の導線**なので、見えない状態を作らない。
+            */}
+            <div className="flex items-center gap-0.5 pr-1 pl-3">
+              <p className="min-w-0 flex-1 text-caption font-semibold tracking-wide text-fg-subtle uppercase">
+                ノート
+              </p>
+              <button
+                type="button"
+                onClick={onCreateCategory}
+                aria-label="フォルダを追加"
+                title="フォルダを追加"
+                className="shrink-0 rounded-control p-1 text-fg-subtle transition hover:bg-row-hover hover:text-fg"
+              >
+                <FolderPlus className="h-3.5 w-3.5" aria-hidden />
+              </button>
+            </div>
 
             <div className="mt-1.5">
               {notebooksLoading ? (
@@ -263,7 +283,7 @@ function SidebarBody({
                 </p>
               ) : categories.length === 0 ? (
                 <p className="px-3 py-2 text-caption leading-relaxed text-fg-subtle">
-                  カテゴリがありません。下の「カテゴリを管理」から追加してください。
+                  カテゴリがありません。上の ＋ からフォルダを作成してください。
                 </p>
               ) : (
                 <NoteTree

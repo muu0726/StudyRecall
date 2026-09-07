@@ -15,6 +15,7 @@ import NoteTabs from './components/NoteTabs';
 import ReviewTab from './components/ReviewTab';
 import StatsTab from './components/StatsTab';
 import CategoryManagerModal from './components/CategoryManagerModal';
+import CreateCategoryDialog from './components/CreateCategoryDialog';
 import AddTermModal from './components/AddTermModal';
 import MoveNoteDialog from './components/MoveNoteDialog';
 import ConfirmDialog from './components/ConfirmDialog';
@@ -61,6 +62,8 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isCategoryOpen, setIsCategoryOpen] = useState(false);
+  /** ツリーの「ノート」見出しの ＋ から開く、フォルダを作るだけのダイアログ */
+  const [isCreateCategoryOpen, setIsCreateCategoryOpen] = useState(false);
   const [isAddTermOpen, setIsAddTermOpen] = useState(false);
   const [isTrashOpen, setIsTrashOpen] = useState(false);
 
@@ -251,6 +254,10 @@ export default function App() {
           openNoteIds={openNoteIdSet}
           onSelectNote={handleSelectNote}
           onCreateNote={(categoryId, parentId) => void handleCreateNote(categoryId, parentId)}
+          onCreateCategory={() => {
+            setIsCreateCategoryOpen(true);
+            setDrawerOpen(false);
+          }}
           onMoveNote={(intent) => void notes.move(intent)}
           onOpenNoteMenu={setMenuFor}
           tags={tags}
@@ -455,6 +462,12 @@ export default function App() {
             void notes.remove(deleteTarget).then(() => setDeleteTarget(null));
           }}
           onCancel={() => setDeleteTarget(null)}
+        />
+
+        <CreateCategoryDialog
+          open={isCreateCategoryOpen}
+          onClose={() => setIsCreateCategoryOpen(false)}
+          onCreated={() => void refresh()}
         />
 
         <CategoryManagerModal

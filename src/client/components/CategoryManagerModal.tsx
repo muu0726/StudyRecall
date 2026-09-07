@@ -2,10 +2,10 @@ import { useEffect, useState } from 'react';
 import { Check, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
 import type { CategoryDTO } from '../../shared/types';
 import { api, asCategoryInUse } from '../lib/api';
-import { cn } from '../lib/cn';
 import { useToast } from './Toast';
 import ConfirmDialog from './ConfirmDialog';
 import { Banner, Button, IconButton, Input, Modal } from '../ui';
+import { ColorPicker, PALETTE } from './CategoryColorPicker';
 
 interface Props {
   open: boolean;
@@ -14,17 +14,6 @@ interface Props {
   /** 変更を全タブへ反映させる */
   onChanged: () => void;
 }
-
-const PALETTE = [
-  '#3b82f6',
-  '#8b5cf6',
-  '#10b981',
-  '#f59e0b',
-  '#ef4444',
-  '#ec4899',
-  '#06b6d4',
-  '#64748b',
-];
 
 export default function CategoryManagerModal({ open, categories, onClose, onChanged }: Props) {
   const { showToast } = useToast();
@@ -227,28 +216,5 @@ export default function CategoryManagerModal({ open, categories, onClose, onChan
         onCancel={() => setDeleteTarget(null)}
       />
     </>
-  );
-}
-
-function ColorPicker({ value, onChange }: { value: string; onChange: (color: string) => void }) {
-  return (
-    <div className="flex flex-wrap gap-2">
-      {PALETTE.map((color) => (
-        <button
-          key={color}
-          type="button"
-          onClick={() => onChange(color)}
-          aria-label={`色 ${color}`}
-          aria-pressed={value === color}
-          className={cn(
-            'h-6 w-6 rounded-full transition',
-            value === color
-              ? 'ring-2 ring-fg ring-offset-2 ring-offset-surface'
-              : 'hover:scale-110',
-          )}
-          style={{ backgroundColor: color }}
-        />
-      ))}
-    </div>
   );
 }
