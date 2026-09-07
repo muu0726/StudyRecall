@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FolderTree, Loader2, Menu, Trash2 } from 'lucide-react';
+import { FolderTree, Loader2, Menu, Pencil, Trash2 } from 'lucide-react';
 import type { CategoryDTO, NotebookDTO, StudyLogsResponse, TagCount } from '../shared/types';
 import { api } from './lib/api';
 import { flushQuizResults, pendingCount } from './lib/offline-queue';
@@ -82,6 +82,11 @@ export default function App() {
 
   /** ツリーの ⋯ から開くメニューと、その先の移動・削除ダイアログ */
   const [menuFor, setMenuFor] = useState<NotebookDTO | null>(null);
+  /**
+   * 名前を付けさせたいノート。作成直後と ⋯ の「名前を変更」から立つ。
+   * エディタがタイトルを全選択したら落とす（同じ指示でフォーカスを奪い続けないため）。
+   */
+  const [renameTargetId, setRenameTargetId] = useState<string | null>(null);
   const [moveTarget, setMoveTarget] = useState<NotebookDTO | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<NotebookDTO | null>(null);
 
@@ -220,8 +225,12 @@ export default function App() {
     if (created) {
       tabs.open(created.id);
       goTo('notes');
+      // 「無題のノート」が選択された状態で開く。そのまま打てば名前になる。
+      setRenameTargetId(created.id);
     }
   };
+
+  const handleTitleFocused = useCallback(() => setRenameTargetId(null), []);
 
   const currentView = VIEWS.find((v) => v.id === view) ?? VIEWS[0];
 
@@ -325,6 +334,8 @@ export default function App() {
                         notebooks={notes.notebooks}
                         activeId={tabs.activeId}
                         saver={saver}
+                        renameTargetId={renameTargetId}
+                        onTitleFocused={handleTitleFocused}
                         onCreate={() => {
                           const first = categories[0];
                           if (first) void handleCreateNote(first.id);
@@ -368,13 +379,31 @@ export default function App() {
               <p className="truncate border-b border-line px-4 py-3 text-body font-semibold text-fg">
                 {menuFor.title}
               </p>
+              {/*
+                名前の変更はここで書き込まない。ツリーから直接 PUT すると、
+                そのノートが useNoteSaver に保留を持っていたとき baseUpdatedAt が
+                古くなり、次の自動保存が必ず 409 になる。開いてタイトル欄へ
+                連れて行くだけにして、書き込む場所はエディタ 1 箇所に保つ。
+              */}
+              <button
+                type="button"
+                onClick={() => {
+                  handleSelectNote(menuFor);
+                  setRenameTargetId(menuFor.id);
+                  setMenuFor(null);
+                }}
+                className="flex w-full items-center gap-2 px-4 py-3 text-left text-body text-fg transition hover:bg-row-hover"
+              >
+                <Pencil className="h-4 w-4" aria-hidden />
+                名前を変更
+              </button>
               <button
                 type="button"
                 onClick={() => {
                   setMoveTarget(menuFor);
                   setMenuFor(null);
                 }}
-                className="flex w-full items-center gap-2 px-4 py-3 text-left text-body text-fg transition hover:bg-row-hover"
+                className="flex w-full items-center gap-2 border-t border-line px-4 py-3 text-left text-body text-fg transition hover:bg-row-hover"
               >
                 <FolderTree className="h-4 w-4" aria-hidden />
                 移動する

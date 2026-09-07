@@ -39,6 +39,10 @@ interface Props {
   /** パンくずの祖先を辿るために全件要る */
   notebooks: NotebookDTO[];
   saver: NoteSaver;
+  /** 名前を付けさせたいノートとして開かれた。タイトルを全選択する */
+  focusTitle: boolean;
+  /** 全選択したことを親に伝える。同じ指示で二度フォーカスを奪わないため */
+  onTitleFocused: () => void;
   onRequestDelete: (notebook: NotebookDTO) => void;
   /** モバイルでサイドバー（ツリー）を開く */
   onOpenExplorer: () => void;
@@ -52,6 +56,8 @@ export default function NoteEditor({
   categories,
   notebooks,
   saver,
+  focusTitle,
+  onTitleFocused,
   onRequestDelete,
   onOpenExplorer,
   onQuizChanged,
@@ -130,6 +136,21 @@ export default function NoteEditor({
     // マウント時だけ走らせたい
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const titleRef = useRef<HTMLInputElement>(null);
+
+  /*
+   * 名前を付けてほしいノートとして開かれたら、タイトルを全選択する。
+   * select() は focus も兼ねるので、そのまま打てば「無題のノート」が置き換わる。
+   *
+   * **マウント時の effect にしないこと。** ツリーの ⋯ の「名前を変更」は
+   * すでに開いているノートにも飛んでくる。そのときは再マウントが起きない。
+   */
+  useEffect(() => {
+    if (!focusTitle) return;
+    titleRef.current?.select();
+    onTitleFocused();
+  }, [focusTitle, onTitleFocused]);
 
   // このノートから生成された問題。切替中の取り違えを防ぐため cancel ガードを置く
   useEffect(() => {
@@ -330,6 +351,7 @@ export default function NoteEditor({
           </button>
 
           <input
+            ref={titleRef}
             value={draftTitle}
             onChange={(event) => {
               setDraftTitle(event.target.value);
@@ -337,7 +359,7 @@ export default function NoteEditor({
             }}
             placeholder="ノートのタイトル"
             aria-label="ノートのタイトル"
-            className="min-w-0 flex-1 rounded-control px-2 py-1 text-lg font-bold text-fg focus:bg-surface-2 focus:outline-none"
+            className="min-w-0 flex-1 rounded-control border border-line-strong bg-surface px-2.5 py-1.5 text-title font-bold text-fg focus:border-accent focus:ring-2 focus:ring-accent/35 focus:outline-none"
           />
 
           <button

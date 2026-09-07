@@ -21,6 +21,9 @@ interface Props {
   notebooks: NotebookDTO[];
   activeId: string | null;
   saver: NoteSaver;
+  /** 名前を付けさせたいノート。作成直後と ⋯ の「名前を変更」から立つ */
+  renameTargetId: string | null;
+  onTitleFocused: () => void;
   onCreate: () => void;
   onRequestDelete: (notebook: NotebookDTO) => void;
   /** モバイルでサイドバー（ツリー）を開く */
@@ -33,6 +36,8 @@ export default function NotesTab({
   notebooks,
   activeId,
   saver,
+  renameTargetId,
+  onTitleFocused,
   onCreate,
   onRequestDelete,
   onOpenExplorer,
@@ -79,6 +84,8 @@ export default function NotesTab({
       categories={categories}
       notebooks={notebooks}
       saver={saver}
+      focusTitle={renameTargetId === notebook.id}
+      onTitleFocused={onTitleFocused}
       onRequestDelete={onRequestDelete}
       onOpenExplorer={onOpenExplorer}
       onQuizChanged={onQuizChanged}
