@@ -49,6 +49,8 @@ interface Props {
   onSelect: (notebook: NotebookDTO) => void;
   onCreateChild: (parent: NotebookDTO) => void;
   onCreateRoot: (categoryId: string) => void;
+  /** フォルダ行の ⋯。名前の変更と削除をここから出す */
+  onOpenCategoryMenu: (category: CategoryDTO) => void;
   onOpenMenu: (notebook: NotebookDTO) => void;
   onMove: (intent: MoveIntent) => void;
 }
@@ -88,6 +90,7 @@ export default function NoteTree({
   onSelect,
   onCreateChild,
   onCreateRoot,
+  onOpenCategoryMenu,
   onOpenMenu,
   onMove,
 }: Props) {
@@ -345,6 +348,19 @@ export default function NoteTree({
                 className="shrink-0 rounded-control p-1 text-fg-subtle transition hover:bg-row-hover hover:text-fg md:opacity-0 md:group-focus-within:opacity-100 md:group-hover:opacity-100"
               >
                 <Plus className="h-3.5 w-3.5" aria-hidden />
+              </button>
+
+              {/*
+                削除はここではなく ⋯ の中。「ノートを追加」の真横にゴミ箱を置くと、
+                誤クリックの当たり判定がフォルダの消滅になる。
+              */}
+              <button
+                type="button"
+                onClick={() => onOpenCategoryMenu(category)}
+                aria-label={`${category.name} のメニュー`}
+                className="shrink-0 rounded-control p-1 text-fg-subtle transition hover:bg-row-hover hover:text-fg md:opacity-0 md:group-focus-within:opacity-100 md:group-hover:opacity-100"
+              >
+                <MoreHorizontal className="h-3.5 w-3.5" aria-hidden />
               </button>
             </div>
 

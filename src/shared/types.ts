@@ -24,7 +24,10 @@ export const DEFAULT_GENERATED_QUESTIONS = 5;
 
 export interface CategoryUsage {
   studyLogs: number;
+  /** 生きているノート。ゴミ箱の分は含めない */
   notebooks: number;
+  /** ゴミ箱にあるノート。見えないのに削除を止めるので、分けて出す */
+  trashedNotebooks: number;
   quizzes: number;
 }
 

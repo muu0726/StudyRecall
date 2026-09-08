@@ -1,5 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FileDown, FolderTree, Loader2, Menu, Pencil, Printer, Trash2 } from 'lucide-react';
+import {
+  FileDown,
+  FolderTree,
+  FolderX,
+  Loader2,
+  Menu,
+  Palette,
+  Pencil,
+  Printer,
+  Trash2,
+} from 'lucide-react';
 import type { CategoryDTO, NotebookDTO, StudyLogsResponse, TagCount } from '../shared/types';
 import { api } from './lib/api';
 import { flushQuizResults, pendingCount } from './lib/offline-queue';
@@ -19,6 +29,7 @@ import StatsTab from './components/StatsTab';
 import CategoryManagerModal from './components/CategoryManagerModal';
 import IntegrationsModal from './components/IntegrationsModal';
 import PrintableNote from './components/PrintableNote';
+import DeleteCategoryDialog from './components/DeleteCategoryDialog';
 import CreateCategoryDialog from './components/CreateCategoryDialog';
 import AddTermModal from './components/AddTermModal';
 import MoveNoteDialog from './components/MoveNoteDialog';
@@ -104,6 +115,10 @@ export default function App() {
   const [moveTarget, setMoveTarget] = useState<NotebookDTO | null>(null);
   /** 印刷（PDF 保存）中のノート。マウントされている間だけ #print-root が生える。 */
   const [printTarget, setPrintTarget] = useState<NotebookDTO | null>(null);
+  /** ツリーのフォルダ行の ⋯ から開くメニューと、その先の削除ダイアログ */
+  const [categoryMenuFor, setCategoryMenuFor] = useState<CategoryDTO | null>(null);
+  const [deleteCategoryTarget, setDeleteCategoryTarget] = useState<CategoryDTO | null>(null);
+  const [isDeletingCategory, setIsDeletingCategory] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<NotebookDTO | null>(null);
 
   /**
@@ -293,6 +308,34 @@ export default function App() {
 
   const handleTitleFocused = useCallback(() => setRenameTargetId(null), []);
 
+  /**
+   * フォルダの削除。**中身の扱いはダイアログで選ばせ、ここは投げるだけ。**
+   * 消したフォルダのノートが開かれていることがあるので、成功したら全体を取り直す。
+   */
+  const deleteCategory = async (options: { mode: 'move'; moveTo?: string } | { mode: 'purge' }) => {
+    if (!deleteCategoryTarget) return;
+    setIsDeletingCategory(true);
+    try {
+      await api.deleteCategory(
+        deleteCategoryTarget.id,
+        options.mode === 'move' && options.moveTo
+          ? { mode: 'move', moveTo: options.moveTo }
+          : options.mode === 'purge'
+            ? { mode: 'purge' }
+            : undefined,
+      );
+      showToast(`「${deleteCategoryTarget.name}」を削除しました`, { kind: 'success' });
+      setDeleteCategoryTarget(null);
+      await refresh();
+    } catch (deleteError) {
+      showToast(deleteError instanceof Error ? deleteError.message : String(deleteError), {
+        kind: 'error',
+      });
+    } finally {
+      setIsDeletingCategory(false);
+    }
+  };
+
   const currentView = VIEWS.find((v) => v.id === view) ?? VIEWS[0];
 
   return (
@@ -318,6 +361,7 @@ export default function App() {
           }}
           onMoveNote={(intent) => void notes.move(intent)}
           onOpenNoteMenu={setMenuFor}
+          onOpenCategoryMenu={setCategoryMenuFor}
           tags={tags}
           activeTag={reviewTag}
           onSelectTag={handleSelectTag}
@@ -524,6 +568,54 @@ export default function App() {
             </div>
           </div>
         )}
+
+        {/* ツリーのフォルダ行の ⋯。ノートの ⋯ と同じ器を使う。 */}
+        {categoryMenuFor && (
+          <div
+            className="fixed inset-0 z-50 flex items-end justify-center bg-overlay p-4 sm:items-center"
+            onClick={() => setCategoryMenuFor(null)}
+          >
+            <div
+              className="w-full max-w-xs overflow-hidden rounded-card bg-surface shadow-overlay"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <p className="truncate border-b border-line px-4 py-3 text-body font-semibold text-fg">
+                {categoryMenuFor.name}
+              </p>
+              {/* 改名と色は「カテゴリを管理」の役目のまま。ここでは開くだけ。 */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCategoryOpen(true);
+                  setCategoryMenuFor(null);
+                }}
+                className="flex w-full items-center gap-2 px-4 py-3 text-left text-body text-fg transition hover:bg-row-hover"
+              >
+                <Palette className="h-4 w-4" aria-hidden />
+                名前と色を変更
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDeleteCategoryTarget(categoryMenuFor);
+                  setCategoryMenuFor(null);
+                }}
+                className="flex w-full items-center gap-2 border-t border-line px-4 py-3 text-left text-body text-danger transition hover:bg-danger-soft"
+              >
+                <FolderX className="h-4 w-4" aria-hidden />
+                フォルダを削除
+              </button>
+            </div>
+          </div>
+        )}
+
+        <DeleteCategoryDialog
+          category={deleteCategoryTarget}
+          others={categories.filter((c) => c.id !== deleteCategoryTarget?.id)}
+          isBusy={isDeletingCategory}
+          onClose={() => setDeleteCategoryTarget(null)}
+          onConfirm={(options) => void deleteCategory(options)}
+        />
 
         <MoveNoteDialog
           open={moveTarget !== null}

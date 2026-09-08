@@ -111,8 +111,12 @@ export default function CategoryManagerModal({ open, categories, onClose, onChan
 
         <ul className="divide-y divide-line px-5 py-2">
           {categories.map((category) => {
+            // ゴミ箱のノートも数える。あれも category を参照していて、削除を止める。
             const inUse =
-              category.usage.studyLogs + category.usage.notebooks + category.usage.quizzes;
+              category.usage.studyLogs +
+              category.usage.notebooks +
+              category.usage.trashedNotebooks +
+              category.usage.quizzes;
             const isEditing = editingId === category.id;
             const isBusy = busyId === category.id;
 
@@ -154,7 +158,15 @@ export default function CategoryManagerModal({ open, categories, onClose, onChan
                       <p className="text-caption text-fg-subtle">
                         {inUse === 0
                           ? '未使用'
-                          : `記録 ${category.usage.studyLogs} / ノート ${category.usage.notebooks} / 問題 ${category.usage.quizzes}`}
+                          : [
+                              `記録 ${category.usage.studyLogs}`,
+                              `ノート ${category.usage.notebooks}`,
+                              // ゴミ箱の分は画面に見えないのに削除を止めるので、あるときだけ出す
+                              ...(category.usage.trashedNotebooks > 0
+                                ? [`ゴミ箱 ${category.usage.trashedNotebooks}`]
+                                : []),
+                              `問題 ${category.usage.quizzes}`,
+                            ].join(' / ')}
                       </p>
                     </div>
                     <IconButton

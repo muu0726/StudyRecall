@@ -78,6 +78,8 @@ interface Props {
   onCreateCategory: () => void;
   onMoveNote: (intent: MoveIntent) => void;
   onOpenNoteMenu: (notebook: NotebookDTO) => void;
+  /** フォルダ行の ⋯ */
+  onOpenCategoryMenu: (category: CategoryDTO) => void;
 
   tags: TagCount[];
   /** 復習画面で選択中のタグ。復習を見ていないときは強調しない。 */
@@ -151,6 +153,7 @@ function SidebarBody({
   onCreateCategory,
   onMoveNote,
   onOpenNoteMenu,
+  onOpenCategoryMenu,
   tags,
   activeTag,
   onSelectTag,
@@ -301,6 +304,7 @@ function SidebarBody({
                   onCreateChild={(parent) => onCreateNote(parent.categoryId, parent.id)}
                   onCreateRoot={(categoryId) => onCreateNote(categoryId)}
                   onOpenMenu={onOpenNoteMenu}
+                  onOpenCategoryMenu={onOpenCategoryMenu}
                   onMove={onMoveNote}
                 />
               )}

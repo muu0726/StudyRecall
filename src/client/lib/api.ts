@@ -117,8 +117,21 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
-  deleteCategory: (id: string) =>
-    request<{ ok: true }>(`/api/categories/${id}`, { method: 'DELETE' }),
+  /**
+   * フォルダを削除する。
+   * options 無し = 未使用のときだけ。move = 中身を移してから。purge = 中身ごと。
+   */
+  deleteCategory: (id: string, options?: { mode: 'move'; moveTo: string } | { mode: 'purge' }) => {
+    const params = new URLSearchParams();
+    if (options) {
+      params.set('mode', options.mode);
+      if (options.mode === 'move') params.set('to', options.moveTo);
+    }
+    const query = params.toString();
+    return request<{ ok: true }>(`/api/categories/${id}${query ? `?${query}` : ''}`, {
+      method: 'DELETE',
+    });
+  },
 
   // --- タイマー ---
   getTimer: () => request<TimerResponse>('/api/timer'),

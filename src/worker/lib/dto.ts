@@ -24,7 +24,7 @@ export function toIso(value: Date | null | undefined): string | null {
 const isoOrEpoch = (value: Date | null | undefined): string =>
   toIso(value) ?? new Date(0).toISOString();
 
-const NO_USAGE: CategoryUsage = { studyLogs: 0, notebooks: 0, quizzes: 0 };
+const NO_USAGE: CategoryUsage = { studyLogs: 0, notebooks: 0, trashedNotebooks: 0, quizzes: 0 };
 
 export function toCategoryDto(row: Category, usage: CategoryUsage = NO_USAGE): CategoryDTO {
   return {
