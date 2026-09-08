@@ -7,14 +7,17 @@ import { useRevalidateOnFocus } from './hooks/useRevalidateOnFocus';
 import { useNotebooks } from './hooks/useNotebooks';
 import { useNoteTabs } from './hooks/useNoteTabs';
 import { useNoteSaver } from './hooks/useNoteSaver';
+import { useTasks } from './hooks/useTasks';
 import { usePwaUpdate } from './hooks/usePwaUpdate';
 import Sidebar, { VIEWS, type ViewId } from './components/Sidebar';
 import StudyTab from './components/StudyTab';
 import NotesTab from './components/NotesTab';
+import TasksTab from './components/TasksTab';
 import NoteTabs from './components/NoteTabs';
 import ReviewTab from './components/ReviewTab';
 import StatsTab from './components/StatsTab';
 import CategoryManagerModal from './components/CategoryManagerModal';
+import IntegrationsModal from './components/IntegrationsModal';
 import CreateCategoryDialog from './components/CreateCategoryDialog';
 import AddTermModal from './components/AddTermModal';
 import MoveNoteDialog from './components/MoveNoteDialog';
@@ -66,6 +69,7 @@ export default function App() {
   const [isCreateCategoryOpen, setIsCreateCategoryOpen] = useState(false);
   const [isAddTermOpen, setIsAddTermOpen] = useState(false);
   const [isTrashOpen, setIsTrashOpen] = useState(false);
+  const [isIntegrationsOpen, setIsIntegrationsOpen] = useState(false);
 
   // 新しいビルドが用意できたらトーストで知らせる（本番ビルドでのみ動く）
   usePwaUpdate();
@@ -74,6 +78,11 @@ export default function App() {
   const notes = useNotebooks();
   /** どのノートを開いているか。取得とは関係しないので useNotebooks とは分けてある */
   const tabs = useNoteTabs();
+  /**
+   * タスク。**タスク画面を見ているあいだだけ同期する。**
+   * 常時走らせると、使っていない機能のために Google を叩き続けることになる。
+   */
+  const tasks = useTasks({ active: view === 'tasks' });
 
   /**
    * 保存の予約・楽観ロックのトークン・競合を、エディタより長生きさせる。
@@ -271,6 +280,10 @@ export default function App() {
             setIsCategoryOpen(true);
             setDrawerOpen(false);
           }}
+          onOpenIntegrations={() => {
+            setIsIntegrationsOpen(true);
+            setDrawerOpen(false);
+          }}
           onOpenTrash={() => {
             setIsTrashOpen(true);
             setDrawerOpen(false);
@@ -352,6 +365,13 @@ export default function App() {
                         onQuizChanged={() => void refresh()}
                       />
                     </>
+                  )}
+                  {view === 'tasks' && (
+                    <TasksTab
+                      tasks={tasks}
+                      categories={categories}
+                      onOpenIntegrations={() => setIsIntegrationsOpen(true)}
+                    />
                   )}
                   {view === 'review' && (
                     <ReviewTab
@@ -469,6 +489,8 @@ export default function App() {
           onClose={() => setIsCreateCategoryOpen(false)}
           onCreated={() => void refresh()}
         />
+
+        <IntegrationsModal open={isIntegrationsOpen} onClose={() => setIsIntegrationsOpen(false)} />
 
         <CategoryManagerModal
           open={isCategoryOpen}

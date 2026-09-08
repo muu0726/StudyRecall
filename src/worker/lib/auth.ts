@@ -5,6 +5,7 @@ import { and, eq } from 'drizzle-orm';
 import * as schema from '../../db/schema';
 import { accounts, categories, users } from '../../db/schema';
 import { getDb } from './db';
+import { GOOGLE_CALENDAR_SCOPE, GOOGLE_TASKS_SCOPE } from './google-auth';
 import { newId } from './ids';
 
 /**
@@ -94,6 +95,18 @@ export function createAuth(env: Env, requestUrl: string) {
           google: {
             clientId: env.GOOGLE_CLIENT_ID,
             clientSecret: env.GOOGLE_CLIENT_SECRET,
+            // カレンダーと ToDo の連携ぶん。accounts.scope に入り、
+            // google-auth.ts が「足りているか」の判定に使う。
+            scope: [GOOGLE_TASKS_SCOPE, GOOGLE_CALENDAR_SCOPE],
+            // リフレッシュトークンを貰うために必須
+            accessType: 'offline',
+            /*
+             * 毎回同意画面を出す。煩わしいが、**これが無いと 2 回目以降の
+             * サインインでリフレッシュトークンが返らない**（Google の仕様）。
+             * 1 時間でアクセストークンが切れたあと、再同意しか復旧手段が無くなる。
+             * スコープを増やした今回、既存ユーザーの同意を取り直す意味も兼ねる。
+             */
+            prompt: 'consent',
           },
         }
       : {},

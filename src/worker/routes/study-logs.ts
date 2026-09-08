@@ -6,6 +6,15 @@ import { toQuizQuestionDto, toStudyLogDto } from '../lib/dto';
 import { newId } from '../lib/ids';
 import { startOfTodayJst, startOfWeekJst } from '../lib/time';
 import { CONTENT_KEPT, generateQuizFromStudyLog } from '../lib/gemini';
+import { buildStudyEvent } from '../../shared/calendar-event';
+import { insertEvent } from '../lib/google-calendar';
+import { describeGoogleError } from '../lib/google-error';
+import {
+  GOOGLE_CALENDAR_SCOPE,
+  describeAccessFailure,
+  getGoogleAccessToken,
+} from '../lib/google-auth';
+import { getSettings } from '../lib/user-settings';
 import { getMonthlyQuota, quotaWarning } from '../lib/quota';
 import { MONTHLY_GENERATION_LIMIT } from '../../shared/types';
 import type {
@@ -213,6 +222,20 @@ export const studyLogsRoute = new Hono<AppEnv>()
             )
             .returning();
 
+    /*
+     * カレンダーへの実績登録。**既定は OFF**（user_settings）。
+     *
+     * ここも AI 生成と同じ方針で、失敗しても学習記録は保存したままにする。
+     * カレンダーが書けないことは、学習を記録できない理由にならない。
+     */
+    const calendarWarning = await recordToCalendar(c.env, c.req.url, userId, db, {
+      categoryName: category.name,
+      notes,
+      durationMinutes,
+    });
+
+    const notices = [warning, calendarWarning].filter((v): v is string => Boolean(v));
+
     const response: CreateStudyLogResponse = {
       log: toStudyLogDto({
         ...log,
@@ -222,9 +245,47 @@ export const studyLogsRoute = new Hono<AppEnv>()
       questions: savedQuestions.map((q) =>
         toQuizQuestionDto({ ...q, categoryName: category.name, categoryColor: category.color }),
       ),
-      // 学習記録は保存済みなので、生成が失敗してもそれを伝える
-      ...(warning ? { warning: `${warning}${CONTENT_KEPT}` } : {}),
+      // 学習記録は保存済みなので、生成やカレンダーが失敗してもそれを伝える
+      ...(notices.length > 0 ? { warning: `${notices.join(' ')}${CONTENT_KEPT}` } : {}),
     };
 
     return c.json(response, 201);
   });
+
+/**
+ * 学習実績を Google カレンダーへ書く。**例外を投げない。**
+ *
+ * 未連携・OFF のときは黙って何もしない（毎回「連携していません」と出しても
+ * 使っていない機能の警告が出続けるだけ）。書こうとして失敗したときだけ伝える。
+ */
+async function recordToCalendar(
+  env: Env,
+  requestUrl: string,
+  userId: string,
+  db: Db,
+  input: { categoryName: string; notes: string; durationMinutes: number },
+): Promise<string | undefined> {
+  const settings = await getSettings(db, userId);
+  if (!settings.calendarSyncEnabled) return undefined;
+
+  const access = await getGoogleAccessToken(env, requestUrl, userId, [GOOGLE_CALENDAR_SCOPE]);
+  if (!access.ok) return describeAccessFailure(access.reason);
+
+  try {
+    await insertEvent(
+      access.accessToken,
+      settings.calendarId,
+      buildStudyEvent({
+        categoryName: input.categoryName,
+        notes: input.notes,
+        durationMinutes: input.durationMinutes,
+        // 記録した長さのブロックが「いま」に接して終わる。理由は calendar-event.ts。
+        endedAt: new Date(),
+      }),
+    );
+    return undefined;
+  } catch (error) {
+    console.error('[study-logs] calendar insert failed:', error);
+    return describeGoogleError(error);
+  }
+}

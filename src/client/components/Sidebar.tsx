@@ -9,6 +9,8 @@ import {
   FolderPlus,
   Hash,
   Layers,
+  Link2,
+  ListTodo,
   Loader2,
   LogOut,
   NotebookPen,
@@ -42,7 +44,7 @@ import type { ThemeSetting } from '../lib/theme';
  * （狭い画面でアイコンだけ出しても意味がないため）。
  */
 
-export type ViewId = 'timer' | 'notes' | 'review' | 'dashboard';
+export type ViewId = 'timer' | 'notes' | 'tasks' | 'review' | 'dashboard';
 
 export const VIEWS: {
   id: ViewId;
@@ -54,6 +56,7 @@ export const VIEWS: {
 }[] = [
   { id: 'timer', label: 'タイマー', title: 'タイマー & ポモドーロ', icon: Timer },
   { id: 'notes', label: 'ノートブック', title: 'ノートブック', icon: NotebookPen },
+  { id: 'tasks', label: 'タスク', title: 'タスク', icon: ListTodo },
   { id: 'review', label: 'フラッシュカード', title: 'フラッシュカード復習', icon: Layers },
   { id: 'dashboard', label: 'ダッシュボード', title: 'ダッシュボード', icon: BarChart3 },
 ];
@@ -82,6 +85,8 @@ interface Props {
   onSelectTag: (tag: string) => void;
   onAddTerm: () => void;
   onManageCategories: () => void;
+  /** Google 連携の設定を開く */
+  onOpenIntegrations: () => void;
   onOpenTrash: () => void;
   collapsed: boolean;
   onToggleCollapsed: () => void;
@@ -151,6 +156,7 @@ function SidebarBody({
   onSelectTag,
   onAddTerm,
   onManageCategories,
+  onOpenIntegrations,
   onOpenTrash,
   collapsed,
   onToggleCollapsed,
@@ -372,6 +378,19 @@ function SidebarBody({
         >
           <Trash2 className="h-4 w-4 shrink-0" aria-hidden />
           {!collapsed && 'ゴミ箱'}
+        </button>
+
+        <button
+          type="button"
+          onClick={onOpenIntegrations}
+          title="連携設定"
+          className={cn(
+            'mt-0.5 flex w-full items-center gap-2.5 rounded-control text-body font-medium text-fg-muted transition hover:bg-row-hover hover:text-fg',
+            collapsed ? 'justify-center p-2.5' : 'px-3 py-2',
+          )}
+        >
+          <Link2 className="h-4 w-4 shrink-0" aria-hidden />
+          {!collapsed && '連携設定'}
         </button>
 
         <button

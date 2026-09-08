@@ -325,3 +325,79 @@ export interface TimerResponse {
 export interface ApiErrorResponse {
   error: string;
 }
+
+// --- タスク（Google Tasks 連携） --------------------------------------------
+
+export interface TaskDTO {
+  id: string;
+  /** Google Tasks 側の ID。null なら「まだ Google に送れていない」 */
+  googleTaskId: string | null;
+  categoryId: string | null;
+  categoryName: string | null;
+  categoryColor: string | null;
+  notebookId: string | null;
+  title: string;
+  memo: string | null;
+  /** 期日。'YYYY-MM-DD'（JST の日付）。Date を経由させないため文字列で持つ。 */
+  dueDate: string | null;
+  isCompleted: boolean;
+  completedAt: string | null;
+  /** 'pending' なら、この変更はまだ Google に届いていない */
+  syncState: 'pending' | 'synced';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TasksResponse {
+  tasks: TaskDTO[];
+}
+
+export interface CreateTaskRequest {
+  title: string;
+  memo?: string | null;
+  dueDate?: string | null;
+  categoryId?: string | null;
+  notebookId?: string | null;
+}
+
+export interface UpdateTaskRequest {
+  title?: string;
+  memo?: string | null;
+  dueDate?: string | null;
+  categoryId?: string | null;
+  notebookId?: string | null;
+  isCompleted?: boolean;
+}
+
+export interface TaskResponse {
+  task: TaskDTO;
+  /** Google への送信だけが失敗したときの但し書き。保存自体は成功している。 */
+  warning?: string;
+}
+
+export interface SyncTasksResponse {
+  tasks: TaskDTO[];
+  /** 取り込み・送信した件数。0 でも失敗ではない。 */
+  pulled: number;
+  pushed: number;
+  syncedAt: string | null;
+  /** 同期できなかった理由。未連携もここに入る（エラーにはしない）。 */
+  warning?: string;
+}
+
+// --- 外部サービス連携 -------------------------------------------------------
+
+export interface IntegrationsDTO {
+  /** Google アカウントと紐付いているか */
+  linked: boolean;
+  hasTasksScope: boolean;
+  hasCalendarScope: boolean;
+  /** タイマー確定時にカレンダーへ書くか */
+  calendarSyncEnabled: boolean;
+  /** 最後に Google Tasks を取り込んだ時刻 */
+  tasksSyncedAt: string | null;
+}
+
+export interface UpdateIntegrationsRequest {
+  calendarSyncEnabled?: boolean;
+}

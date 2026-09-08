@@ -15,7 +15,14 @@ import type {
   QuizzesResponse,
   NotebookConflictResponse,
   StudyLogsResponse,
+  SyncTasksResponse,
   TagsResponse,
+  TaskResponse,
+  TasksResponse,
+  CreateTaskRequest,
+  UpdateTaskRequest,
+  IntegrationsDTO,
+  UpdateIntegrationsRequest,
   TimerMode,
   TimerResponse,
   HeatmapResponse,
@@ -132,6 +139,27 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+
+  // --- タスク（Google Tasks 連携） ---
+  listTasks: () => request<TasksResponse>('/api/tasks'),
+
+  createTask: (body: CreateTaskRequest) =>
+    request<TaskResponse>('/api/tasks', { method: 'POST', body: JSON.stringify(body) }),
+
+  updateTask: (id: string, body: UpdateTaskRequest) =>
+    request<TaskResponse>(`/api/tasks/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+
+  deleteTask: (id: string) =>
+    request<{ ok: true; warning?: string }>(`/api/tasks/${id}`, { method: 'DELETE' }),
+
+  /** 双方向の突き合わせ。未連携でもエラーにはならず warning で返る。 */
+  syncTasks: () => request<SyncTasksResponse>('/api/tasks/sync', { method: 'POST' }),
+
+  // --- 外部サービス連携 ---
+  getIntegrations: () => request<IntegrationsDTO>('/api/integrations'),
+
+  updateIntegrations: (body: UpdateIntegrationsRequest) =>
+    request<IntegrationsDTO>('/api/integrations', { method: 'PUT', body: JSON.stringify(body) }),
 
   // --- クイズ ---
   listQuizzes: (options: QuizFilters = {}) => {

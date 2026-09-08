@@ -289,9 +289,93 @@ export const quizQuestions = sqliteTable(
   ],
 );
 
+/**
+ * タスク（ToDo）。Google Tasks の `@default` リストと双方向に同期する。
+ *
+ * **物理削除しない。** 未連携や通信断のときにローカルで消すと、行ごと消してしまうと
+ * 「Google 側も消す」という事実まで失われ、次の同期で消したはずのタスクが復活する。
+ * deletedAt を立てて墓標として残し、リモート削除が通ってから行を消す。
+ */
+export const tasks = sqliteTable(
+  'tasks',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /** Google Tasks 側の一意 ID。null なら「まだ Google に無い」 */
+    googleTaskId: text('google_task_id'),
+    // カテゴリ・ノートは任意の紐付け。消えてもタスクは残す。
+    categoryId: text('category_id').references(() => categories.id, { onDelete: 'set null' }),
+    notebookId: text('notebook_id').references(() => notebooks.id, { onDelete: 'set null' }),
+    title: text('title').notNull(),
+    memo: text('memo'),
+    /**
+     * 期日。**'YYYY-MM-DD' の文字列**（JST の日付）。
+     * Google Tasks の due は実質「日付」で時刻が意味を持たないため、
+     * タイムスタンプに落とすとタイムゾーンで前日にずれる。
+     */
+    dueDate: text('due_date'),
+    isCompleted: integer('is_completed', { mode: 'boolean' }).notNull().default(false),
+    completedAt: integer('completed_at', { mode: 'timestamp_ms' }),
+    sortOrder: integer('sort_order').notNull().default(0),
+    /** 墓標。null なら生きている。 */
+    deletedAt: integer('deleted_at', { mode: 'timestamp_ms' }),
+    /** 最後に取り込んだ Google 側の updated。突き合わせの基準になる。 */
+    googleUpdatedAt: integer('google_updated_at', { mode: 'timestamp_ms' }),
+    /**
+     * 'pending' = ローカルの変更がまだ Google に届いていない。
+     * これが無いと、送信に失敗した追加が永久にローカルだけに留まる。
+     */
+    syncState: text('sync_state', { enum: ['pending', 'synced'] })
+      .notNull()
+      .default('pending'),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    // 一覧（生きているものだけ）と期日順の表示
+    index('tasks_user_deleted_idx').on(t.userId, t.deletedAt),
+    index('tasks_user_due_idx').on(t.userId, t.dueDate),
+    // 同期で Google の ID から引く
+    index('tasks_user_google_idx').on(t.userId, t.googleTaskId),
+  ],
+);
+
+/**
+ * ユーザーごとの連携設定。ユーザー 1 人につき 1 行。
+ *
+ * 行が無いことを「既定のまま」として扱う。サインイン時に作らないのは、
+ * 既存ユーザーのぶんを埋める処理が要らないようにするため。
+ */
+export const userSettings = sqliteTable('user_settings', {
+  userId: text('user_id')
+    .primaryKey()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  /** タイマー確定時にカレンダーへ書くか。**既定は false**（人の主カレンダーは勝手に触らない） */
+  calendarSyncEnabled: integer('calendar_sync_enabled', { mode: 'boolean' })
+    .notNull()
+    .default(false),
+  calendarId: text('calendar_id').notNull().default('primary'),
+  /** 最後に Google Tasks を取り込んだ時刻。次回の updatedMin に使う。 */
+  tasksSyncedAt: integer('tasks_synced_at', { mode: 'timestamp_ms' }),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
 export type User = typeof users.$inferSelect;
 export type Category = typeof categories.$inferSelect;
 export type StudyLog = typeof studyLogs.$inferSelect;
 export type Notebook = typeof notebooks.$inferSelect;
 export type TimerSession = typeof timerSessions.$inferSelect;
 export type QuizQuestion = typeof quizQuestions.$inferSelect;
+export type Task = typeof tasks.$inferSelect;
+export type UserSettings = typeof userSettings.$inferSelect;

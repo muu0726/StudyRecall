@@ -4,9 +4,17 @@ import type {
   NotebookDTO,
   QuizQuestionDTO,
   StudyLogDTO,
+  TaskDTO,
   TimerSessionDTO,
 } from '../../shared/types';
-import type { Category, Notebook, QuizQuestion, StudyLog, TimerSession } from '../../db/schema';
+import type {
+  Category,
+  Notebook,
+  QuizQuestion,
+  StudyLog,
+  Task,
+  TimerSession,
+} from '../../db/schema';
 
 /** Date → ISO 文字列。null はそのまま通す。 */
 export function toIso(value: Date | null | undefined): string | null {
@@ -100,5 +108,28 @@ export function toQuizQuestionDto(row: QuizQuestionRow): QuizQuestionDTO {
     dueAt: toIso(row.dueAt),
     intervalDays: row.intervalDays,
     createdAt: isoOrEpoch(row.createdAt),
+  };
+}
+
+/** カテゴリは任意の紐付けなので、join で付かないこともある */
+export type TaskRow = Task & { categoryName: string | null; categoryColor: string | null };
+
+export function toTaskDto(row: TaskRow): TaskDTO {
+  return {
+    id: row.id,
+    googleTaskId: row.googleTaskId,
+    categoryId: row.categoryId,
+    categoryName: row.categoryName,
+    categoryColor: row.categoryColor,
+    notebookId: row.notebookId,
+    title: row.title,
+    memo: row.memo,
+    // 'YYYY-MM-DD' の文字列をそのまま通す。Date にすると日がずれる。
+    dueDate: row.dueDate,
+    isCompleted: row.isCompleted,
+    completedAt: toIso(row.completedAt),
+    syncState: row.syncState,
+    createdAt: isoOrEpoch(row.createdAt),
+    updatedAt: isoOrEpoch(row.updatedAt),
   };
 }

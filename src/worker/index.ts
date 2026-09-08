@@ -8,6 +8,8 @@ import { notebooksRoute } from './routes/notebooks';
 import { tagsRoute } from './routes/tags';
 import { timerRoute } from './routes/timer';
 import { statsRoute } from './routes/stats';
+import { tasksRoute } from './routes/tasks';
+import { integrationsRoute } from './routes/integrations';
 
 const app = new Hono<AppEnv>();
 
@@ -43,6 +45,8 @@ app.route('/api/notebooks', notebooksRoute);
 app.route('/api/tags', tagsRoute);
 app.route('/api/timer', timerRoute);
 app.route('/api/stats', statsRoute);
+app.route('/api/tasks', tasksRoute);
+app.route('/api/integrations', integrationsRoute);
 
 app.notFound((c) => c.json({ error: 'Not Found' }, 404));
 

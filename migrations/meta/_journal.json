@@ -57,6 +57,13 @@
       "when": 1788671517635,
       "tag": "0009_bizarre_mandroid",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1788843742258,
+      "tag": "0010_lumpy_giant_girl",
+      "breakpoints": true
     }
   ]
 }
