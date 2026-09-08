@@ -1,9 +1,10 @@
 import { Hono } from 'hono';
 import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
-import { categories, notebooks, quizQuestions } from '../../db/schema';
+import { categories, notebooks } from '../../db/schema';
 import { getDb, type AppEnv, type Db } from '../lib/db';
 import { toNotebookDto, toQuizQuestionDto } from '../lib/dto';
 import { newId } from '../lib/ids';
+import { insertQuizQuestions } from '../lib/quiz-insert';
 import { CONTENT_KEPT, clampQuestionCount, generateQuizFromNotebook } from '../lib/gemini';
 import { canMove, collectSubtreeIds } from '../../shared/note-tree';
 import { buildPromptSource } from '../../shared/note-sanitize';
@@ -521,25 +522,20 @@ export const notebooksRoute = new Hono<AppEnv>()
       count,
     );
 
-    const saved =
-      generated.length === 0
-        ? []
-        : await db
-            .insert(quizQuestions)
-            .values(
-              generated.map((q) => ({
-                id: newId('qz'),
-                userId,
-                categoryId: notebook.categoryId,
-                studyLogId: null,
-                notebookId: notebook.id,
-                question: q.question,
-                answer: q.answer,
-                explanation: q.explanation || null,
-                tags: q.tags,
-              })),
-            )
-            .returning();
+    const saved = await insertQuizQuestions(
+      db,
+      generated.map((q) => ({
+        id: newId('qz'),
+        userId,
+        categoryId: notebook.categoryId,
+        studyLogId: null,
+        notebookId: notebook.id,
+        question: q.question,
+        answer: q.answer,
+        explanation: q.explanation || null,
+        tags: q.tags,
+      })),
+    );
 
     const response: GenerateNotebookQuizResponse = {
       questions: saved.map((q) =>

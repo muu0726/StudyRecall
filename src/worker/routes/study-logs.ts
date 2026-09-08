@@ -4,6 +4,7 @@ import { categories, quizQuestions, studyLogs, timerSessions } from '../../db/sc
 import { getDb, type AppEnv, type Db } from '../lib/db';
 import { toQuizQuestionDto, toStudyLogDto } from '../lib/dto';
 import { newId } from '../lib/ids';
+import { insertQuizQuestions } from '../lib/quiz-insert';
 import { startOfTodayJst, startOfWeekJst } from '../lib/time';
 import { CONTENT_KEPT, generateQuizFromStudyLog } from '../lib/gemini';
 import { buildStudyEvent } from '../../shared/calendar-event';
@@ -203,24 +204,19 @@ export const studyLogsRoute = new Hono<AppEnv>()
           QUESTIONS_PER_LOG,
         );
 
-    const savedQuestions =
-      generated.length === 0
-        ? []
-        : await db
-            .insert(quizQuestions)
-            .values(
-              generated.map((q) => ({
-                id: newId('qz'),
-                userId,
-                categoryId,
-                studyLogId: log.id,
-                question: q.question,
-                answer: q.answer,
-                explanation: q.explanation || null,
-                tags: q.tags,
-              })),
-            )
-            .returning();
+    const savedQuestions = await insertQuizQuestions(
+      db,
+      generated.map((q) => ({
+        id: newId('qz'),
+        userId,
+        categoryId,
+        studyLogId: log.id,
+        question: q.question,
+        answer: q.answer,
+        explanation: q.explanation || null,
+        tags: q.tags,
+      })),
+    );
 
     /*
      * カレンダーへの実績登録。**既定は OFF**（user_settings）。
