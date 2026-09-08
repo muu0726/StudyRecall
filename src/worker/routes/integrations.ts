@@ -6,6 +6,7 @@ import {
   GOOGLE_TASKS_SCOPE,
   findGoogleAccount,
   parseScopes,
+  resolveGrantedScopes,
 } from '../lib/google-auth';
 import type { IntegrationsDTO, UpdateIntegrationsRequest } from '../../shared/types';
 
@@ -16,13 +17,23 @@ import type { IntegrationsDTO, UpdateIntegrationsRequest } from '../../shared/ty
  * 見分けられないと、Google が 403 を返してから初めて気付くことになる。
  */
 
-async function buildDto(env: Env, userId: string): Promise<IntegrationsDTO> {
+const REQUIRED_SCOPES = [GOOGLE_TASKS_SCOPE, GOOGLE_CALENDAR_SCOPE];
+
+async function buildDto(env: Env, requestUrl: string, userId: string): Promise<IntegrationsDTO> {
   const db = getDb(env);
   const [account, settings] = await Promise.all([
     findGoogleAccount(env, userId),
     getSettings(db, userId),
   ]);
-  const granted = parseScopes(account?.scope);
+
+  /*
+   * **accounts.scope は当てにならない。** better-auth はサインインでは scope 列を
+   * 更新しないので、権限を許可し直しても列は古いままになる。足りないときは
+   * 実トークンに問い合わせて直す（resolveGrantedScopes 参照）。
+   */
+  const granted = account
+    ? await resolveGrantedScopes(env, requestUrl, userId, account, REQUIRED_SCOPES)
+    : parseScopes(null);
 
   return {
     linked: Boolean(account),
@@ -34,7 +45,7 @@ async function buildDto(env: Env, userId: string): Promise<IntegrationsDTO> {
 }
 
 export const integrationsRoute = new Hono<AppEnv>()
-  .get('/', async (c) => c.json(await buildDto(c.env, c.get('userId'))))
+  .get('/', async (c) => c.json(await buildDto(c.env, c.req.url, c.get('userId'))))
 
   .put('/', async (c) => {
     const body = await c.req.json<Partial<UpdateIntegrationsRequest>>().catch(() => null);
@@ -46,7 +57,7 @@ export const integrationsRoute = new Hono<AppEnv>()
       // ON にできるのは権限がある場合だけ。UI 側でも塞ぐが、
       // ここで弾かないと「ON なのに毎回失敗する」状態を保存できてしまう。
       if (body.calendarSyncEnabled) {
-        const current = await buildDto(c.env, userId);
+        const current = await buildDto(c.env, c.req.url, userId);
         if (!current.hasCalendarScope) {
           return c.json(
             { error: 'カレンダーの権限がありません。Google と接続し直してください。' },
@@ -59,5 +70,5 @@ export const integrationsRoute = new Hono<AppEnv>()
       });
     }
 
-    return c.json(await buildDto(c.env, userId));
+    return c.json(await buildDto(c.env, c.req.url, userId));
   });

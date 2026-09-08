@@ -48,11 +48,23 @@ export default function IntegrationsModal({ open, onClose }: Props) {
   const reconnect = async () => {
     try {
       /*
-       * サーバー側が prompt='consent' を送るので、これで同意を取り直せる。
        * 戻り先に印を付けるのは、**戻ってきた時点で結果を出すため**。
        * これが無いと、権限が降りなかったことに自分で連携設定を開くまで気付けない。
        */
-      await authClient.signIn.social({ provider: 'google', callbackURL: '/?google=linked' });
+      const callbackURL = '/?google=linked';
+
+      if (state?.linked) {
+        /*
+         * **連携済みなら signIn.social ではなく linkSocial。**
+         * better-auth はサインインでは accounts.scope を更新しない（意図的な仕様）。
+         * signIn.social で同意を取り直しても列は最初のサインイン時のままで、
+         * 「同意画面は最後まで通ったのに、ずっと未許可」という状態から抜けられない。
+         * linkSocial は既存の行に許可されたスコープをマージして書き込む。
+         */
+        await authClient.linkSocial({ provider: 'google', callbackURL });
+      } else {
+        await authClient.signIn.social({ provider: 'google', callbackURL });
+      }
     } catch (signInError) {
       showToast(signInError instanceof Error ? signInError.message : String(signInError), {
         kind: 'error',
