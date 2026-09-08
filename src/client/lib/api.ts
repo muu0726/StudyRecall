@@ -1,5 +1,6 @@
 import type {
   ApiErrorResponse,
+  CalendarEventsResponse,
   CategoryInUseResponse,
   CategoryDTO,
   CreateCategoryRequest,
@@ -167,6 +168,11 @@ export const api = {
 
   /** 双方向の突き合わせ。未連携でもエラーにはならず warning で返る。 */
   syncTasks: () => request<SyncTasksResponse>('/api/tasks/sync', { method: 'POST' }),
+
+  // --- カレンダー（Google Calendar の読み取り） ---
+  /** その月のグリッドに載る予定。未連携でもエラーにはならず warning で返る。 */
+  listCalendarEvents: (month: string) =>
+    request<CalendarEventsResponse>(`/api/calendar/events?month=${encodeURIComponent(month)}`),
 
   // --- 外部サービス連携 ---
   getIntegrations: () => request<IntegrationsDTO>('/api/integrations'),

@@ -393,6 +393,32 @@ export interface SyncTasksResponse {
   warning?: string;
 }
 
+// --- カレンダー（Google Calendar の読み取り） -------------------------------
+
+export interface CalendarEventDTO {
+  id: string;
+  /** 空タイトルは「（タイトルなし）」に寄せる */
+  title: string;
+  /** JST の 'YYYY-MM-DD' */
+  startDay: string;
+  /** 最終日。**含む**（Google の終日 end は排他なので 1 日戻してある） */
+  endDay: string;
+  /** JST の 'HH:MM'。終日なら null。端末のタイムゾーンで整形させないためサーバーで作る */
+  startTime: string | null;
+  isAllDay: boolean;
+  htmlLink: string | null;
+}
+
+export interface CalendarEventsResponse {
+  /** 要求された月のエコーバック。遅れて届いた応答を捨てるのに使う */
+  month: string;
+  events: CalendarEventDTO[];
+  /** Google と紐付いているか。未連携ならカレンダーから Google の要素を消す */
+  googleLinked: boolean;
+  /** 読めなかった理由。未連携もここに入る（エラーにはしない）。 */
+  warning?: string;
+}
+
 // --- 外部サービス連携 -------------------------------------------------------
 
 export interface IntegrationsDTO {
