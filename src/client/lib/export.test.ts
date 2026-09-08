@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { QuizQuestionDTO } from '../../shared/types';
-import { buildAnkiCsv, buildNotebookMarkdown, todayStamp } from './export';
+import { buildAnkiCsv, buildNotebookMarkdown, safeFileName, todayStamp } from './export';
 
 /**
  * 書き出したファイルは Anki や Obsidian など外部ツールが読む。
@@ -112,6 +112,35 @@ describe('buildNotebookMarkdown', () => {
   it('タイトルのダブルクォートを YAML として壊れない形に escape する', () => {
     const md = buildNotebookMarkdown({ ...notebook, title: 'いわゆる "OSI"' });
     expect(md).toContain('title: "いわゆる \\"OSI\\""');
+  });
+});
+
+/**
+ * ZIP の中のパスにも、単体ダウンロードのファイル名にも同じ規則が当たる。
+ * ここが緩むと、OS によってはファイルが作れず**保存が黙って失敗する**。
+ */
+describe('safeFileName', () => {
+  it('ファイル名に使えない文字を _ にする', () => {
+    expect(safeFileName('OSI/参照:モデル*の?整理')).toBe('OSI_参照_モデル_の_整理');
+    expect(safeFileName(String.raw`a\b"c<d>e|f`)).toBe('a_b_c_d_e_f');
+  });
+
+  it('連続する空白は 1 つに畳み、前後を落とす', () => {
+    expect(safeFileName('  TCP   の   輻輳制御  ')).toBe('TCP の 輻輳制御');
+  });
+
+  /** 空になると拡張子だけのファイルができてしまう */
+  it('落とした結果が空なら untitled', () => {
+    expect(safeFileName('   ')).toBe('untitled');
+    expect(safeFileName('')).toBe('untitled');
+  });
+
+  it('記号だけの名前は _ が残るので untitled にはしない', () => {
+    expect(safeFileName('///')).toBe('___');
+  });
+
+  it('長すぎる名前は 80 文字で切る', () => {
+    expect(safeFileName('あ'.repeat(200))).toHaveLength(80);
   });
 });
 

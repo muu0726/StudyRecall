@@ -192,3 +192,82 @@ body {
 .dark {
   color-scheme: dark;
 }
+
+/*
+ * 印刷（PDF 保存）。
+ *
+ * ノート 1 枚だけを紙に載せる。画面の作りをそのまま印刷すると、サイドバー・
+ * ツールバー・開いているモーダルまで付いてくる。#root ごと隠し、body 直下へ
+ * portal した #print-root だけを出す（PrintableNote.tsx）。
+ */
+#print-root {
+  display: none;
+}
+
+@media print {
+  #root {
+    display: none !important;
+  }
+
+  #print-root {
+    display: block !important;
+  }
+
+  /*
+   * ダークのまま印刷すると、白い紙に薄い文字が乗って読めない。
+   * MarkdownRenderer が実際に使っているトークンだけをライト値へ戻す。
+   * 全部を書き写すと上の定義と二重管理になるので、9 種類に絞る。
+   */
+  :root,
+  :root.dark {
+    --color-canvas: #ffffff;
+    --color-surface: #ffffff;
+    --color-surface-2: #f1f2f4;
+    --color-surface-3: #e8eaec;
+    --color-line: #e5e7ea;
+    --color-fg: #17191c;
+    --color-fg-muted: #5b6169;
+    --color-fg-subtle: #8a9096;
+    --color-accent-text: #1d4ed8;
+    --color-hl: #fdf0b4;
+    color-scheme: light;
+  }
+
+  body {
+    background: #ffffff;
+  }
+
+  @page {
+    margin: 15mm;
+  }
+
+  #print-root h1 {
+    margin: 0 0 0.25rem;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--color-fg);
+  }
+
+  #print-root .print-meta {
+    margin: 0 0 1.25rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--color-line);
+    font-size: 0.75rem;
+    color: var(--color-fg-muted);
+  }
+
+  /* 表やコードが改ページで割れると読めなくなる */
+  pre,
+  table,
+  blockquote,
+  li {
+    break-inside: avoid;
+  }
+
+  /* 見出しだけがページ末尾に取り残されないようにする */
+  h1,
+  h2,
+  h3 {
+    break-after: avoid;
+  }
+}

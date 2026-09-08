@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FolderTree, Loader2, Menu, Pencil, Trash2 } from 'lucide-react';
+import { FileDown, FolderTree, Loader2, Menu, Pencil, Printer, Trash2 } from 'lucide-react';
 import type { CategoryDTO, NotebookDTO, StudyLogsResponse, TagCount } from '../shared/types';
 import { api } from './lib/api';
 import { flushQuizResults, pendingCount } from './lib/offline-queue';
@@ -18,6 +18,7 @@ import ReviewTab from './components/ReviewTab';
 import StatsTab from './components/StatsTab';
 import CategoryManagerModal from './components/CategoryManagerModal';
 import IntegrationsModal from './components/IntegrationsModal';
+import PrintableNote from './components/PrintableNote';
 import CreateCategoryDialog from './components/CreateCategoryDialog';
 import AddTermModal from './components/AddTermModal';
 import MoveNoteDialog from './components/MoveNoteDialog';
@@ -27,6 +28,7 @@ import { useToast } from './components/Toast';
 import { TimerProvider } from './contexts/TimerProvider';
 import FloatingMiniTimer from './components/FloatingMiniTimer';
 import { cn } from './lib/cn';
+import { exportNotebookMarkdown } from './lib/export';
 import { LAYER } from './ui';
 
 const VIEW_KEY = 'studyrecall:view';
@@ -100,6 +102,8 @@ export default function App() {
    */
   const [renameTargetId, setRenameTargetId] = useState<string | null>(null);
   const [moveTarget, setMoveTarget] = useState<NotebookDTO | null>(null);
+  /** 印刷（PDF 保存）中のノート。マウントされている間だけ #print-root が生える。 */
+  const [printTarget, setPrintTarget] = useState<NotebookDTO | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<NotebookDTO | null>(null);
 
   /**
@@ -213,6 +217,36 @@ export default function App() {
   const handleCloseTab = (id: string) => {
     void saver.flush(id);
     tabs.close(id);
+  };
+
+  /**
+   * 書き出す直前の下ごしらえ。
+   *
+   * **ツリーが持つ NotebookDTO はサーバー版。** 編集中で自動保存（2 秒 debounce）が
+   * まだ走っていないと、そのまま書き出して**古い本文が落ちてくる**。
+   * 保留を送り切ってから、更新後の一覧で引き直す。
+   */
+  const notebooksRef = useRef<NotebookDTO[]>(notes.notebooks);
+  notebooksRef.current = notes.notebooks;
+
+  const latestAfterFlush = async (notebook: NotebookDTO): Promise<NotebookDTO> => {
+    await saver.flush(notebook.id);
+    return notebooksRef.current.find((n) => n.id === notebook.id) ?? notebook;
+  };
+
+  const downloadMarkdown = async (notebook: NotebookDTO) => {
+    const latest = await latestAfterFlush(notebook);
+    const parentTitle = latest.parentId
+      ? notebooksRef.current.find((n) => n.id === latest.parentId)?.title
+      : undefined;
+    exportNotebookMarkdown(latest, parentTitle);
+  };
+
+  const printNote = async (notebook: NotebookDTO) => {
+    const latest = await latestAfterFlush(notebook);
+    // 遅延チャンクを先に温める。Suspense が解決する前に print() が走ると白紙になる。
+    await import('./components/MarkdownRenderer');
+    setPrintTarget(latest);
   };
 
   /** タブの切り替え。前のノートの保留を送ってから移る */
@@ -427,6 +461,32 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => {
+                  void downloadMarkdown(menuFor);
+                  setMenuFor(null);
+                }}
+                className="flex w-full items-center gap-2 border-t border-line px-4 py-3 text-left text-body text-fg transition hover:bg-row-hover"
+              >
+                <FileDown className="h-4 w-4" aria-hidden />
+                Markdown で保存
+              </button>
+              {/*
+                PDF はブラウザの印刷ダイアログで作る。プリンタのアイコンを出すのは、
+                押すとダイアログが開くことをラベルより先に伝えるため。
+              */}
+              <button
+                type="button"
+                onClick={() => {
+                  void printNote(menuFor);
+                  setMenuFor(null);
+                }}
+                className="flex w-full items-center gap-2 px-4 py-3 text-left text-body text-fg transition hover:bg-row-hover"
+              >
+                <Printer className="h-4 w-4" aria-hidden />
+                PDF で保存
+              </button>
+              <button
+                type="button"
+                onClick={() => {
                   setMoveTarget(menuFor);
                   setMenuFor(null);
                 }}
@@ -489,6 +549,10 @@ export default function App() {
           onClose={() => setIsCreateCategoryOpen(false)}
           onCreated={() => void refresh()}
         />
+
+        {printTarget && (
+          <PrintableNote notebook={printTarget} onDone={() => setPrintTarget(null)} />
+        )}
 
         <IntegrationsModal open={isIntegrationsOpen} onClose={() => setIsIntegrationsOpen(false)} />
 

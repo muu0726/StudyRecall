@@ -53,8 +53,11 @@ export function exportAnkiCsv(questions: QuizQuestionDTO[], filename: string): v
   downloadBlob(blob, filename);
 }
 
-/** ZIP のパスに使えない文字を落とす */
-function safeFileName(name: string): string {
+/**
+ * ファイル名に使えない文字を落とす。
+ * ZIP の中のパスにも、単体ダウンロードのファイル名にも同じ規則を当てる。
+ */
+export function safeFileName(name: string): string {
   const cleaned = name
     .replace(/[\\/:*?"<>|]/g, '_')
     .replace(/\s+/g, ' ')
@@ -124,6 +127,19 @@ export async function exportNotebooksZip(
   filename: string,
 ): Promise<void> {
   downloadBlob(await buildNotebooksZip(notebooks), filename);
+}
+
+/**
+ * ノート 1 枚を .md で書き出す。
+ *
+ * 整形は ZIP と**同じ buildNotebookMarkdown を通す**。ここで独自に組み立てると、
+ * 「ZIP で出したものと単体で出したものの中身が違う」という食い違いが生まれる。
+ */
+export function exportNotebookMarkdown(notebook: NotebookDTO, parentTitle?: string): void {
+  const blob = new Blob([buildNotebookMarkdown(notebook, parentTitle)], {
+    type: 'text/markdown;charset=utf-8',
+  });
+  downloadBlob(blob, `${safeFileName(notebook.title)}.md`);
 }
 
 /** ファイル名用の YYYY-MM-DD（JST） */
