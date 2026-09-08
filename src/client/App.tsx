@@ -146,6 +146,21 @@ export default function App() {
     void refresh();
   }, [refresh]);
 
+  /*
+   * Google から連携し直して戻ってきた直後。
+   *
+   * 結果（権限が降りたか）は連携設定に書いてあるので、そこへ着地させる。
+   * **URL の印は必ず消す。** 残すとリロードや共有のたびにモーダルが開く。
+   */
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('google') !== 'linked') return;
+    params.delete('google');
+    const query = params.toString();
+    window.history.replaceState(null, '', `${window.location.pathname}${query ? `?${query}` : ''}`);
+    setIsIntegrationsOpen(true);
+  }, []);
+
   const { markFetched } = useRevalidateOnFocus(() => refresh(), {
     enabled: !isCategoryOpen && !isAddTermOpen,
   });

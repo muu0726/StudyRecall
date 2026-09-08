@@ -47,8 +47,12 @@ export default function IntegrationsModal({ open, onClose }: Props) {
 
   const reconnect = async () => {
     try {
-      // サーバー側が prompt='consent' を送るので、これで同意を取り直せる
-      await authClient.signIn.social({ provider: 'google', callbackURL: '/' });
+      /*
+       * サーバー側が prompt='consent' を送るので、これで同意を取り直せる。
+       * 戻り先に印を付けるのは、**戻ってきた時点で結果を出すため**。
+       * これが無いと、権限が降りなかったことに自分で連携設定を開くまで気付けない。
+       */
+      await authClient.signIn.social({ provider: 'google', callbackURL: '/?google=linked' });
     } catch (signInError) {
       showToast(signInError instanceof Error ? signInError.message : String(signInError), {
         kind: 'error',
@@ -108,9 +112,27 @@ export default function IntegrationsModal({ open, onClose }: Props) {
 
             {needsReconnect && (
               <Banner tone="warning" size="sm">
-                {state.linked
-                  ? '権限が足りていません。接続し直すと、ToDo とカレンダーへのアクセスを許可できます。'
-                  : 'Google と接続すると、ToDo とカレンダーを同期できます。'}
+                {state.linked ? (
+                  /*
+                   * 実際に詰まった原因をそのまま書く。「権限が足りません」だけだと、
+                   * どこを直せばよいのか分からず、同意画面を往復することになる。
+                   */
+                  <div className="space-y-1">
+                    <p className="font-semibold">権限が足りていません。次のどちらかです。</p>
+                    <ul className="list-disc space-y-0.5 pl-4">
+                      <li>同意画面で ToDo とカレンダーのチェックが外れていた</li>
+                      <li>
+                        Google Cloud の「データアクセス」に 2 つのスコープが未登録
+                        <br />
+                        <span className="text-fg-muted">
+                          未登録だと、Google は要求を黙って無視します（エラーになりません）
+                        </span>
+                      </li>
+                    </ul>
+                  </div>
+                ) : (
+                  'Google と接続すると、ToDo とカレンダーを同期できます。'
+                )}
               </Banner>
             )}
 

@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { AlertTriangle, CloudOff, Loader2, Plus, RefreshCw } from 'lucide-react';
+import { AlertTriangle, CloudOff, Loader2, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import type { CategoryDTO, TaskDTO } from '../../shared/types';
 import { groupTasks, todayInJst } from '../../shared/task-sync';
 import { cn } from '../lib/cn';
-import { Banner, Button, Input } from '../ui';
+import { Banner, Button, IconButton, Input } from '../ui';
 import type { TasksApi } from '../hooks/useTasks';
 import TaskEditDialog from './TaskEditDialog';
+import ConfirmDialog from './ConfirmDialog';
 
 /**
  * タスク画面。
@@ -27,6 +28,9 @@ export default function TasksTab({ tasks, categories, onOpenIntegrations }: Prop
   const [isAdding, setIsAdding] = useState(false);
   const [editing, setEditing] = useState<TaskDTO | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  /** 削除の確認待ち。タスクにゴミ箱は無いので、消す前に一度止める。 */
+  const [deleteTarget, setDeleteTarget] = useState<TaskDTO | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const today = todayInJst();
   const groups = groupTasks(tasks.tasks, today);
@@ -160,6 +164,7 @@ export default function TasksTab({ tasks, categories, onOpenIntegrations }: Prop
                     overdueDays={overdueDays}
                     onToggle={() => void tasks.update(task.id, { isCompleted: !task.isCompleted })}
                     onEdit={() => setEditing(task)}
+                    onDelete={() => setDeleteTarget(task)}
                   />
                 ))}
               </Section>
@@ -176,6 +181,7 @@ export default function TasksTab({ tasks, categories, onOpenIntegrations }: Prop
                     showSyncState={tasks.googleLinked}
                     onToggle={() => void tasks.update(task.id, { isCompleted: !task.isCompleted })}
                     onEdit={() => setEditing(task)}
+                    onDelete={() => setDeleteTarget(task)}
                   />
                 ))
               )}
@@ -190,6 +196,7 @@ export default function TasksTab({ tasks, categories, onOpenIntegrations }: Prop
                     showSyncState={tasks.googleLinked}
                     onToggle={() => void tasks.update(task.id, { isCompleted: !task.isCompleted })}
                     onEdit={() => setEditing(task)}
+                    onDelete={() => setDeleteTarget(task)}
                   />
                 ))}
               </Section>
@@ -204,6 +211,7 @@ export default function TasksTab({ tasks, categories, onOpenIntegrations }: Prop
                     showSyncState={tasks.googleLinked}
                     onToggle={() => void tasks.update(task.id, { isCompleted: !task.isCompleted })}
                     onEdit={() => setEditing(task)}
+                    onDelete={() => setDeleteTarget(task)}
                   />
                 ))}
               </Section>
@@ -218,6 +226,7 @@ export default function TasksTab({ tasks, categories, onOpenIntegrations }: Prop
                     showSyncState={tasks.googleLinked}
                     onToggle={() => void tasks.update(task.id, { isCompleted: !task.isCompleted })}
                     onEdit={() => setEditing(task)}
+                    onDelete={() => setDeleteTarget(task)}
                   />
                 ))}
               </Section>
@@ -234,8 +243,27 @@ export default function TasksTab({ tasks, categories, onOpenIntegrations }: Prop
         onSave={(patch) => void save(patch)}
         onDelete={(task) => {
           setEditing(null);
-          void tasks.remove(task);
+          setDeleteTarget(task);
         }}
+      />
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title={`「${deleteTarget?.title ?? ''}」を削除しますか？`}
+        description={[
+          'タスクにゴミ箱はありません。元に戻せません。',
+          'Google ToDo と連携している場合は、あちらからも削除されます。',
+        ]}
+        isBusy={isDeleting}
+        onConfirm={() => {
+          if (!deleteTarget) return;
+          setIsDeleting(true);
+          void tasks.remove(deleteTarget).finally(() => {
+            setIsDeleting(false);
+            setDeleteTarget(null);
+          });
+        }}
+        onCancel={() => setDeleteTarget(null)}
       />
     </div>
   );
@@ -277,6 +305,7 @@ function TaskRow({
   overdueDays,
   onToggle,
   onEdit,
+  onDelete,
 }: {
   task: TaskDTO;
   /** 未連携のときは「未反映」に意味が無い（全行が永久に pending になる） */
@@ -284,6 +313,7 @@ function TaskRow({
   overdueDays?: number;
   onToggle: () => void;
   onEdit: () => void;
+  onDelete: () => void;
 }) {
   return (
     <li className="group flex items-center gap-3 px-4 py-2 transition hover:bg-row-hover">
@@ -338,6 +368,27 @@ function TaskRow({
           <CloudOff className="h-3.5 w-3.5 shrink-0 text-fg-subtle" aria-hidden />
         </span>
       )}
+
+      {/*
+        編集と削除は**ホバーで隠さず常に出す**。ツリーの行は ⋯ を隠しているが、
+        あれは既に見つかっている機能の整理。ここは「できない」と思われていた側なので、
+        まず見えることを優先する。タイトルのクリックでも編集は開く（近道は残す）。
+      */}
+      <div className="flex shrink-0 items-center gap-0.5">
+        <IconButton
+          size="sm"
+          onClick={onEdit}
+          aria-label={`${task.title} を編集`}
+          icon={<Pencil className="h-3.5 w-3.5" aria-hidden />}
+        />
+        <IconButton
+          size="sm"
+          onClick={onDelete}
+          aria-label={`${task.title} を削除`}
+          icon={<Trash2 className="h-3.5 w-3.5" aria-hidden />}
+          className="hover:bg-danger-soft hover:text-danger"
+        />
+      </div>
     </li>
   );
 }
