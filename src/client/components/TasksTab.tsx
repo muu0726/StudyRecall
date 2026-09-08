@@ -55,8 +55,12 @@ export default function TasksTab({ tasks, categories, onOpenIntegrations }: Prop
     <div className="space-y-4">
       {tasks.error && <Banner tone="error">{tasks.error}</Banner>}
 
-      {/* 未連携も含めた同期の状況。エラーではないので warning ではなく info で出す。 */}
-      {tasks.syncNotice && (
+      {/*
+        同期の状況。**未連携のときは出さない。** 連携する気の無い人にとっては
+        消せない注意書きにしかならず、毎回画面の一番上を占める。
+        連携済みで失敗しているときだけ出す（そのときは理由を知る必要がある）。
+      */}
+      {tasks.googleLinked && tasks.syncNotice && (
         <Banner tone="info">
           <div className="flex flex-wrap items-center gap-2">
             <span>{tasks.syncNotice}</span>
@@ -106,26 +110,29 @@ export default function TasksTab({ tasks, categories, onOpenIntegrations }: Prop
           </Button>
         </div>
 
-        <div className="flex items-center gap-2 border-b border-line px-4 py-2 text-caption text-fg-subtle">
-          <button
-            type="button"
-            onClick={() => void tasks.sync(true)}
-            disabled={tasks.isSyncing}
-            className="flex items-center gap-1.5 rounded-control px-2 py-1 transition hover:bg-row-hover hover:text-fg disabled:opacity-45"
-          >
-            <RefreshCw
-              className={cn('h-3.5 w-3.5', tasks.isSyncing && 'animate-spin')}
-              aria-hidden
-            />
-            Google ToDo と同期
-          </button>
-          {tasks.syncNotice && (
-            <span className="flex items-center gap-1">
-              <CloudOff className="h-3.5 w-3.5" aria-hidden />
-              未同期
-            </span>
-          )}
-        </div>
+        {/* 未連携なら行ごと出さない。導線はサイドバーの「連携設定」に一本化する。 */}
+        {tasks.googleLinked && (
+          <div className="flex items-center gap-2 border-b border-line px-4 py-2 text-caption text-fg-subtle">
+            <button
+              type="button"
+              onClick={() => void tasks.sync(true)}
+              disabled={tasks.isSyncing}
+              className="flex items-center gap-1.5 rounded-control px-2 py-1 transition hover:bg-row-hover hover:text-fg disabled:opacity-45"
+            >
+              <RefreshCw
+                className={cn('h-3.5 w-3.5', tasks.isSyncing && 'animate-spin')}
+                aria-hidden
+              />
+              Google ToDo と同期
+            </button>
+            {tasks.syncNotice && (
+              <span className="flex items-center gap-1">
+                <CloudOff className="h-3.5 w-3.5" aria-hidden />
+                未同期
+              </span>
+            )}
+          </div>
+        )}
 
         {tasks.isLoading ? (
           <p className="flex items-center justify-center gap-2 px-4 py-16 text-body text-fg-muted">
@@ -149,6 +156,7 @@ export default function TasksTab({ tasks, categories, onOpenIntegrations }: Prop
                   <TaskRow
                     key={task.id}
                     task={task}
+                    showSyncState={tasks.googleLinked}
                     overdueDays={overdueDays}
                     onToggle={() => void tasks.update(task.id, { isCompleted: !task.isCompleted })}
                     onEdit={() => setEditing(task)}
@@ -165,6 +173,7 @@ export default function TasksTab({ tasks, categories, onOpenIntegrations }: Prop
                   <TaskRow
                     key={task.id}
                     task={task}
+                    showSyncState={tasks.googleLinked}
                     onToggle={() => void tasks.update(task.id, { isCompleted: !task.isCompleted })}
                     onEdit={() => setEditing(task)}
                   />
@@ -178,6 +187,7 @@ export default function TasksTab({ tasks, categories, onOpenIntegrations }: Prop
                   <TaskRow
                     key={task.id}
                     task={task}
+                    showSyncState={tasks.googleLinked}
                     onToggle={() => void tasks.update(task.id, { isCompleted: !task.isCompleted })}
                     onEdit={() => setEditing(task)}
                   />
@@ -191,6 +201,7 @@ export default function TasksTab({ tasks, categories, onOpenIntegrations }: Prop
                   <TaskRow
                     key={task.id}
                     task={task}
+                    showSyncState={tasks.googleLinked}
                     onToggle={() => void tasks.update(task.id, { isCompleted: !task.isCompleted })}
                     onEdit={() => setEditing(task)}
                   />
@@ -204,6 +215,7 @@ export default function TasksTab({ tasks, categories, onOpenIntegrations }: Prop
                   <TaskRow
                     key={task.id}
                     task={task}
+                    showSyncState={tasks.googleLinked}
                     onToggle={() => void tasks.update(task.id, { isCompleted: !task.isCompleted })}
                     onEdit={() => setEditing(task)}
                   />
@@ -261,11 +273,14 @@ function Section({
 
 function TaskRow({
   task,
+  showSyncState,
   overdueDays,
   onToggle,
   onEdit,
 }: {
   task: TaskDTO;
+  /** 未連携のときは「未反映」に意味が無い（全行が永久に pending になる） */
+  showSyncState: boolean;
   overdueDays?: number;
   onToggle: () => void;
   onEdit: () => void;
@@ -318,7 +333,7 @@ function TaskRow({
       )}
 
       {/* まだ Google に届いていない印。同期すれば消える。 */}
-      {task.syncState === 'pending' && (
+      {showSyncState && task.syncState === 'pending' && (
         <span title="Google ToDo に未反映" aria-label="Google ToDo に未反映">
           <CloudOff className="h-3.5 w-3.5 shrink-0 text-fg-subtle" aria-hidden />
         </span>

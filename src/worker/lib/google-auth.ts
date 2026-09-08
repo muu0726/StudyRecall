@@ -38,6 +38,17 @@ export async function findGoogleAccount(env: Env, userId: string) {
 }
 
 /**
+ * Google アカウントが紐付いているか。**スコープは見ない。**
+ *
+ * 「一度も連携していない」と「連携したが権限が足りない」を分けるための判定。
+ * 前者にはタスク画面から Google を消すが、後者に同じことをすると
+ * **同期が動かない理由を知る術が無くなる**ので、あちらには警告を出し続ける。
+ */
+export async function isGoogleLinked(env: Env, userId: string): Promise<boolean> {
+  return Boolean(await findGoogleAccount(env, userId));
+}
+
+/**
  * 必要なスコープ付きのアクセストークンを返す。
  *
  * スコープの不足は**呼ぶ前に**弾く。Google に投げてから 403 で気付くより、

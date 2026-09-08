@@ -9,6 +9,7 @@ import {
   GOOGLE_TASKS_SCOPE,
   describeAccessFailure,
   getGoogleAccessToken,
+  isGoogleLinked,
 } from '../lib/google-auth';
 import {
   deleteTask,
@@ -151,7 +152,13 @@ async function pushOne(
 
 export const tasksRoute = new Hono<AppEnv>()
   .get('/', async (c) => {
-    return c.json({ tasks: await listDto(getDb(c.env), c.get('userId')) });
+    const userId = c.get('userId');
+    // 連携状態を一覧に相乗りさせる。一覧は必ず取るので追加の往復が要らない。
+    const [list, googleLinked] = await Promise.all([
+      listDto(getDb(c.env), userId),
+      isGoogleLinked(c.env, userId),
+    ]);
+    return c.json({ tasks: list, googleLinked });
   })
 
   .post('/', async (c) => {

@@ -350,6 +350,11 @@ export interface TaskDTO {
 
 export interface TasksResponse {
   tasks: TaskDTO[];
+  /**
+   * Google アカウントが紐付いているか。**スコープの有無は見ない。**
+   * 一度も連携していない人には、タスク画面から Google 関連の表示を全て外すために使う。
+   */
+  googleLinked: boolean;
 }
 
 export interface CreateTaskRequest {

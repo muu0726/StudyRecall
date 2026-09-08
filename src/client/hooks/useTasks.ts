@@ -26,17 +26,26 @@ export function useTasks({ active }: Options) {
   const [isSyncing, setIsSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [syncNotice, setSyncNotice] = useState<string | null>(null);
+  /**
+   * Google アカウントが紐付いているか。**false のあいだは画面から Google を消す。**
+   * 連携する気の無い人に「連携していません」を出し続けても、消せない注意書きにしかならない。
+   */
+  const [googleLinked, setGoogleLinked] = useState(false);
 
   // 同期の多重起動を防ぐ。state だと連打の間に反映が間に合わない。
   const syncingRef = useRef(false);
 
-  const reload = useCallback(async () => {
+  /** 連携しているかを返す。呼び出し側が「同期まで走らせるか」を決められるように。 */
+  const reload = useCallback(async (): Promise<boolean> => {
     try {
-      const { tasks: next } = await api.listTasks();
+      const { tasks: next, googleLinked: linked } = await api.listTasks();
       setTasks(next);
+      setGoogleLinked(linked);
       setError(null);
+      return linked;
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : String(loadError));
+      return false;
     } finally {
       setIsLoading(false);
     }
@@ -71,15 +80,18 @@ export function useTasks({ active }: Options) {
     [showToast],
   );
 
-  // 画面を開いたら、まず手元を出してから裏で同期する（待たせない）
+  // 画面を開いたら、まず手元を出してから裏で同期する（待たせない）。
+  // **未連携なら同期に行かない。** 毎回「連携していません」を貰って帰るだけになる。
   useEffect(() => {
     if (!active) return;
-    void reload().then(() => sync());
+    void reload().then((linked) => {
+      if (linked) void sync();
+    });
     // active になった瞬間だけ走らせたい
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
 
-  useRevalidateOnFocus(() => sync(), { enabled: active });
+  useRevalidateOnFocus(() => sync(), { enabled: active && googleLinked });
 
   const create = useCallback(
     async (body: CreateTaskRequest) => {
@@ -149,6 +161,7 @@ export function useTasks({ active }: Options) {
 
   return {
     tasks,
+    googleLinked,
     isLoading,
     isSyncing,
     error,
