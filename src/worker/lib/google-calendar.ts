@@ -1,6 +1,6 @@
-import type { CalendarEvent } from '../../shared/calendar-event';
+import type { CalendarEvent, CalendarEventPatch } from '../../shared/calendar-event';
 import type { CalendarEventDTO } from '../../shared/types';
-import { normalizeEvent } from '../../shared/calendar-view';
+import { isWritableRole, normalizeEvent } from '../../shared/calendar-view';
 import { GoogleApiError, isRetryable } from './google-error';
 
 /**
@@ -24,6 +24,8 @@ export interface CreatedEvent {
   id: string;
   /** カレンダー上のイベントへのリンク。トーストから開けるようにする */
   htmlLink: string | null;
+  /** Google が返した本体。書き込み後の DTO はこれを normalizeEvent に通して作る */
+  raw: unknown;
 }
 
 async function call(
@@ -80,7 +82,52 @@ export async function insertEvent(
   return {
     id: typeof body?.id === 'string' ? body.id : '',
     htmlLink: typeof body?.htmlLink === 'string' ? body.htmlLink : null,
+    raw: body,
   };
+}
+
+/**
+ * 予定を書き換える。
+ *
+ * **`events.update`（PUT）は使わない。** あちらはリソース全置換なので、
+ * このアプリが知らない項目 — 参加者・Meet のリンク・リマインダー・色・場所 —
+ * が**まるごと消える**。4 つの項目しかモデル化していないアプリが PUT を使ってはいけない。
+ *
+ * `singleEvents=true` で取った id はインスタンス id なので、繰り返しの予定でも
+ * **その回だけ**が変わる（シリーズには触らない）。
+ */
+export async function patchEvent(
+  accessToken: string,
+  calendarId: string,
+  eventId: string,
+  patch: CalendarEventPatch,
+): Promise<{ raw: unknown }> {
+  const raw = await call(
+    accessToken,
+    `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}?sendUpdates=none`,
+    { method: 'PATCH', body: JSON.stringify(patch) },
+  );
+  return { raw };
+}
+
+/**
+ * 予定を消す。
+ *
+ * **`sendUpdates=none`。** 既定のままだと、ゲストのいる予定を消したときに
+ * 本人の名前でキャンセル通知メールが飛ぶ。学習用カレンダーの片付けの副作用として
+ * 人にメールを送ってはいけない。
+ */
+export async function deleteEvent(
+  accessToken: string,
+  calendarId: string,
+  eventId: string,
+): Promise<void> {
+  // 成功は 204。call() が null を返すので受け取らない。
+  await call(
+    accessToken,
+    `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}?sendUpdates=none`,
+    { method: 'DELETE' },
+  );
 }
 
 /**
@@ -117,10 +164,19 @@ export async function listEvents(
     const body = (await call(
       accessToken,
       `/calendars/${encodeURIComponent(calendarId)}/events?${params}`,
-    )) as { items?: unknown[]; nextPageToken?: string } | null;
+    )) as { items?: unknown[]; nextPageToken?: string; accessRole?: unknown } | null;
+
+    /*
+     * `accessRole` は**アイテムではなく応答の直下**にある。1 ページにつき 1 回読んで
+     * 渡す。黙って落ちると「編集ボタンが全部消えた」になるので、欠けていたら記録する。
+     */
+    if (body && body.accessRole === undefined) {
+      console.warn('[google-calendar] events.list に accessRole がありません');
+    }
+    const calendarWritable = isWritableRole(body?.accessRole);
 
     for (const raw of body?.items ?? []) {
-      const event = normalizeEvent(raw);
+      const event = normalizeEvent(raw, { calendarWritable });
       if (event) results.push(event);
     }
 

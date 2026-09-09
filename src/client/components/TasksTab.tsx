@@ -11,14 +11,21 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import type { CalendarEventDTO, CategoryDTO, TaskDTO } from '../../shared/types';
+import type {
+  CalendarEventDTO,
+  CalendarEventInput,
+  CategoryDTO,
+  TaskDTO,
+} from '../../shared/types';
 import { daysBetween, groupTasks, todayInJst } from '../../shared/task-sync';
 import { WEEKDAY_LABELS } from '../../shared/calendar-view';
 import { cn } from '../lib/cn';
+import { readShortcutContext } from '../lib/keyboard';
 import { Banner, Button, IconButton, Input } from '../ui';
 import type { TasksApi } from '../hooks/useTasks';
 import { useCalendarEvents } from '../hooks/useCalendarEvents';
 import TaskCalendar from './TaskCalendar';
+import CalendarEventDialog, { type EventDialogTarget } from './CalendarEventDialog';
 import TaskEditDialog from './TaskEditDialog';
 import ConfirmDialog from './ConfirmDialog';
 
@@ -50,6 +57,11 @@ export default function TasksTab({ tasks, categories, onOpenIntegrations }: Prop
   const [isDeleting, setIsDeleting] = useState(false);
   /** カレンダーで選んでいる日。null なら通常の 5 セクション表示 */
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  /** 予定のダイアログ。作成中と編集中が同時に半分ずつ真にならないよう union にする */
+  const [eventTarget, setEventTarget] = useState<EventDialogTarget | null>(null);
+  const [isSavingEvent, setIsSavingEvent] = useState(false);
+  const [deleteEventTarget, setDeleteEventTarget] = useState<CalendarEventDTO | null>(null);
+  const [isDeletingEvent, setIsDeletingEvent] = useState(false);
 
   const today = todayInJst();
   const groups = groupTasks(tasks.tasks, today);
@@ -59,7 +71,16 @@ export default function TasksTab({ tasks, categories, onOpenIntegrations }: Prop
   useEffect(() => {
     if (selectedDay === null) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setSelectedDay(null);
+      if (event.key !== 'Escape') return;
+      /*
+       * **ダイアログが開いているあいだは拾わない。** フォームのモーダルは
+       * Esc で閉じない作りなので、ここで拾うと**裏の日の選択だけが消えて**
+       * DaySection が外れる。`editing !== null || …` と条件を並べる書き方は
+       * ダイアログが 1 つ増えた瞬間に腐るので、既存の共通判定を使う
+       * （Modal は必ず role="dialog" を出す。lib/keyboard.ts 参照）。
+       */
+      if (readShortcutContext(event).hasOpenDialog) return;
+      setSelectedDay(null);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
@@ -83,6 +104,17 @@ export default function TasksTab({ tasks, categories, onOpenIntegrations }: Prop
       setDraftDue('');
     }
     setIsAdding(false);
+  };
+
+  const saveEvent = async (input: CalendarEventInput) => {
+    if (!eventTarget) return;
+    setIsSavingEvent(true);
+    const saved =
+      eventTarget.mode === 'create'
+        ? await calendar.create(input)
+        : await calendar.update(eventTarget.event.id, input);
+    setIsSavingEvent(false);
+    if (saved) setEventTarget(null);
   };
 
   const save = async (patch: Parameters<Parameters<typeof TaskEditDialog>[0]['onSave']>[0]) => {
@@ -213,6 +245,9 @@ export default function TasksTab({ tasks, categories, onOpenIntegrations }: Prop
             onToggle={(task) => void tasks.update(task.id, { isCompleted: !task.isCompleted })}
             onEdit={setEditing}
             onDelete={setDeleteTarget}
+            onCreateEvent={(day) => setEventTarget({ mode: 'create', day })}
+            onEditEvent={(event) => setEventTarget({ mode: 'edit', event })}
+            onDeleteEvent={setDeleteEventTarget}
           />
         ) : (
           <div>
@@ -302,6 +337,39 @@ export default function TasksTab({ tasks, categories, onOpenIntegrations }: Prop
         )}
       </div>
 
+      <CalendarEventDialog
+        target={eventTarget}
+        isBusy={isSavingEvent}
+        onClose={() => setEventTarget(null)}
+        onSave={(input) => void saveEvent(input)}
+        onDelete={(event) => {
+          // 編集を閉じてから確認を出す（重ねない。既存のタスクと同じ流れ）
+          setEventTarget(null);
+          setDeleteEventTarget(event);
+        }}
+      />
+
+      <ConfirmDialog
+        open={deleteEventTarget !== null}
+        title={`「${deleteEventTarget?.title ?? ''}」を削除しますか？`}
+        description={[
+          'Google カレンダーから削除されます。元に戻せません。',
+          ...(deleteEventTarget?.isRecurring
+            ? ['繰り返しの予定です。削除されるのはこの日の 1 回だけで、ほかの回は残ります。']
+            : []),
+        ]}
+        isBusy={isDeletingEvent}
+        onConfirm={() => {
+          if (!deleteEventTarget) return;
+          setIsDeletingEvent(true);
+          void calendar.remove(deleteEventTarget).finally(() => {
+            setIsDeletingEvent(false);
+            setDeleteEventTarget(null);
+          });
+        }}
+        onCancel={() => setDeleteEventTarget(null)}
+      />
+
       <TaskEditDialog
         task={editing}
         categories={categories}
@@ -352,6 +420,9 @@ function DaySection({
   onToggle,
   onEdit,
   onDelete,
+  onCreateEvent,
+  onEditEvent,
+  onDeleteEvent,
 }: {
   day: string;
   today: string;
@@ -362,6 +433,9 @@ function DaySection({
   onToggle: (task: TaskDTO) => void;
   onEdit: (task: TaskDTO) => void;
   onDelete: (task: TaskDTO) => void;
+  onCreateEvent: (day: string) => void;
+  onEditEvent: (event: CalendarEventDTO) => void;
+  onDeleteEvent: (event: CalendarEventDTO) => void;
 }) {
   // ローカルの日付整形に Date を通さない（端末のタイムゾーンで前日になる）
   const weekday = WEEKDAY_LABELS[new Date(`${day}T00:00:00Z`).getUTCDay()];
@@ -371,20 +445,37 @@ function DaySection({
 
   return (
     <div>
-      <div className="flex items-center gap-2 border-b border-line px-4 py-2.5">
-        <h2 className="text-body font-semibold text-fg">{label}</h2>
-        <span className="text-caption text-fg-subtle tabular-nums">
+      {/* 狭い画面ではボタンごと折り返す。文字を縦に割らせない。 */}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-line px-4 py-2.5">
+        <h2 className="text-body font-semibold whitespace-nowrap text-fg">{label}</h2>
+        <span className="text-caption whitespace-nowrap text-fg-subtle tabular-nums">
           タスク {tasks.length}
           {showGoogle && ` / 予定 ${visibleEvents.length}`}
         </span>
-        <button
-          type="button"
-          onClick={onClear}
-          className="ml-auto flex items-center gap-1 rounded-control px-2 py-1 text-caption text-fg-muted transition hover:bg-row-hover hover:text-fg"
-        >
-          <X className="h-3.5 w-3.5" aria-hidden />
-          選択を解除
-        </button>
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          {/*
+            カレンダーのセルごとに + を置かない。日はもう選ばれているので
+            日付を選ばせる手間が無く、セル（最大 6 個の点と +N）も汚さない。
+          */}
+          {showGoogle && (
+            <button
+              type="button"
+              onClick={() => onCreateEvent(day)}
+              className="flex items-center gap-1 rounded-control px-2 py-1 text-caption whitespace-nowrap text-fg-muted transition hover:bg-row-hover hover:text-fg"
+            >
+              <Plus className="h-3.5 w-3.5" aria-hidden />
+              予定を追加
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onClear}
+            className="flex items-center gap-1 rounded-control px-2 py-1 text-caption whitespace-nowrap text-fg-muted transition hover:bg-row-hover hover:text-fg"
+          >
+            <X className="h-3.5 w-3.5" aria-hidden />
+            選択を解除
+          </button>
+        </div>
       </div>
 
       {tasks.length === 0 && visibleEvents.length === 0 ? (
@@ -421,7 +512,17 @@ function DaySection({
                   <span className="w-12 shrink-0 text-caption text-fg-subtle tabular-nums">
                     {event.startTime ?? '終日'}
                   </span>
-                  <span className="min-w-0 flex-1 truncate text-fg">{event.title}</span>
+                  {/*
+                    編集できない予定でも**開けるようにする**。ボタンが無いだけだと
+                    「壊れている」に見えるが、開けば理由が書いてある。
+                  */}
+                  <button
+                    type="button"
+                    onClick={() => onEditEvent(event)}
+                    className="min-w-0 flex-1 truncate text-left text-fg transition hover:underline"
+                  >
+                    {event.title}
+                  </button>
                   {event.htmlLink && (
                     <a
                       href={event.htmlLink}
@@ -432,6 +533,27 @@ function DaySection({
                     >
                       <ExternalLink className="h-3.5 w-3.5" aria-hidden />
                     </a>
+                  )}
+                  {/*
+                    ホバーで出さない。読み取り専用だと思われている側なので、
+                    まず「できる」と見えることを優先する（TaskRow と同じ方針）。
+                  */}
+                  {event.canEdit && (
+                    <div className="flex shrink-0 items-center gap-0.5">
+                      <IconButton
+                        size="sm"
+                        onClick={() => onEditEvent(event)}
+                        aria-label={`${event.title} を編集`}
+                        icon={<Pencil className="h-4 w-4" aria-hidden />}
+                      />
+                      <IconButton
+                        size="sm"
+                        onClick={() => onDeleteEvent(event)}
+                        aria-label={`${event.title} を削除`}
+                        className="hover:bg-danger-soft hover:text-danger"
+                        icon={<Trash2 className="h-4 w-4" aria-hidden />}
+                      />
+                    </div>
                   )}
                 </li>
               ))}

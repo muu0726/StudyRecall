@@ -393,7 +393,10 @@ export interface SyncTasksResponse {
   warning?: string;
 }
 
-// --- カレンダー（Google Calendar の読み取り） -------------------------------
+// --- カレンダー -------------------------------------------------------------
+
+/** カレンダーに載せる説明文の上限。ノートを丸ごと貼らない。 */
+export const MAX_DESCRIPTION_CHARS = 1000;
 
 export interface CalendarEventDTO {
   id: string;
@@ -405,8 +408,38 @@ export interface CalendarEventDTO {
   endDay: string;
   /** JST の 'HH:MM'。終日なら null。端末のタイムゾーンで整形させないためサーバーで作る */
   startTime: string | null;
+  /** JST の 'HH:MM'。終日なら null。これが無いと編集画面が終了時刻を復元できない */
+  endTime: string | null;
+  /** Google の「説明」。空欄で保存して消してしまわないために持つ */
+  description: string | null;
   isAllDay: boolean;
+  /** 繰り返しの 1 回か。「この回だけ変わる」と伝えるために要る */
+  isRecurring: boolean;
+  /** このアプリから編集・削除してよいか。判定は shared/calendar-view.ts */
+  canEdit: boolean;
   htmlLink: string | null;
+}
+
+/**
+ * 予定の作成・更新に送る形。
+ *
+ * **`endDay` は DTO と同じく「最終日を含む」。** Google の排他 end への変換は
+ * shared/calendar-event.ts の中だけで起きる。
+ */
+export interface CalendarEventInput {
+  title: string;
+  /** undefined は「触らない」。null と '' は「説明を消す」 */
+  description?: string | null;
+  isAllDay: boolean;
+  startDay: string;
+  endDay: string;
+  /** 'HH:MM'。終日なら無視される */
+  startTime: string | null;
+  endTime: string | null;
+}
+
+export interface CalendarEventResponse {
+  event: CalendarEventDTO;
 }
 
 export interface CalendarEventsResponse {

@@ -1,4 +1,5 @@
 import type { CalendarEventDTO, TaskDTO } from './types';
+import { MAX_DESCRIPTION_CHARS } from './types';
 import { daysBetween } from './task-sync';
 
 /**
@@ -22,8 +23,9 @@ export const GRID_DAYS = 42;
 /**
  * 1 件のイベントを何日ぶんまで展開するか。
  * 5 年続く終日イベントは実在するので、上限が無いとバケット作りが暴走する。
+ * **これより長い予定は作らせない**（描けないものを作らせるほうが不誠実）。
  */
-const MAX_SPAN_DAYS = 62;
+export const MAX_SPAN_DAYS = 62;
 
 // ---------------------------------------------------------------------------
 // 絶対時刻 → JST の暦日・時刻
@@ -44,9 +46,20 @@ export function jstTimeOf(epochMs: number): string {
   return new Date(epochMs + JST_OFFSET_MS).toISOString().slice(11, 16);
 }
 
+/**
+ * JST の暦日＋時刻を RFC3339（UTC）にする。`jstDayOf`/`jstTimeOf` の逆。
+ *
+ * 壁時計を**いったん UTC として**読んでから 9 時間引く。実行環境のタイムゾーンを
+ * 一度も参照しないので、Workers（UTC）でもブラウザ（任意）でも同じ答えになる。
+ * 固定オフセットで足りるのは **JST に夏時間が無い**ため。
+ */
+export function jstDayTimeToUtc(day: string, time: string): string {
+  return new Date(Date.parse(`${day}T${time}:00Z`) - JST_OFFSET_MS).toISOString();
+}
+
 /** JST のその日の 0:00 を RFC3339（UTC）にする。Google に渡す範囲の端 */
 export function jstDayStartToUtc(day: string): string {
-  return new Date(Date.parse(`${day}T00:00:00Z`) - JST_OFFSET_MS).toISOString();
+  return jstDayTimeToUtc(day, '00:00');
 }
 
 // ---------------------------------------------------------------------------
@@ -128,6 +141,40 @@ interface RawEventTime {
 
 const DAY_PATTERN = /^(\d{4}-\d{2}-\d{2})/;
 
+/** このアプリからは触らせない種類。誕生日と Gmail 由来は Google が自分で作り直す */
+const UNEDITABLE_EVENT_TYPES = ['birthday', 'fromGmail'];
+
+/**
+ * events.list 応答の `accessRole` が書き込みを許すか。
+ * **アイテムではなく応答の直下**にある値なので、呼び出し側が 1 回だけ読んで渡す。
+ */
+export function isWritableRole(accessRole: unknown): boolean {
+  return accessRole === 'owner' || accessRole === 'writer';
+}
+
+/** `x.self === true` を安全に読む（Google は false のとき **キーごと省く**） */
+function isSelf(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) return false;
+  return (value as { self?: unknown }).self === true;
+}
+
+/**
+ * このアプリから編集・削除してよいか。
+ *
+ * **判断できる材料が無ければ false に倒す。** Google は `organizer.self` を
+ * false のとき省略するので、「無い」は「自分のものではない」を意味する。
+ * ボタンを押させてから 403 を返すより、最初から出さないほうがよい
+ * （出せなかった理由はダイアログの読み取り専用バナーで説明する）。
+ */
+function canEditEvent(event: Record<string, unknown>, calendarWritable: boolean): boolean {
+  if (!calendarWritable) return false;
+  if (event.locked === true) return false;
+  if (typeof event.eventType === 'string' && UNEDITABLE_EVENT_TYPES.includes(event.eventType)) {
+    return false;
+  }
+  return isSelf(event.organizer) || isSelf(event.creator) || event.guestsCanModify === true;
+}
+
 function readTime(value: unknown): RawEventTime | null {
   if (typeof value !== 'object' || value === null) return null;
   const { date, dateTime } = value as { date?: unknown; dateTime?: unknown };
@@ -148,7 +195,10 @@ function readTime(value: unknown): RawEventTime | null {
  *   （他人が作った予定、旅行先で作った予定）。先頭 10 文字を切ると別の日になるので、
  *   必ず epoch に直してから JST の暦日を求める。
  */
-export function normalizeEvent(raw: unknown): CalendarEventDTO | null {
+export function normalizeEvent(
+  raw: unknown,
+  context: { calendarWritable?: boolean } = {},
+): CalendarEventDTO | null {
   if (typeof raw !== 'object' || raw === null) return null;
   const event = raw as Record<string, unknown>;
 
@@ -167,9 +217,17 @@ export function normalizeEvent(raw: unknown): CalendarEventDTO | null {
 
   const title = typeof event.summary === 'string' ? event.summary.trim() : '';
   const htmlLink = typeof event.htmlLink === 'string' ? event.htmlLink : null;
+  const description =
+    typeof event.description === 'string' && event.description !== ''
+      ? event.description.slice(0, MAX_DESCRIPTION_CHARS)
+      : null;
   const base = {
     id,
     title: title || '（タイトルなし）',
+    description,
+    // singleEvents=true で取るので、繰り返しはこのキーを必ず持つ「1 回ぶん」で返る
+    isRecurring: typeof event.recurringEventId === 'string',
+    canEdit: canEditEvent(event, context.calendarWritable === true),
     htmlLink,
   };
 
@@ -185,6 +243,7 @@ export function normalizeEvent(raw: unknown): CalendarEventDTO | null {
       startDay,
       endDay: endDay < startDay ? startDay : endDay,
       startTime: null,
+      endTime: null,
       isAllDay: true,
     };
   }
@@ -195,11 +254,15 @@ export function normalizeEvent(raw: unknown): CalendarEventDTO | null {
   const startDay = jstDayOf(startMs);
 
   let endDay = startDay;
+  let endTime: string | null = null;
   const endMs = end?.dateTime ? Date.parse(end.dateTime) : NaN;
   if (!Number.isNaN(endMs)) {
     endDay = jstDayOf(endMs);
+    endTime = jstTimeOf(endMs);
     // JST のちょうど 0:00 に終わる予定は、翌日を占有していない。
-    if (jstTimeOf(endMs) === '00:00') endDay = addDays(endDay, -1);
+    // **この引き戻しのせいで endDay + endTime をそのままフォームに入れると
+    // 終了が開始の 24 時間前になる。** 打ち消しは calendar-event.ts の eventFormFrom。
+    if (endTime === '00:00') endDay = addDays(endDay, -1);
   }
 
   return {
@@ -207,6 +270,7 @@ export function normalizeEvent(raw: unknown): CalendarEventDTO | null {
     startDay,
     endDay: endDay < startDay ? startDay : endDay,
     startTime: jstTimeOf(startMs),
+    endTime,
     isAllDay: false,
   };
 }
@@ -260,4 +324,30 @@ export function bucketByDay(
   }
 
   return map;
+}
+
+// ---------------------------------------------------------------------------
+// 一覧の手当て（書き込み後にキャッシュを直すのに使う）
+// ---------------------------------------------------------------------------
+
+/**
+ * その予定が month のグリッドに現れるか。
+ *
+ * **「月」ではなく 42 日の窓で判定する。** グリッドは前後の月の日も見せるので、
+ * 8/30 の予定は 9 月のグリッドにも現れる。月で判定すると、作った予定が
+ * その場では見えないのに再取得したら出てくる、という食い違いになる。
+ */
+export function eventInMonthGrid(event: CalendarEventDTO, month: string): boolean {
+  const grid = buildMonthGrid(month);
+  return event.startDay <= grid[grid.length - 1].date && grid[0].date <= event.endDay;
+}
+
+/** 表示順。日 → 終日が先 → 開始時刻。Google の orderBy=startTime に合わせる */
+export function compareEvents(a: CalendarEventDTO, b: CalendarEventDTO): number {
+  if (a.startDay !== b.startDay) return a.startDay < b.startDay ? -1 : 1;
+  if (a.isAllDay !== b.isAllDay) return a.isAllDay ? -1 : 1;
+  const at = a.startTime ?? '';
+  const bt = b.startTime ?? '';
+  if (at !== bt) return at < bt ? -1 : 1;
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }

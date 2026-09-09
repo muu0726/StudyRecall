@@ -1,5 +1,7 @@
 import type {
   ApiErrorResponse,
+  CalendarEventInput,
+  CalendarEventResponse,
   CalendarEventsResponse,
   CategoryInUseResponse,
   CategoryDTO,
@@ -173,6 +175,27 @@ export const api = {
   /** その月のグリッドに載る予定。未連携でもエラーにはならず warning で返る。 */
   listCalendarEvents: (month: string) =>
     request<CalendarEventsResponse>(`/api/calendar/events?month=${encodeURIComponent(month)}`),
+
+  /*
+   * 読み取りと違い、**書き込みは失敗をそのまま失敗として返す**。
+   * ローカルに置き場所が無いので、劣化した成功が作れない（routes/calendar.ts 参照）。
+   */
+  createCalendarEvent: (body: CalendarEventInput) =>
+    request<CalendarEventResponse>('/api/calendar/events', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  updateCalendarEvent: (id: string, body: CalendarEventInput) =>
+    request<CalendarEventResponse>(`/api/calendar/events/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+
+  deleteCalendarEvent: (id: string) =>
+    request<{ ok: true; warning?: string }>(`/api/calendar/events/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }),
 
   // --- 外部サービス連携 ---
   getIntegrations: () => request<IntegrationsDTO>('/api/integrations'),
