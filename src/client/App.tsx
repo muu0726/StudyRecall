@@ -28,6 +28,7 @@ import ReviewTab from './components/ReviewTab';
 import StatsTab from './components/StatsTab';
 import CategoryManagerModal from './components/CategoryManagerModal';
 import IntegrationsModal from './components/IntegrationsModal';
+import RestoreBackupDialog from './components/RestoreBackupDialog';
 import PrintableNote from './components/PrintableNote';
 import DeleteCategoryDialog from './components/DeleteCategoryDialog';
 import CreateCategoryDialog from './components/CreateCategoryDialog';
@@ -197,6 +198,27 @@ export default function App() {
       // 同上
     }
   }, [collapsed]);
+
+  /*
+   * 1 日 1 回の自動バックアップ。**投げっぱなしにする。**
+   *
+   * 24 時間経ったかの判定はサーバー側（driveBackupAt はあちらにあるし、
+   * クライアントの時計を信用する理由も無い）。条件に合わなければ向こうが
+   * skipped で返すだけなので、ここは結果を見ない。
+   *
+   * **トーストを出さない。** ユーザーが頼んでいない処理で驚かせない。
+   * 代償として裏の失敗に気付けないので、連携設定に「最後のバックアップ」を必ず出す。
+   */
+  const [isRestoreOpen, setIsRestoreOpen] = useState(false);
+  const autoBackupRef = useRef(false);
+  useEffect(() => {
+    // StrictMode の二重マウントで 2 回投げない
+    if (autoBackupRef.current) return;
+    autoBackupRef.current = true;
+    void api.runBackup({ auto: true }).catch(() => {
+      // 失敗しても画面には出さない。連携設定の日時だけが手掛かりになる。
+    });
+  }, []);
 
   /**
    * 溜まっている判定の再送。
@@ -661,7 +683,18 @@ export default function App() {
           <PrintableNote notebook={printTarget} onDone={() => setPrintTarget(null)} />
         )}
 
-        <IntegrationsModal open={isIntegrationsOpen} onClose={() => setIsIntegrationsOpen(false)} />
+        <IntegrationsModal
+          open={isIntegrationsOpen}
+          onClose={() => setIsIntegrationsOpen(false)}
+          onOpenRestore={() => setIsRestoreOpen(true)}
+        />
+
+        <RestoreBackupDialog
+          open={isRestoreOpen}
+          onClose={() => setIsRestoreOpen(false)}
+          // 中身が丸ごと入れ替わるので、開いているものを含めて取り直す
+          onRestored={() => void refresh()}
+        />
 
         <CategoryManagerModal
           open={isCategoryOpen}

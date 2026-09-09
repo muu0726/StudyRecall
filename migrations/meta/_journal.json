@@ -64,6 +64,13 @@
       "when": 1788843742258,
       "tag": "0010_lumpy_giant_girl",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1788961765256,
+      "tag": "0011_strange_random",
+      "breakpoints": true
     }
   ]
 }

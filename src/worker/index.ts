@@ -11,6 +11,7 @@ import { statsRoute } from './routes/stats';
 import { tasksRoute } from './routes/tasks';
 import { integrationsRoute } from './routes/integrations';
 import { calendarRoute } from './routes/calendar';
+import { backupRoute } from './routes/backup';
 
 const app = new Hono<AppEnv>();
 
@@ -49,6 +50,7 @@ app.route('/api/stats', statsRoute);
 app.route('/api/tasks', tasksRoute);
 app.route('/api/integrations', integrationsRoute);
 app.route('/api/calendar', calendarRoute);
+app.route('/api/backup', backupRoute);
 
 app.notFound((c) => c.json({ error: 'Not Found' }, 404));
 

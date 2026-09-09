@@ -5,7 +5,7 @@ import { and, eq } from 'drizzle-orm';
 import * as schema from '../../db/schema';
 import { accounts, categories, users } from '../../db/schema';
 import { getDb } from './db';
-import { GOOGLE_CALENDAR_SCOPE, GOOGLE_TASKS_SCOPE } from './google-auth';
+import { GOOGLE_CALENDAR_SCOPE, GOOGLE_DRIVE_SCOPE, GOOGLE_TASKS_SCOPE } from './google-auth';
 import { newId } from './ids';
 
 /**
@@ -95,9 +95,9 @@ export function createAuth(env: Env, requestUrl: string) {
           google: {
             clientId: env.GOOGLE_CLIENT_ID,
             clientSecret: env.GOOGLE_CLIENT_SECRET,
-            // カレンダーと ToDo の連携ぶん。accounts.scope に入り、
+            // カレンダー・ToDo・バックアップの連携ぶん。accounts.scope に入り、
             // google-auth.ts が「足りているか」の判定に使う。
-            scope: [GOOGLE_TASKS_SCOPE, GOOGLE_CALENDAR_SCOPE],
+            scope: [GOOGLE_TASKS_SCOPE, GOOGLE_CALENDAR_SCOPE, GOOGLE_DRIVE_SCOPE],
             // リフレッシュトークンを貰うために必須
             accessType: 'offline',
             /*

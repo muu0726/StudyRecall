@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
-import { CalendarDays, Check, ListTodo, Loader2, Link2 } from 'lucide-react';
+import {
+  CalendarDays,
+  Check,
+  HardDrive,
+  HardDriveDownload,
+  HardDriveUpload,
+  ListTodo,
+  Loader2,
+  Link2,
+} from 'lucide-react';
 import type { IntegrationsDTO } from '../../shared/types';
 import { api } from '../lib/api';
 import { authClient } from '../lib/auth-client';
@@ -18,13 +27,16 @@ import { useToast } from './Toast';
 interface Props {
   open: boolean;
   onClose: () => void;
+  /** 復元は別モーダル。連携設定を閉じてから開く（layer が 2 段しか無いため） */
+  onOpenRestore: () => void;
 }
 
-export default function IntegrationsModal({ open, onClose }: Props) {
+export default function IntegrationsModal({ open, onClose, onOpenRestore }: Props) {
   const { showToast } = useToast();
   const [state, setState] = useState<IntegrationsDTO | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isBackingUp, setIsBackingUp] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -86,7 +98,41 @@ export default function IntegrationsModal({ open, onClose }: Props) {
     }
   };
 
-  const needsReconnect = state !== null && (!state.hasTasksScope || !state.hasCalendarScope);
+  const toggleDriveBackup = async (next: boolean) => {
+    setIsSaving(true);
+    try {
+      setState(await api.updateIntegrations({ driveBackupEnabled: next }));
+      showToast(next ? '自動バックアップを有効にしました' : '自動バックアップを止めました', {
+        kind: 'success',
+      });
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : String(saveError));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const backupNow = async () => {
+    setIsBackingUp(true);
+    setError(null);
+    try {
+      const result = await api.runBackup();
+      if (result.skipped) {
+        showToast('バックアップは実行されませんでした', { kind: 'info' });
+      } else {
+        showToast(`${result.folder?.name ?? 'ドライブ'} に保存しました`, { kind: 'success' });
+      }
+      // 「最後のバックアップ」を出し直す
+      await load();
+    } catch (backupError) {
+      setError(backupError instanceof Error ? backupError.message : String(backupError));
+    } finally {
+      setIsBackingUp(false);
+    }
+  };
+
+  const needsReconnect =
+    state !== null && (!state.hasTasksScope || !state.hasCalendarScope || !state.hasDriveScope);
 
   return (
     <Modal open title="連携設定" size="sm" onClose={onClose}>
@@ -120,6 +166,11 @@ export default function IntegrationsModal({ open, onClose }: Props) {
                 label="カレンダーの予定"
                 granted={state.hasCalendarScope}
               />
+              <ScopeRow
+                icon={<HardDrive className="h-4 w-4" aria-hidden />}
+                label="ドライブ（バックアップ）"
+                granted={state.hasDriveScope}
+              />
             </ul>
 
             {needsReconnect && (
@@ -132,9 +183,9 @@ export default function IntegrationsModal({ open, onClose }: Props) {
                   <div className="space-y-1">
                     <p className="font-semibold">権限が足りていません。次のどちらかです。</p>
                     <ul className="list-disc space-y-0.5 pl-4">
-                      <li>同意画面で ToDo とカレンダーのチェックが外れていた</li>
+                      <li>同意画面で ToDo・カレンダー・ドライブのチェックが外れていた</li>
                       <li>
-                        Google Cloud の「データアクセス」に 2 つのスコープが未登録
+                        Google Cloud の「データアクセス」に 3 つのスコープが未登録
                         <br />
                         <span className="text-fg-muted">
                           未登録だと、Google は要求を黙って無視します（エラーになりません）
@@ -143,7 +194,7 @@ export default function IntegrationsModal({ open, onClose }: Props) {
                     </ul>
                   </div>
                 ) : (
-                  'Google と接続すると、ToDo とカレンダーを同期できます。'
+                  'Google と接続すると、ToDo とカレンダーの同期、ドライブへのバックアップが使えます。'
                 )}
               </Banner>
             )}
@@ -177,6 +228,65 @@ export default function IntegrationsModal({ open, onClose }: Props) {
                 </span>
               </span>
             </label>
+          </section>
+
+          <section className="space-y-2.5 border-t border-line pt-4">
+            <p className="text-body font-medium text-fg">Google ドライブへのバックアップ</p>
+            <p className="text-caption text-fg-muted">
+              ノート・問題・学習記録・タスクをまとめて保存します。アプリが作るフォルダに入るので、
+              ドライブ上で好きな場所へ移動しても構いません。
+            </p>
+
+            <label className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                checked={state.driveBackupEnabled}
+                disabled={!state.hasDriveScope || isSaving}
+                onChange={(event) => void toggleDriveBackup(event.target.checked)}
+                className="mt-0.5 h-4 w-4 shrink-0 accent-accent disabled:opacity-45"
+              />
+              <span className="min-w-0">
+                <span className="block text-body font-medium text-fg">
+                  1日1回、自動でバックアップする
+                </span>
+                <span className="block text-caption text-fg-muted">
+                  アプリを開いたときに、前回から24時間以上経っていれば裏で保存します。
+                  {!state.hasDriveScope && '（権限がないため、いまは使えません）'}
+                </span>
+              </span>
+            </label>
+
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="secondary"
+                onClick={() => void backupNow()}
+                disabled={!state.hasDriveScope}
+                loading={isBackingUp}
+                icon={<HardDriveUpload className="h-4 w-4" aria-hidden />}
+              >
+                今すぐバックアップ
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  // 確認ダイアログを重ねられるよう、こちらを閉じてから開く
+                  onClose();
+                  onOpenRestore();
+                }}
+                disabled={!state.hasDriveScope}
+                icon={<HardDriveDownload className="h-4 w-4" aria-hidden />}
+              >
+                復元
+              </Button>
+            </div>
+
+            {/* **裏の失敗に気付く唯一の手掛かり。** 自動はトーストを出さない。 */}
+            <p className="text-caption text-fg-subtle">
+              最後のバックアップ:{' '}
+              {state.driveBackupAt
+                ? new Date(state.driveBackupAt).toLocaleString('ja-JP')
+                : 'まだありません'}
+            </p>
           </section>
 
           {state.tasksSyncedAt && (

@@ -363,6 +363,12 @@ export const userSettings = sqliteTable('user_settings', {
   calendarId: text('calendar_id').notNull().default('primary'),
   /** 最後に Google Tasks を取り込んだ時刻。次回の updatedMin に使う。 */
   tasksSyncedAt: integer('tasks_synced_at', { mode: 'timestamp_ms' }),
+  /** 1 日 1 回、自動で Google ドライブへバックアップするか。**既定は false** */
+  driveBackupEnabled: integer('drive_backup_enabled', { mode: 'boolean' }).notNull().default(false),
+  /** アプリが作ったバックアップ用フォルダの id。移動・改名されても変わらない */
+  driveFolderId: text('drive_folder_id'),
+  /** 最後にバックアップした時刻。24 時間の判定に使う。 */
+  driveBackupAt: integer('drive_backup_at', { mode: 'timestamp_ms' }),
   createdAt: integer('created_at', { mode: 'timestamp_ms' })
     .notNull()
     .$defaultFn(() => new Date()),

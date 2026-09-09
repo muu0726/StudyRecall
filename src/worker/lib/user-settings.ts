@@ -14,6 +14,11 @@ export interface Settings {
   calendarSyncEnabled: boolean;
   calendarId: string;
   tasksSyncedAt: Date | null;
+  /** 1 日 1 回、自動で Google ドライブへバックアップするか */
+  driveBackupEnabled: boolean;
+  /** アプリが作ったバックアップ用フォルダ。移動・改名されても id は変わらない */
+  driveFolderId: string | null;
+  driveBackupAt: Date | null;
 }
 
 const DEFAULTS: Settings = {
@@ -21,6 +26,10 @@ const DEFAULTS: Settings = {
   calendarSyncEnabled: false,
   calendarId: 'primary',
   tasksSyncedAt: null,
+  // 人の Drive にも、明示的に ON にされるまで書かない
+  driveBackupEnabled: false,
+  driveFolderId: null,
+  driveBackupAt: null,
 };
 
 export async function getSettings(db: Db, userId: string): Promise<Settings> {
@@ -34,6 +43,9 @@ export async function getSettings(db: Db, userId: string): Promise<Settings> {
     calendarSyncEnabled: row.calendarSyncEnabled,
     calendarId: row.calendarId,
     tasksSyncedAt: row.tasksSyncedAt,
+    driveBackupEnabled: row.driveBackupEnabled,
+    driveFolderId: row.driveFolderId,
+    driveBackupAt: row.driveBackupAt,
   };
 }
 

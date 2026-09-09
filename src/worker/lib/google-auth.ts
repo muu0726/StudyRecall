@@ -14,6 +14,12 @@ import { getDb } from './db';
 
 export const GOOGLE_TASKS_SCOPE = 'https://www.googleapis.com/auth/tasks';
 export const GOOGLE_CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.events';
+/**
+ * バックアップ用。**`drive` ではなく `drive.file`。**
+ * このアプリが作ったファイルしか見えないので、人の Drive 全体を覗く力を持たない。
+ * `drive` は Google の制限付きスコープで、一般公開にはセキュリティ審査が要る。
+ */
+export const GOOGLE_DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 
 /** そのトークンに何が降りているかを Google に聞く先 */
 const TOKENINFO_URL = 'https://oauth2.googleapis.com/tokeninfo';
@@ -179,7 +185,8 @@ export function describeAccessFailure(reason: GoogleAccessFailure): string {
     case 'not-linked':
       return 'Google と連携していません。連携設定から Google でログインし直してください。';
     case 'missing-scope':
-      return 'Google の権限が足りません。連携設定から接続し直して、カレンダーとToDoへのアクセスを許可してください。';
+      // どの権限が要るかは呼ぶ側で違う。ここでは名指ししない。
+      return 'Google の権限が足りません。連携設定から接続し直して、求められた項目をすべて許可してください。';
     case 'refresh-failed':
       return 'Google の認証が切れています。連携設定から接続し直してください。';
   }

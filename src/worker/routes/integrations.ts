@@ -3,6 +3,7 @@ import { getDb, type AppEnv } from '../lib/db';
 import { getSettings, saveSettings } from '../lib/user-settings';
 import {
   GOOGLE_CALENDAR_SCOPE,
+  GOOGLE_DRIVE_SCOPE,
   GOOGLE_TASKS_SCOPE,
   findGoogleAccount,
   parseScopes,
@@ -17,7 +18,13 @@ import type { IntegrationsDTO, UpdateIntegrationsRequest } from '../../shared/ty
  * 見分けられないと、Google が 403 を返してから初めて気付くことになる。
  */
 
-const REQUIRED_SCOPES = [GOOGLE_TASKS_SCOPE, GOOGLE_CALENDAR_SCOPE];
+/*
+ * **代償を承知で Drive を足している。** resolveGrantedScopes は「必要なスコープが
+ * すべて accounts.scope に載っている」ときだけ早期 return するので、再同意が済むまで
+ * ここを通るたびに tokeninfo へ 1 往復する。呼ばれるのは連携設定モーダルを
+ * 開いたときだけなので許容する。
+ */
+const REQUIRED_SCOPES = [GOOGLE_TASKS_SCOPE, GOOGLE_CALENDAR_SCOPE, GOOGLE_DRIVE_SCOPE];
 
 async function buildDto(env: Env, requestUrl: string, userId: string): Promise<IntegrationsDTO> {
   const db = getDb(env);
@@ -39,8 +46,11 @@ async function buildDto(env: Env, requestUrl: string, userId: string): Promise<I
     linked: Boolean(account),
     hasTasksScope: granted.has(GOOGLE_TASKS_SCOPE),
     hasCalendarScope: granted.has(GOOGLE_CALENDAR_SCOPE),
+    hasDriveScope: granted.has(GOOGLE_DRIVE_SCOPE),
     calendarSyncEnabled: settings.calendarSyncEnabled,
     tasksSyncedAt: settings.tasksSyncedAt?.toISOString() ?? null,
+    driveBackupEnabled: settings.driveBackupEnabled,
+    driveBackupAt: settings.driveBackupAt?.toISOString() ?? null,
   };
 }
 
@@ -67,6 +77,22 @@ export const integrationsRoute = new Hono<AppEnv>()
       }
       await saveSettings(getDb(c.env), userId, {
         calendarSyncEnabled: body.calendarSyncEnabled,
+      });
+    }
+
+    if (typeof body.driveBackupEnabled === 'boolean') {
+      // カレンダーと同じ理由。権限が無いまま ON を保存させない。
+      if (body.driveBackupEnabled) {
+        const current = await buildDto(c.env, c.req.url, userId);
+        if (!current.hasDriveScope) {
+          return c.json(
+            { error: 'ドライブの権限がありません。Google と接続し直してください。' },
+            400,
+          );
+        }
+      }
+      await saveSettings(getDb(c.env), userId, {
+        driveBackupEnabled: body.driveBackupEnabled,
       });
     }
 

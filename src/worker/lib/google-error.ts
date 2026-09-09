@@ -75,6 +75,8 @@ export function describeGoogleError(error: unknown): string {
       return `Google へのアクセスが許可されていません${code}。連携設定から接続し直すか、API が有効か確認してください。`;
     case 404:
       return `Google 側に対象が見つかりませんでした${code}。`;
+    case 413:
+      return `送ろうとしたデータが大きすぎます${code}。`;
     case 429:
       return `Google の利用が集中しています${code}。しばらく待ってからお試しください。`;
     case 500:
@@ -82,6 +84,8 @@ export function describeGoogleError(error: unknown): string {
     case 503:
     case 504:
       return `Google 側で一時的な不具合が起きています${code}。しばらく待ってからお試しください。`;
+    case 507:
+      return `Google ドライブの空き容量が足りません${code}。`;
     default:
       return `Google の呼び出しに失敗しました${code}。`;
   }

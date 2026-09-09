@@ -459,12 +459,55 @@ export interface IntegrationsDTO {
   linked: boolean;
   hasTasksScope: boolean;
   hasCalendarScope: boolean;
+  hasDriveScope: boolean;
   /** タイマー確定時にカレンダーへ書くか */
   calendarSyncEnabled: boolean;
   /** 最後に Google Tasks を取り込んだ時刻 */
   tasksSyncedAt: string | null;
+  /** 1 日 1 回、自動でバックアップするか */
+  driveBackupEnabled: boolean;
+  /** 最後にバックアップした時刻。**裏の失敗に気付く唯一の手掛かり** */
+  driveBackupAt: string | null;
 }
 
 export interface UpdateIntegrationsRequest {
   calendarSyncEnabled?: boolean;
+  driveBackupEnabled?: boolean;
+}
+
+// --- バックアップ -----------------------------------------------------------
+
+export interface BackupFileDTO {
+  id: string;
+  name: string;
+  createdAt: string;
+  size: number | null;
+}
+
+export interface BackupFolderDTO {
+  id: string;
+  name: string;
+  url: string | null;
+}
+
+export interface RunBackupResponse {
+  /** 自動実行の条件に合わなかった。エラーではない */
+  skipped?: boolean;
+  reason?: string;
+  file?: BackupFileDTO;
+  folder?: BackupFolderDTO;
+  backedUpAt?: string;
+}
+
+export interface BackupFilesResponse {
+  files: BackupFileDTO[];
+  folder: BackupFolderDTO | null;
+}
+
+export interface RestoreBackupResponse {
+  ok: true;
+  /** 復元した件数 */
+  counts: Record<string, number>;
+  /** 復元の直前に取った安全用のバックアップ */
+  safetyBackup: BackupFileDTO | null;
 }

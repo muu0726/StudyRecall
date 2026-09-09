@@ -1,5 +1,8 @@
 import type {
   ApiErrorResponse,
+  BackupFilesResponse,
+  RestoreBackupResponse,
+  RunBackupResponse,
   CalendarEventInput,
   CalendarEventResponse,
   CalendarEventsResponse,
@@ -195,6 +198,26 @@ export const api = {
   deleteCalendarEvent: (id: string) =>
     request<{ ok: true; warning?: string }>(`/api/calendar/events/${encodeURIComponent(id)}`, {
       method: 'DELETE',
+    }),
+
+  // --- バックアップ（Google ドライブ） ---
+  /**
+   * バックアップを実行する。`auto` は 1 日 1 回の自動実行で、
+   * **条件に合わなければ 200 + skipped で返る**（エラーにはしない）。
+   */
+  runBackup: (body: { auto?: boolean } = {}) =>
+    request<RunBackupResponse>('/api/backup/run', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  listBackups: () => request<BackupFilesResponse>('/api/backup/files'),
+
+  /** **いまの中身を消して置き換える。** 呼ぶ前に必ず確認を取ること。 */
+  restoreBackup: (fileId: string) =>
+    request<RestoreBackupResponse>('/api/backup/restore', {
+      method: 'POST',
+      body: JSON.stringify({ fileId }),
     }),
 
   // --- 外部サービス連携 ---
