@@ -5,6 +5,7 @@ import {
   HardDrive,
   HardDriveDownload,
   HardDriveUpload,
+  FileText,
   ListTodo,
   Loader2,
   Link2,
@@ -37,6 +38,9 @@ export default function IntegrationsModal({ open, onClose, onOpenRestore }: Prop
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isBackingUp, setIsBackingUp] = useState(false);
+  const [isMirroring, setIsMirroring] = useState(false);
+  /** ノートの書き出しで積み残した件数。0 になるまで押せば追いつく */
+  const [notesRemaining, setNotesRemaining] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -109,6 +113,38 @@ export default function IntegrationsModal({ open, onClose, onOpenRestore }: Prop
       setError(saveError instanceof Error ? saveError.message : String(saveError));
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const toggleDriveNotes = async (next: boolean) => {
+    setIsSaving(true);
+    try {
+      setState(await api.updateIntegrations({ driveNotesEnabled: next }));
+      showToast(next ? 'ノートの書き出しを有効にしました' : 'ノートの書き出しを止めました', {
+        kind: 'success',
+      });
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : String(saveError));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const mirrorNotes = async () => {
+    setIsMirroring(true);
+    setError(null);
+    try {
+      const result = await api.mirrorNotes();
+      const touched =
+        (result.created ?? 0) + (result.updated ?? 0) + (result.moved ?? 0) + (result.deleted ?? 0);
+      setNotesRemaining(result.remaining ?? 0);
+      showToast(touched === 0 ? 'ノートは最新でした' : `ノート ${touched} 件を書き出しました`, {
+        kind: 'success',
+      });
+    } catch (mirrorError) {
+      setError(mirrorError instanceof Error ? mirrorError.message : String(mirrorError));
+    } finally {
+      setIsMirroring(false);
     }
   };
 
@@ -256,6 +292,28 @@ export default function IntegrationsModal({ open, onClose, onOpenRestore }: Prop
               </span>
             </label>
 
+            <label className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                checked={state.driveNotesEnabled}
+                disabled={!state.hasDriveScope || isSaving}
+                onChange={(event) => void toggleDriveNotes(event.target.checked)}
+                className="mt-0.5 h-4 w-4 shrink-0 accent-accent disabled:opacity-45"
+              />
+              <span className="min-w-0">
+                <span className="block text-body font-medium text-fg">
+                  ノートを .md ファイルとしても保存する
+                </span>
+                <span className="block text-caption text-fg-muted">
+                  「カテゴリ名／親ノート／子ノート.md」の形でドライブに置きます。
+                  {/* 黙って消えるのが一番悪いので、先に言っておく */}
+                  <strong className="font-medium">
+                    ドライブ側で編集しても、次の書き出しで上書きされます。
+                  </strong>
+                </span>
+              </span>
+            </label>
+
             <div className="flex flex-wrap gap-2">
               <Button
                 variant="secondary"
@@ -265,6 +323,15 @@ export default function IntegrationsModal({ open, onClose, onOpenRestore }: Prop
                 icon={<HardDriveUpload className="h-4 w-4" aria-hidden />}
               >
                 今すぐバックアップ
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => void mirrorNotes()}
+                disabled={!state.hasDriveScope}
+                loading={isMirroring}
+                icon={<FileText className="h-4 w-4" aria-hidden />}
+              >
+                ノートを書き出す
               </Button>
               <Button
                 variant="ghost"
@@ -279,6 +346,13 @@ export default function IntegrationsModal({ open, onClose, onOpenRestore }: Prop
                 復元
               </Button>
             </div>
+
+            {/* 予算で打ち切ったぶん。押すたびに減って 0 になる */}
+            {notesRemaining !== null && notesRemaining > 0 && (
+              <p className="text-caption text-warning">
+                ノートがあと {notesRemaining} 件残っています。もう一度押すと続きを書き出します。
+              </p>
+            )}
 
             {/* **裏の失敗に気付く唯一の手掛かり。** 自動はトーストを出さない。 */}
             <p className="text-caption text-fg-subtle">

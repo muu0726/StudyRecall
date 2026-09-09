@@ -19,6 +19,8 @@ export interface Settings {
   /** アプリが作ったバックアップ用フォルダ。移動・改名されても id は変わらない */
   driveFolderId: string | null;
   driveBackupAt: Date | null;
+  /** ノートを .md としてもミラーするか */
+  driveNotesEnabled: boolean;
 }
 
 const DEFAULTS: Settings = {
@@ -30,6 +32,7 @@ const DEFAULTS: Settings = {
   driveBackupEnabled: false,
   driveFolderId: null,
   driveBackupAt: null,
+  driveNotesEnabled: false,
 };
 
 export async function getSettings(db: Db, userId: string): Promise<Settings> {
@@ -46,6 +49,7 @@ export async function getSettings(db: Db, userId: string): Promise<Settings> {
     driveBackupEnabled: row.driveBackupEnabled,
     driveFolderId: row.driveFolderId,
     driveBackupAt: row.driveBackupAt,
+    driveNotesEnabled: row.driveNotesEnabled,
   };
 }
 

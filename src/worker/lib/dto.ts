@@ -69,7 +69,16 @@ export function toStudyLogDto(row: StudyLogRow): StudyLogDTO {
   };
 }
 
-export type NotebookRow = Notebook & WithCategory;
+/**
+ * DTO を作るのに要る列だけ。**`$inferSelect` 全体を要求しない。**
+ * テーブルに列を足すたびに、その列を選んでいない projection が型エラーになるため
+ * （Drive のミラー用に 3 列足したときに実際そうなった）。
+ */
+export type NotebookRow = Pick<
+  Notebook,
+  'id' | 'categoryId' | 'parentId' | 'sortOrder' | 'title' | 'content' | 'createdAt' | 'updatedAt'
+> &
+  WithCategory;
 
 export function toNotebookDto(row: NotebookRow): NotebookDTO {
   return {

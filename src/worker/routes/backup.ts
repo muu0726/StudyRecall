@@ -15,9 +15,11 @@ import {
   uploadJson,
 } from '../lib/google-drive';
 import { describeGoogleError, statusOf } from '../lib/google-error';
+import { discardNoteMirror, mirrorNotes } from '../lib/note-mirror';
 import { getSettings, saveSettings } from '../lib/user-settings';
 import type {
   BackupFilesResponse,
+  MirrorNotesResponse,
   RestoreBackupResponse,
   RunBackupResponse,
 } from '../../shared/types';
@@ -131,11 +133,54 @@ export const backupRoute = new Hono<AppEnv>()
     try {
       const result = await runBackup(db, userId, access.accessToken, settings.driveFolderId);
       if ('error' in result) return c.json({ error: result.error }, 413);
+
+      /*
+       * ノートのミラーは**おまけ**。失敗しても JSON バックアップは成功のまま返す
+       * （あちらが本体で、こちらは読むための写し）。
+       */
+      if (settings.driveNotesEnabled && result.response.folder) {
+        try {
+          await mirrorNotes(db, userId, access.accessToken, result.response.folder.id);
+        } catch (mirrorError) {
+          console.error('[backup] note mirror failed:', mirrorError);
+        }
+      }
+
       const response: RunBackupResponse = result.response;
       return c.json(response);
     } catch (error) {
       console.error('[backup] run failed:', error);
       if (auto) return c.json({ skipped: true, reason: 'failed' });
+      return c.json({ error: describeGoogleError(error) }, 502);
+    }
+  })
+
+  /**
+   * ノートを .md として Drive にミラーする。
+   *
+   * **一方通行。** Drive 側で編集された .md は読まず、次の書き出しで上書きする。
+   * 1 回で叩く Drive の回数に上限があるので、多いときは `remaining` を返して
+   * 次の実行に続ける（変わっていないものは飛ばすので必ず追いつく）。
+   */
+  .post('/notes', async (c) => {
+    const userId = c.get('userId');
+    const db = getDb(c.env);
+
+    const access = await getGoogleAccessToken(c.env, c.req.url, userId, [GOOGLE_DRIVE_SCOPE]);
+    if (!access.ok) return c.json({ error: describeAccessFailure(access.reason) }, 403);
+
+    const settings = await getSettings(db, userId);
+
+    try {
+      const folder = await ensureBackupFolder(access.accessToken, settings.driveFolderId);
+      if (folder.id !== settings.driveFolderId) {
+        await saveSettings(db, userId, { driveFolderId: folder.id });
+      }
+      const result = await mirrorNotes(db, userId, access.accessToken, folder.id);
+      const response: MirrorNotesResponse = result;
+      return c.json(response);
+    } catch (error) {
+      console.error('[backup] note mirror failed:', error);
       return c.json({ error: describeGoogleError(error) }, 502);
     }
   })
@@ -233,6 +278,16 @@ export const backupRoute = new Hono<AppEnv>()
     // 3. 置き換える
     try {
       const counts = await applySnapshot(db, userId, parsed.value.data);
+
+      /*
+       * ノートは総入れ替えになり driveFileId も null に戻る。古い .md を残すと、
+       * 次のミラーが作るぶんと**同じ名前で二重に並ぶ**ので捨てておく。
+       * 消せなくても復元は成功なので、中で握りつぶしている。
+       */
+      if (settings.driveFolderId) {
+        await discardNoteMirror(access.accessToken, settings.driveFolderId);
+      }
+
       const response: RestoreBackupResponse = {
         ok: true,
         counts,

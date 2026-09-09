@@ -185,7 +185,9 @@ export async function listBackups(
   folderId: string,
 ): Promise<DriveBackupFile[]> {
   const params = new URLSearchParams({
-    q: `'${folderId}' in parents and trashed = false`,
+    // **mimeType で絞る。** 同じフォルダの下にノート用のサブフォルダがあるので、
+    // 絞らないと復元の一覧に「ノート」フォルダが並んでしまう。
+    q: `'${folderId}' in parents and mimeType = 'application/json' and trashed = false`,
     orderBy: 'createdTime desc',
     pageSize: '50',
     fields: 'files(id,name,createdTime,size)',
@@ -239,4 +241,126 @@ export async function pruneBackups(accessToken: string, folderId: string): Promi
   } catch (error) {
     console.error('[google-drive] prune failed:', error);
   }
+}
+
+// ---------------------------------------------------------------------------
+// ノートを .md としてミラーするための操作
+// ---------------------------------------------------------------------------
+
+/**
+ * 名前で探して、無ければ作る。
+ *
+ * **`drive.file` なので「自分が作ったフォルダ」しか検索に出てこない。**
+ * それがちょうど探したい集合なので、他人のフォルダを誤って掴む心配が無い。
+ */
+export async function findFolder(
+  accessToken: string,
+  parentId: string,
+  name: string,
+): Promise<string | null> {
+  /*
+   * 名前に ' が入るとクエリが壊れるのでエスケープする。
+   * バックスラッシュは safeFileName が既に落としているので ' だけでよい。
+   */
+  const escaped = name.replaceAll("'", String.raw`\'`);
+  const params = new URLSearchParams({
+    q: `'${parentId}' in parents and name = '${escaped}' and mimeType = '${FOLDER_MIME}' and trashed = false`,
+    fields: 'files(id)',
+    pageSize: '1',
+  });
+  const found = (await call(accessToken, `${API}/files?${params}`)) as {
+    files?: { id?: unknown }[];
+  } | null;
+  const existing = found?.files?.[0]?.id;
+  return typeof existing === 'string' ? existing : null;
+}
+
+/** 探して、無ければ作る */
+export async function ensureFolder(
+  accessToken: string,
+  parentId: string,
+  name: string,
+): Promise<string> {
+  const existing = await findFolder(accessToken, parentId, name);
+  if (existing) return existing;
+
+  const created = (await call(accessToken, `${API}/files?fields=id`, {
+    method: 'POST',
+    body: JSON.stringify({ name, mimeType: FOLDER_MIME, parents: [parentId] }),
+  })) as { id?: unknown } | null;
+  if (typeof created?.id !== 'string')
+    throw new GoogleApiError(500, 'folder create returned no id');
+  return created.id;
+}
+
+/** テキストのファイルを 1 つ作る */
+export async function uploadText(
+  accessToken: string,
+  folderId: string,
+  name: string,
+  mimeType: string,
+  body: string,
+): Promise<string> {
+  const boundary = `studyrecall-${crypto.randomUUID()}`;
+  const metadata = JSON.stringify({ name, parents: [folderId], mimeType });
+
+  const payload =
+    `--${boundary}\r\n` +
+    'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+    `${metadata}\r\n` +
+    `--${boundary}\r\n` +
+    `Content-Type: ${mimeType}; charset=UTF-8\r\n\r\n` +
+    `${body}\r\n` +
+    `--${boundary}--`;
+
+  const created = (await call(accessToken, `${UPLOAD}/files?uploadType=multipart&fields=id`, {
+    method: 'POST',
+    headers: { 'Content-Type': `multipart/related; boundary=${boundary}` },
+    body: payload,
+  })) as { id?: unknown } | null;
+  if (typeof created?.id !== 'string') throw new GoogleApiError(500, 'upload returned no id');
+  return created.id;
+}
+
+/**
+ * 中身だけ差し替える。**ファイル id は変わらない**ので、
+ * Drive で張ったリンクも、Drive 自身の変更履歴も保たれる。
+ */
+export async function updateText(
+  accessToken: string,
+  fileId: string,
+  mimeType: string,
+  body: string,
+): Promise<void> {
+  await call(
+    accessToken,
+    `${UPLOAD}/files/${encodeURIComponent(fileId)}?uploadType=media&fields=id`,
+    { method: 'PATCH', headers: { 'Content-Type': `${mimeType}; charset=UTF-8` }, body },
+  );
+}
+
+/** 改名と、親フォルダの付け替えを同時にやる */
+export async function moveFile(
+  accessToken: string,
+  fileId: string,
+  name: string,
+  addParent: string,
+  removeParent: string | null,
+): Promise<void> {
+  const params = new URLSearchParams({ fields: 'id', addParents: addParent });
+  if (removeParent && removeParent !== addParent) params.set('removeParents', removeParent);
+  await call(accessToken, `${API}/files/${encodeURIComponent(fileId)}?${params}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ name }),
+  });
+}
+
+/** そのファイルがいまどのフォルダに居るか。移動のときに removeParents へ渡す */
+export async function parentOf(accessToken: string, fileId: string): Promise<string | null> {
+  const raw = (await call(
+    accessToken,
+    `${API}/files/${encodeURIComponent(fileId)}?fields=parents`,
+  )) as { parents?: unknown } | null;
+  const parents = raw?.parents;
+  return Array.isArray(parents) && typeof parents[0] === 'string' ? parents[0] : null;
 }

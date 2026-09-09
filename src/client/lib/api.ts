@@ -1,6 +1,7 @@
 import type {
   ApiErrorResponse,
   BackupFilesResponse,
+  MirrorNotesResponse,
   RestoreBackupResponse,
   RunBackupResponse,
   CalendarEventInput,
@@ -212,6 +213,9 @@ export const api = {
     }),
 
   listBackups: () => request<BackupFilesResponse>('/api/backup/files'),
+
+  /** ノートを .md として Drive にミラーする。**一方通行**（Drive 側の編集は上書きされる） */
+  mirrorNotes: () => request<MirrorNotesResponse>('/api/backup/notes', { method: 'POST' }),
 
   /** **いまの中身を消して置き換える。** 呼ぶ前に必ず確認を取ること。 */
   restoreBackup: (fileId: string) =>

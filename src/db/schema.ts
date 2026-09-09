@@ -173,6 +173,19 @@ export const notebooks = sqliteTable(
     deletedAt: integer('deleted_at', { mode: 'timestamp_ms' }),
     title: text('title').notNull(),
     content: text('content').notNull(),
+    /*
+     * Google ドライブへ .md としてミラーした跡。**一方通行**なので、
+     * ここは「最後にこちらから書いたときの状態」しか持たない。
+     */
+    /** Drive 上のファイル id。null なら未書き出し */
+    driveFileId: text('drive_file_id'),
+    /**
+     * 最後に書いた場所（'カテゴリ/親/子.md'）。
+     * **親を改名しても子の updatedAt は変わらない**ので、これが無いと
+     * 改名後の子が古いフォルダに取り残される。
+     */
+    drivePath: text('drive_path'),
+    driveSyncedAt: integer('drive_synced_at', { mode: 'timestamp_ms' }),
     // ミリ秒精度。updatedAt は楽観的ロックのトークンに使うため、秒精度だと
     // 「最後の更新と同じ秒内に2端末が保存する」ケースで競合を取りこぼす。
     createdAt: integer('created_at', { mode: 'timestamp_ms' })
@@ -369,6 +382,8 @@ export const userSettings = sqliteTable('user_settings', {
   driveFolderId: text('drive_folder_id'),
   /** 最後にバックアップした時刻。24 時間の判定に使う。 */
   driveBackupAt: integer('drive_backup_at', { mode: 'timestamp_ms' }),
+  /** ノートを .md としてもミラーするか。**既定は false** */
+  driveNotesEnabled: integer('drive_notes_enabled', { mode: 'boolean' }).notNull().default(false),
   createdAt: integer('created_at', { mode: 'timestamp_ms' })
     .notNull()
     .$defaultFn(() => new Date()),

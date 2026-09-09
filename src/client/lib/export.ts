@@ -1,5 +1,13 @@
 import type { NotebookDTO, QuizQuestionDTO } from '../../shared/types';
-import { getAncestorPath } from '../../shared/note-tree';
+import { buildNotePaths, joinPath } from '../../shared/note-export';
+import { buildNotebookMarkdown, safeFileName } from '../../shared/note-export';
+
+/*
+ * 整形と置き場所の決め方は shared に置いてある。**ここで組み立て直さない。**
+ * ZIP・単体の .md・Google ドライブへのミラーが同じものを通るようにするため。
+ * 呼び出し側の import を変えずに済むよう、ここから再エクスポートする。
+ */
+export { buildNotebookMarkdown, safeFileName };
 
 /** Blob をダウンロードさせる。オブジェクト URL は必ず解放する。 */
 export function downloadBlob(blob: Blob, filename: string): void {
@@ -54,39 +62,6 @@ export function exportAnkiCsv(questions: QuizQuestionDTO[], filename: string): v
 }
 
 /**
- * ファイル名に使えない文字を落とす。
- * ZIP の中のパスにも、単体ダウンロードのファイル名にも同じ規則を当てる。
- */
-export function safeFileName(name: string): string {
-  const cleaned = name
-    .replace(/[\\/:*?"<>|]/g, '_')
-    .replace(/\s+/g, ' ')
-    .trim();
-  return cleaned.slice(0, 80) || 'untitled';
-}
-
-/** YAML フロントマターの値として安全な形にする */
-function yamlString(value: string): string {
-  return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
-}
-
-export function buildNotebookMarkdown(notebook: NotebookDTO, parentTitle?: string): string {
-  const frontMatter = [
-    '---',
-    `title: ${yamlString(notebook.title)}`,
-    `category: ${yamlString(notebook.categoryName)}`,
-    ...(parentTitle ? [`parent: ${yamlString(parentTitle)}`] : []),
-    `created: ${notebook.createdAt}`,
-    `updated: ${notebook.updatedAt}`,
-    'tags:',
-    `  - ${notebook.categoryName}`,
-    '---',
-    '',
-  ].join('\n');
-  return `${frontMatter}${notebook.content}\n`;
-}
-
-/**
  * 「カテゴリ名/親ノート/子ノート.md」というツリー構造で ZIP にまとめる。
  * 同名ファイルは連番を振って衝突を避ける。
  */
@@ -94,29 +69,14 @@ export async function buildNotebooksZip(notebooks: NotebookDTO[]): Promise<Blob>
   // jszip は書き出しのときにしか要らないので、ここで初めて読み込む
   const { default: JSZip } = await import('jszip');
   const zip = new JSZip();
-  const used = new Set<string>();
   const byId = new Map(notebooks.map((n) => [n.id, n]));
+  const paths = buildNotePaths(notebooks);
 
   for (const notebook of notebooks) {
-    // 祖先を辿ってフォルダ階層を作る。末尾（自分自身）はファイル名になる。
-    const ancestors = getAncestorPath(notebooks, notebook.id);
-    const folders = [
-      safeFileName(notebook.categoryName),
-      ...ancestors.slice(0, -1).map((n) => safeFileName(n.title)),
-    ];
-    const base = safeFileName(notebook.title);
-    const dir = folders.join('/');
-
-    let path = `${dir}/${base}.md`;
-    let suffix = 2;
-    while (used.has(path)) {
-      path = `${dir}/${base}-${suffix}.md`;
-      suffix += 1;
-    }
-    used.add(path);
-
+    const path = paths.get(notebook.id);
+    if (!path) continue;
     const parentTitle = notebook.parentId ? byId.get(notebook.parentId)?.title : undefined;
-    zip.file(path, buildNotebookMarkdown(notebook, parentTitle));
+    zip.file(joinPath(path), buildNotebookMarkdown(notebook, parentTitle));
   }
 
   return zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });

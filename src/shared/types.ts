@@ -466,6 +466,8 @@ export interface IntegrationsDTO {
   tasksSyncedAt: string | null;
   /** 1 日 1 回、自動でバックアップするか */
   driveBackupEnabled: boolean;
+  /** ノートを .md としてもミラーするか */
+  driveNotesEnabled: boolean;
   /** 最後にバックアップした時刻。**裏の失敗に気付く唯一の手掛かり** */
   driveBackupAt: string | null;
 }
@@ -473,6 +475,7 @@ export interface IntegrationsDTO {
 export interface UpdateIntegrationsRequest {
   calendarSyncEnabled?: boolean;
   driveBackupEnabled?: boolean;
+  driveNotesEnabled?: boolean;
 }
 
 // --- バックアップ -----------------------------------------------------------
@@ -502,6 +505,18 @@ export interface RunBackupResponse {
 export interface BackupFilesResponse {
   files: BackupFileDTO[];
   folder: BackupFolderDTO | null;
+}
+
+export interface MirrorNotesResponse {
+  /** 自動実行の条件に合わなかった。エラーではない */
+  skipped?: boolean;
+  reason?: string;
+  created?: number;
+  updated?: number;
+  moved?: number;
+  deleted?: number;
+  /** 予算に入りきらなかった件数。0 になるまで押せば追いつく */
+  remaining?: number;
 }
 
 export interface RestoreBackupResponse {
