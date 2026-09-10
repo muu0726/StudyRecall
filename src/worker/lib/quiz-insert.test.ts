@@ -12,6 +12,22 @@ describe('maxRowsPerInsert', () => {
     expect(maxRowsPerInsert(18)).toBe(5);
   });
 
+  /**
+   * 用語辞書で glossary_term_id / question_type / choices を足して 21 列になった。
+   * CHUNK_SIZE はモジュール読み込み時に列数から導出しているので**勝手に下がる**が、
+   * 誰かが列を足して境界を割ったときに気付けるよう、ここで固定しておく。
+   */
+  it('quiz_questions の 21 列では 4 行', () => {
+    expect(maxRowsPerInsert(21)).toBe(4);
+    // 10 問生成は 4 + 4 + 2 の 3 回に分かれる
+    expect(
+      chunkRows(
+        Array.from({ length: 10 }, (_, i) => i),
+        maxRowsPerInsert(21),
+      ),
+    ).toHaveLength(3);
+  });
+
   it('列が上限より多くても 0 を返さない（無限ループになる）', () => {
     expect(maxRowsPerInsert(200)).toBe(1);
     expect(maxRowsPerInsert(0)).toBeGreaterThanOrEqual(1);

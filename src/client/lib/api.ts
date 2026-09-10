@@ -13,8 +13,14 @@ import type {
   CreateNotebookRequest,
   CreateStudyLogRequest,
   CreateStudyLogResponse,
+  CreateGlossaryTermRequest,
+  DeleteGlossaryTermResponse,
   GenerateNotebookQuizResponse,
+  GlossaryDuplicateResponse,
+  GlossaryTermResponse,
+  GlossaryTermsResponse,
   ManualAddQuizResponse,
+  UpdateGlossaryTermRequest,
   NotebookDTO,
   NotebookResponse,
   NotebooksResponse,
@@ -257,6 +263,35 @@ export const api = {
   // --- タグ ---
   listTags: () => request<TagsResponse>('/api/tags'),
 
+  // --- 用語辞書 ---
+  /**
+   * 一覧。**検索語（q）は渡さない。**
+   * 用語名・意味・タグの検索は手元で畳む（→ shared/glossary-search.ts）。
+   * D1 は日本語の大小・全半角・カナを畳めないので、サーバーに投げると取りこぼす。
+   */
+  listGlossary: (options: { categoryId?: string; tag?: string } = {}) => {
+    const params = new URLSearchParams();
+    if (options.categoryId) params.set('categoryId', options.categoryId);
+    if (options.tag) params.set('tag', options.tag);
+    const query = params.toString();
+    return request<GlossaryTermsResponse>(`/api/glossary${query ? `?${query}` : ''}`);
+  },
+
+  createGlossaryTerm: (body: CreateGlossaryTermRequest) =>
+    request<GlossaryTermResponse>('/api/glossary', { method: 'POST', body: JSON.stringify(body) }),
+
+  updateGlossaryTerm: (id: string, body: UpdateGlossaryTermRequest) =>
+    request<GlossaryTermResponse>(`/api/glossary/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+
+  /** 既定ではカードを残す。`cards: 'delete'` を渡したときだけ一緒に消す。 */
+  deleteGlossaryTerm: (id: string, options: { cards?: 'keep' | 'delete' } = {}) =>
+    request<DeleteGlossaryTermResponse>(`/api/glossary/${id}?cards=${options.cards ?? 'keep'}`, {
+      method: 'DELETE',
+    }),
+
   // --- 統計 ---
   getHeatmap: () => request<HeatmapResponse>('/api/stats/heatmap'),
 
@@ -309,6 +344,15 @@ export function asNotebookConflict(error: unknown): NotebookConflictResponse | n
     if (body && typeof body.currentContent === 'string' && body.notebook) {
       return body as NotebookConflictResponse;
     }
+  }
+  return null;
+}
+
+/** POST/PUT /api/glossary が「同じ用語が既にある」を返したか判定する */
+export function asGlossaryDuplicate(error: unknown): GlossaryDuplicateResponse | null {
+  if (error instanceof ApiError && error.status === 409) {
+    const body = error.body as Partial<GlossaryDuplicateResponse> | null;
+    if (body && body.term) return body as GlossaryDuplicateResponse;
   }
   return null;
 }

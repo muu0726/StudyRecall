@@ -1,4 +1,11 @@
-import { index, integer, sqliteTable, text, type AnySQLiteColumn } from 'drizzle-orm/sqlite-core';
+import {
+  index,
+  integer,
+  sqliteTable,
+  text,
+  uniqueIndex,
+  type AnySQLiteColumn,
+} from 'drizzle-orm/sqlite-core';
 
 /**
  * StudyRecall のスキーマ定義。
@@ -247,8 +254,67 @@ export const timerSessions = sqliteTable(
 );
 
 /**
+ * 用語辞書。**カード（quiz_questions）とは別の資産**として持つ。
+ *
+ * それまでの「用語を追加」は用語と説明を Gemini に渡して問題を 1 問作り、
+ * **元の用語と説明を捨てていた**。作り直したくなっても材料が残っていない。
+ * ここに残しておけば、同じ用語から一問一答・穴埋め・4択を何度でも作り直せる。
+ *
+ * **習得ステータスはこの行に持たない。** カード側の状態から読み取り時に導く
+ * （→ src/shared/glossary-mastery.ts）。持つと、オフラインで溜めた判定が
+ * 後から届いたときにここだけ古いまま取り残される。
+ */
+export const glossaryTerms = sqliteTable(
+  'glossary_terms',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /**
+     * カテゴリは他のユーザー所有テーブルと同じく必須。
+     * ここから作るカードが categoryId を必須にしているので、null だと生成時に決められない。
+     */
+    categoryId: text('category_id')
+      .notNull()
+      .references(() => categories.id, { onDelete: 'cascade' }),
+    /** ノートの選択範囲から登録したときの出所。ノートを消しても用語は残す。 */
+    notebookId: text('notebook_id').references(() => notebooks.id, { onDelete: 'set null' }),
+    term: text('term').notNull(),
+    /**
+     * 検索と重複判定のための正規化キー。NFKC + 小文字化 + カタカナ→ひらがな。
+     * **SQLite は ICU を持たない**ので、アプリ側で作って保存する。
+     * 作る場所は src/shared/glossary-search.ts の normalizeForSearch() ひとつだけ。
+     */
+    termKey: text('term_key').notNull(),
+    /** 意味。AI 補完の前は空でもよいので notNull + default('')。 */
+    definition: text('definition').notNull().default(''),
+    /** quiz_questions.tags と同じ形。json_each() で展開・集計できる。 */
+    tags: text('tags', { mode: 'json' }).$type<string[]>().notNull().default([]),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    // 一覧は更新順で引く
+    index('glossary_terms_user_updated_idx').on(t.userId, t.updatedAt),
+    index('glossary_terms_user_category_idx').on(t.userId, t.categoryId),
+    index('glossary_terms_notebook_idx').on(t.notebookId),
+    /*
+     * 同じカテゴリに同じ用語を二重登録させない。
+     * 全体で一意にしないのは、「ネットワーク」の tunnel と「英語」の tunnel が
+     * 別物として成立するため。
+     */
+    uniqueIndex('glossary_terms_user_category_key_unq').on(t.userId, t.categoryId, t.termKey),
+  ],
+);
+
+/**
  * 一問一答フラッシュカード。
- * 生成元は3系統ある: 学習記録(studyLogId) / ノート(notebookId) / 手動追加(どちらも null)。
+ * 生成元は4系統ある: 学習記録(studyLogId) / ノート(notebookId) / 用語辞書(glossaryTermId) / 手動追加。
  */
 export const quizQuestions = sqliteTable(
   'quiz_questions',
@@ -263,9 +329,26 @@ export const quizQuestions = sqliteTable(
     studyLogId: text('study_log_id').references(() => studyLogs.id, { onDelete: 'cascade' }),
     // ノートを消しても蓄積した問題は残す（復習資産を巻き込んで消さない）
     notebookId: text('notebook_id').references(() => notebooks.id, { onDelete: 'set null' }),
+    /** 用語辞書から作った問題の出所。用語を消してもカードは残す（notebookId と同じ扱い）。 */
+    glossaryTermId: text('glossary_term_id').references(() => glossaryTerms.id, {
+      onDelete: 'set null',
+    }),
     question: text('question').notNull(),
     answer: text('answer').notNull(),
     explanation: text('explanation'),
+    /**
+     * 出題形式。'qa' = 一問一答 / 'cloze' = 穴埋め / 'quiz' = 4択。
+     * **既存の行はすべて 'qa'** として扱われ、見た目も動きも変わらない。
+     */
+    questionType: text('question_type', { enum: ['qa', 'cloze', 'quiz'] })
+      .notNull()
+      .default('qa'),
+    /**
+     * 4択のときだけ 4 要素。それ以外は空配列。
+     * **正解の番号は持たない。** answer と文字列一致で照合する。
+     * 番号を持つと、選択肢を並べ替えるたびに整合を取る場所が増える。
+     */
+    choices: text('choices', { mode: 'json' }).$type<string[]>().notNull().default([]),
     /** ジャンルタグ。実体は JSON 文字列なので json_each() で展開・集計できる。 */
     tags: text('tags', { mode: 'json' }).$type<string[]>().notNull().default([]),
     isMastered: integer('is_mastered', { mode: 'boolean' }).notNull().default(false),
@@ -297,6 +380,8 @@ export const quizQuestions = sqliteTable(
     index('quiz_questions_user_answered_idx').on(t.userId, t.lastAnsweredAt),
     index('quiz_questions_study_log_idx').on(t.studyLogId),
     index('quiz_questions_notebook_idx').on(t.notebookId),
+    // 用語ごとの習得ステータスを導くための集計を支える
+    index('quiz_questions_glossary_idx').on(t.glossaryTermId),
     // 「今日の復習」= dueAt が来ているものの絞り込み
     index('quiz_questions_user_due_idx').on(t.userId, t.dueAt),
   ],
@@ -398,5 +483,6 @@ export type StudyLog = typeof studyLogs.$inferSelect;
 export type Notebook = typeof notebooks.$inferSelect;
 export type TimerSession = typeof timerSessions.$inferSelect;
 export type QuizQuestion = typeof quizQuestions.$inferSelect;
+export type GlossaryTerm = typeof glossaryTerms.$inferSelect;
 export type Task = typeof tasks.$inferSelect;
 export type UserSettings = typeof userSettings.$inferSelect;

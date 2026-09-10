@@ -4,6 +4,10 @@
  * 日時は JSON 化された ISO 8601 文字列で受け渡す。
  */
 
+import type { MasteryStatus } from './glossary-mastery';
+
+export type { MasteryStatus };
+
 /** 「わかった」がこの回数に達すると習得済みとみなす */
 export const MASTERY_THRESHOLD = 3;
 
@@ -68,6 +72,12 @@ export interface NotebookDTO {
 /** ノートの階層の深さの上限（ルートを 1 とする） */
 export const MAX_NOTE_DEPTH = 5;
 
+/**
+ * 出題形式。
+ * 'qa' = 一問一答 / 'cloze' = 穴埋め（question の中の `____`）/ 'quiz' = 4択。
+ */
+export type QuestionType = 'qa' | 'cloze' | 'quiz';
+
 export interface QuizQuestionDTO {
   id: string;
   categoryId: string;
@@ -77,9 +87,15 @@ export interface QuizQuestionDTO {
   studyLogId: string | null;
   /** ノート由来ならその ID。ノート削除時は null になる。 */
   notebookId: string | null;
+  /** 用語辞書由来ならその ID。用語削除時は null になる。 */
+  glossaryTermId: string | null;
   question: string;
   answer: string;
   explanation: string | null;
+  /** 出題形式。既存の問題はすべて 'qa'。 */
+  questionType: QuestionType;
+  /** 'quiz'（4択）のときだけ 4 要素。正解は answer と文字列一致で判定する。 */
+  choices: string[];
   tags: string[];
   isMastered: boolean;
   correctCount: number;
@@ -206,6 +222,81 @@ export interface ManualAddQuizResponse {
 
 export interface TagsResponse {
   tags: TagCount[];
+}
+
+// --- 用語辞書 ---------------------------------------------------------------
+
+/**
+ * 一覧で返せる用語の上限。
+ *
+ * 検索と習得ステータスの絞り込みはクライアント側で畳むので（→ shared/glossary-search.ts）、
+ * ここで切ったぶんは**検索の対象からも外れる**。黙って一部だけ検索するのが最悪なので、
+ * 超えたら `truncated` を立てて画面で知らせる。
+ */
+export const GLOSSARY_LIMIT = 500;
+
+/** 用語名の長さの上限 */
+export const MAX_TERM_LENGTH = 60;
+/** 意味の長さの上限 */
+export const MAX_DEFINITION_LENGTH = 1_000;
+/** 1 用語に付けられるタグの数 */
+export const MAX_TAGS_PER_TERM = 3;
+
+export interface GlossaryTermDTO {
+  id: string;
+  categoryId: string;
+  categoryName: string;
+  categoryColor: string;
+  /** ノートの選択範囲から登録した場合の出所。ノート削除時は null になる。 */
+  notebookId: string | null;
+  term: string;
+  definition: string;
+  tags: string[];
+  /** カードの状態から導いた値。この用語の行には保存していない。 */
+  masteryStatus: MasteryStatus;
+  /** この用語から生成されたカードの枚数 */
+  cardCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GlossaryTermsResponse {
+  terms: GlossaryTermDTO[];
+  /** GLOSSARY_LIMIT で打ち切られたか。true ならクライアント検索が全件を見ていない。 */
+  truncated: boolean;
+}
+
+export interface GlossaryTermResponse {
+  term: GlossaryTermDTO;
+}
+
+export interface CreateGlossaryTermRequest {
+  categoryId: string;
+  term: string;
+  definition?: string;
+  tags?: string[];
+  /** ノートから登録したときの出所 */
+  notebookId?: string | null;
+}
+
+export interface UpdateGlossaryTermRequest {
+  term?: string;
+  definition?: string;
+  tags?: string[];
+  categoryId?: string;
+}
+
+/** 同じカテゴリに同じ用語が既にあるときの 409 レスポンス */
+export interface GlossaryDuplicateResponse {
+  error: string;
+  /** 既にある用語。「開いて編集する」へ誘導するために返す。 */
+  term: GlossaryTermDTO;
+}
+
+export interface DeleteGlossaryTermResponse {
+  ok: true;
+  /** cards=delete を指定したときに消したカードの枚数 */
+  deletedCards: number;
 }
 
 // --- ノートブック -----------------------------------------------------------

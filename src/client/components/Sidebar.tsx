@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import {
   BarChart3,
+  BookMarked,
   BookOpenCheck,
   ChevronLeft,
   ChevronRight,
@@ -44,7 +45,7 @@ import type { ThemeSetting } from '../lib/theme';
  * （狭い画面でアイコンだけ出しても意味がないため）。
  */
 
-export type ViewId = 'timer' | 'notes' | 'tasks' | 'review' | 'dashboard';
+export type ViewId = 'timer' | 'notes' | 'tasks' | 'glossary' | 'review' | 'dashboard';
 
 export const VIEWS: {
   id: ViewId;
@@ -57,6 +58,7 @@ export const VIEWS: {
   { id: 'timer', label: 'タイマー', title: 'タイマー & ポモドーロ', icon: Timer },
   { id: 'notes', label: 'ノートブック', title: 'ノートブック', icon: NotebookPen },
   { id: 'tasks', label: 'タスク', title: 'タスク', icon: ListTodo },
+  { id: 'glossary', label: '用語辞書', title: '用語辞書', icon: BookMarked },
   { id: 'review', label: 'フラッシュカード', title: 'フラッシュカード復習', icon: Layers },
   { id: 'dashboard', label: 'ダッシュボード', title: 'ダッシュボード', icon: BarChart3 },
 ];

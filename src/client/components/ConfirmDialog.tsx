@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { Button, Modal } from '../ui';
 
@@ -24,6 +25,11 @@ interface Props {
   isBusy?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
+  /**
+   * 見出しと本文の下に置く追加の入力（「カードも一緒に削除する」など）。
+   * **既定の見た目は変えない。** 渡さなければ今までどおり本文だけ。
+   */
+  children?: ReactNode;
 }
 
 export default function ConfirmDialog({
@@ -36,6 +42,7 @@ export default function ConfirmDialog({
   isBusy = false,
   onConfirm,
   onCancel,
+  children,
 }: Props) {
   const lines =
     description === undefined ? [] : Array.isArray(description) ? description : [description];
@@ -56,6 +63,7 @@ export default function ConfirmDialog({
           {line}
         </p>
       ))}
+      bodyClassName="px-5 py-4"
       footer={
         <>
           <Button variant="ghost" size="lg" fullWidth onClick={onCancel} disabled={isBusy}>
@@ -72,6 +80,8 @@ export default function ConfirmDialog({
           </Button>
         </>
       }
-    />
+    >
+      {children}
+    </Modal>
   );
 }

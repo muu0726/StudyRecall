@@ -1,0 +1,318 @@
+import { useEffect, useMemo, useState } from 'react';
+import { BookMarked, Loader2, Plus, Sparkles } from 'lucide-react';
+import type { CategoryDTO, GlossaryTermDTO } from '../../shared/types';
+import {
+  collectTags,
+  filterGlossaryTerms,
+  normalizeForSearch,
+  type GlossaryFilter,
+} from '../../shared/glossary-search';
+import { countByMastery } from '../../shared/glossary-mastery';
+import type { GlossaryApi } from '../hooks/useGlossary';
+import { cn } from '../lib/cn';
+import { Banner, Button, EmptyState, FilterMenu, SearchInput, Segmented } from '../ui';
+import ConfirmDialog from './ConfirmDialog';
+import GlossaryTermCard from './GlossaryTermCard';
+import GlossaryTermModal from './GlossaryTermModal';
+import { useToast } from './Toast';
+
+/**
+ * 用語辞書。
+ *
+ * **絞り込みは全部この画面の中で完結する。** 一覧はカテゴリ単位で 1 回だけ取り、
+ * 検索語・タグ・習得ステータスはメモリ上で畳む（→ shared/glossary-search.ts）。
+ * サーバーへ投げないのは、D1 が日本語の大小・全半角・カナを畳めないため。
+ *
+ * その代わり、上限で切られたときは**必ず知らせる**。黙って切ると
+ * 「検索したのに出てこない」が起きて、検索そのものが信用されなくなる。
+ */
+
+interface Props {
+  glossary: GlossaryApi;
+  categories: CategoryDTO[];
+  /** 一覧を開いたときに取り直す合図。復習で習得ステータスが動いたときに増える */
+  reloadToken: number;
+}
+
+export default function GlossaryTab({ glossary, categories, reloadToken }: Props) {
+  const { showToast } = useToast();
+
+  const [query, setQuery] = useState('');
+  const [categoryId, setCategoryId] = useState('');
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [mastery, setMastery] = useState<GlossaryFilter['mastery']>('all');
+
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editing, setEditing] = useState<GlossaryTermDTO | null>(null);
+  const [deleting, setDeleting] = useState<GlossaryTermDTO | null>(null);
+  const [deleteCards, setDeleteCards] = useState(false);
+
+  useEffect(() => {
+    void glossary.reload();
+  }, [glossary.reload, reloadToken]);
+
+  const { terms } = glossary;
+
+  const visible = useMemo(
+    () =>
+      filterGlossaryTerms(
+        categoryId ? terms.filter((term) => term.categoryId === categoryId) : terms,
+        { query, tags: selectedTags, mastery },
+      ),
+    [terms, categoryId, query, selectedTags, mastery],
+  );
+
+  // タグの候補は「いま見えている範囲の 1 つ手前」から作る。
+  // 絞り込んだ結果から作ると、押した途端に他のタグが消えて外せなくなる。
+  const tagOptions = useMemo(
+    () => collectTags(categoryId ? terms.filter((t) => t.categoryId === categoryId) : terms),
+    [terms, categoryId],
+  );
+  const allTagNames = useMemo(() => collectTags(terms).map((t) => t.tag), [terms]);
+
+  const counts = useMemo(() => countByMastery(terms.map((term) => term.masteryStatus)), [terms]);
+
+  const toggleTag = (tag: string) => {
+    const key = normalizeForSearch(tag);
+    setSelectedTags((current) =>
+      current.some((t) => normalizeForSearch(t) === key)
+        ? current.filter((t) => normalizeForSearch(t) !== key)
+        : [...current, tag],
+    );
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleSubmit = async (values: {
+    categoryId: string;
+    term: string;
+    definition: string;
+    tags: string[];
+  }) => {
+    if (editing) {
+      const saved = await glossary.update(editing.id, values);
+      if (saved) {
+        setIsModalOpen(false);
+        showToast('用語を更新しました', { kind: 'success' });
+      }
+      return;
+    }
+
+    const result = await glossary.create(values);
+    if (!result) return;
+
+    if (result.duplicate) {
+      // 作らずに、既にあるほうを開く。黙って上書きも二重登録もしない
+      showToast('同じ用語が既に登録されています。既存の用語を開きます。', { kind: 'info' });
+      setEditing(result.term);
+      return;
+    }
+
+    setIsModalOpen(false);
+    showToast('辞書に登録しました', { kind: 'success' });
+  };
+
+  const isFiltering =
+    query !== '' || selectedTags.length > 0 || mastery !== 'all' || categoryId !== '';
+
+  return (
+    <div className="space-y-4">
+      {glossary.error && <Banner tone="error">{glossary.error}</Banner>}
+
+      {glossary.truncated && (
+        <Banner tone="warning">
+          表示できる上限を超えています。検索は表示中のぶんだけを見ているので、
+          カテゴリで絞り込んでください。
+        </Banner>
+      )}
+
+      {/* 検索とアクション */}
+      <div className="flex flex-wrap items-center gap-2">
+        <SearchInput
+          value={query}
+          onChange={setQuery}
+          aria-label="用語を検索"
+          placeholder="用語・意味・タグを検索"
+          className="min-w-56 flex-1"
+        />
+        <Button
+          variant="primary"
+          icon={<Plus className="h-4 w-4" aria-hidden />}
+          disabled={categories.length === 0}
+          onClick={() => {
+            setEditing(null);
+            setIsModalOpen(true);
+          }}
+        >
+          用語を追加
+        </Button>
+        <Button
+          variant="secondary"
+          icon={<Sparkles className="h-4 w-4" aria-hidden />}
+          disabled
+          title="次の段階で実装します"
+        >
+          辞書から問題を生成
+        </Button>
+      </div>
+
+      {/* 絞り込み */}
+      <div className="-mx-4 flex [scrollbar-width:none] items-center gap-2 overflow-x-auto px-4 pb-1 [&::-webkit-scrollbar]:hidden">
+        <Segmented
+          label="習得ステータス"
+          size="sm"
+          className="shrink-0"
+          value={mastery}
+          onChange={(value) => setMastery(value as GlossaryFilter['mastery'])}
+          options={[
+            { value: 'all', label: `すべて ${terms.length}` },
+            { value: 'unmastered', label: `苦手 ${counts.unlearned + counts.reviewing}` },
+            { value: 'mastered', label: `マスター ${counts.mastered}` },
+          ]}
+        />
+
+        <FilterMenu
+          label="カテゴリ"
+          value={categoryId}
+          onChange={(value) => {
+            setCategoryId(value);
+            setSelectedTags([]);
+          }}
+          options={categories.map((category) => ({
+            value: category.id,
+            label: category.name,
+            dot: category.color,
+          }))}
+        />
+
+        {tagOptions.slice(0, 12).map(({ tag, count }) => {
+          const active = selectedTags.some(
+            (t) => normalizeForSearch(t) === normalizeForSearch(tag),
+          );
+          return (
+            <button
+              key={tag}
+              type="button"
+              onClick={() => toggleTag(tag)}
+              aria-pressed={active}
+              className={cn(
+                'flex h-8 shrink-0 items-center gap-1.5 rounded-control border px-2.5 text-body transition',
+                active
+                  ? 'border-accent bg-accent-soft text-accent-text'
+                  : 'border-line-strong text-fg-muted hover:bg-row-hover hover:text-fg',
+              )}
+            >
+              #{tag}
+              <span className="text-caption text-fg-subtle tabular-nums">{count}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-3 rounded-card border border-line bg-surface-2 px-4 py-2.5">
+          <span className="text-body text-fg tabular-nums">{selectedIds.size} 件を選択中</span>
+          <button
+            type="button"
+            onClick={() => setSelectedIds(new Set())}
+            className="text-caption text-fg-muted underline-offset-2 transition hover:text-fg hover:underline"
+          >
+            選択を解除
+          </button>
+        </div>
+      )}
+
+      {glossary.isLoading ? (
+        <div className="flex items-center justify-center gap-2 py-16 text-body text-fg-muted">
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+          読み込み中…
+        </div>
+      ) : visible.length === 0 ? (
+        <EmptyState
+          icon={<BookMarked className="h-8 w-8" aria-hidden />}
+          title={isFiltering ? '該当する用語がありません' : 'まだ用語がありません'}
+          description={
+            isFiltering
+              ? '検索語やタグを外すと、ほかの用語が出てきます。'
+              : 'ノートを読みながら気になった言葉を登録していくと、そのまま問題にできます。'
+          }
+        />
+      ) : (
+        <ul className="space-y-2">
+          {visible.map((term) => (
+            <GlossaryTermCard
+              key={term.id}
+              term={term}
+              selected={selectedIds.has(term.id)}
+              suggestions={allTagNames}
+              onToggleSelect={() => toggleSelect(term.id)}
+              onEdit={() => {
+                setEditing(term);
+                setIsModalOpen(true);
+              }}
+              onDelete={() => {
+                setDeleting(term);
+                setDeleteCards(false);
+              }}
+              onSaveInline={async (values) => {
+                const saved = await glossary.update(term.id, values);
+                return saved !== null;
+              }}
+            />
+          ))}
+        </ul>
+      )}
+
+      <GlossaryTermModal
+        open={isModalOpen}
+        editing={editing}
+        categories={categories}
+        suggestions={allTagNames}
+        defaultCategoryId={categoryId || undefined}
+        isSaving={glossary.isSaving}
+        onClose={() => setIsModalOpen(false)}
+        onSubmit={(values) => void handleSubmit(values)}
+      />
+
+      <ConfirmDialog
+        open={deleting !== null}
+        title={`「${deleting?.term ?? ''}」を削除しますか？`}
+        description={
+          deleting && deleting.cardCount > 0
+            ? [
+                `この用語から作ったカードが ${deleting.cardCount} 枚あります。`,
+                '既定ではカードを残します（復習の記録を巻き込まないため）。',
+              ]
+            : ['この用語を辞書から削除します。']
+        }
+        confirmLabel="削除する"
+        onCancel={() => setDeleting(null)}
+        onConfirm={() => {
+          const target = deleting;
+          setDeleting(null);
+          if (target) void glossary.remove(target.id, deleteCards ? 'delete' : 'keep');
+        }}
+      >
+        {deleting && deleting.cardCount > 0 && (
+          <label className="flex items-center gap-2 text-body text-fg">
+            <input
+              type="checkbox"
+              checked={deleteCards}
+              onChange={(event) => setDeleteCards(event.target.checked)}
+              className="h-4 w-4 accent-accent"
+            />
+            カードも一緒に削除する
+          </label>
+        )}
+      </ConfirmDialog>
+    </div>
+  );
+}

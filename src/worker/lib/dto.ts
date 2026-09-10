@@ -1,6 +1,7 @@
 import type {
   CategoryDTO,
   CategoryUsage,
+  GlossaryTermDTO,
   NotebookDTO,
   QuizQuestionDTO,
   StudyLogDTO,
@@ -9,12 +10,14 @@ import type {
 } from '../../shared/types';
 import type {
   Category,
+  GlossaryTerm,
   Notebook,
   QuizQuestion,
   StudyLog,
   Task,
   TimerSession,
 } from '../../db/schema';
+import { deriveMasteryStatus } from '../../shared/glossary-mastery';
 
 /** Date → ISO 文字列。null はそのまま通す。 */
 export function toIso(value: Date | null | undefined): string | null {
@@ -105,9 +108,12 @@ export function toQuizQuestionDto(row: QuizQuestionRow): QuizQuestionDTO {
     categoryColor: row.categoryColor,
     studyLogId: row.studyLogId,
     notebookId: row.notebookId,
+    glossaryTermId: row.glossaryTermId,
     question: row.question,
     answer: row.answer,
     explanation: row.explanation,
+    questionType: row.questionType,
+    choices: Array.isArray(row.choices) ? row.choices : [],
     // json モードのカラムだが、古い行や手書き SQL 由来で配列でない可能性を潰しておく
     tags: Array.isArray(row.tags) ? row.tags : [],
     isMastered: row.isMastered,
@@ -117,6 +123,46 @@ export function toQuizQuestionDto(row: QuizQuestionRow): QuizQuestionDTO {
     dueAt: toIso(row.dueAt),
     intervalDays: row.intervalDays,
     createdAt: isoOrEpoch(row.createdAt),
+  };
+}
+
+/**
+ * `glossarySelectWithStats` が返す形。**`GlossaryTerm` 全体を要求しない。**
+ * termKey・userId は DTO に出さないので、選ばない projection が型エラーにならないよう
+ * `NotebookRow` と同じく Pick で narrow する。
+ */
+export type GlossaryTermRow = Pick<
+  GlossaryTerm,
+  'id' | 'categoryId' | 'notebookId' | 'term' | 'definition' | 'tags' | 'createdAt' | 'updatedAt'
+> &
+  WithCategory & {
+    cardCount: number;
+    masteredCardCount: number;
+    answeredCardCount: number;
+  };
+
+export function toGlossaryTermDto(row: GlossaryTermRow): GlossaryTermDTO {
+  // 集計は SQL 由来で、カードが 0 枚のとき sum() が null を返す
+  const cardCount = Number(row.cardCount ?? 0);
+  const summary = {
+    cardCount,
+    masteredCardCount: Number(row.masteredCardCount ?? 0),
+    answeredCardCount: Number(row.answeredCardCount ?? 0),
+  };
+
+  return {
+    id: row.id,
+    categoryId: row.categoryId,
+    categoryName: row.categoryName,
+    categoryColor: row.categoryColor,
+    notebookId: row.notebookId,
+    term: row.term,
+    definition: row.definition,
+    tags: Array.isArray(row.tags) ? row.tags : [],
+    masteryStatus: deriveMasteryStatus(summary),
+    cardCount,
+    createdAt: isoOrEpoch(row.createdAt),
+    updatedAt: isoOrEpoch(row.updatedAt),
   };
 }
 

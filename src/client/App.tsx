@@ -18,6 +18,7 @@ import { useRevalidateOnFocus } from './hooks/useRevalidateOnFocus';
 import { useNotebooks } from './hooks/useNotebooks';
 import { useElementWidth } from './hooks/useElementWidth';
 import { useNoteTabs } from './hooks/useNoteTabs';
+import { useGlossary } from './hooks/useGlossary';
 import { useNoteSaver } from './hooks/useNoteSaver';
 import { useTasks } from './hooks/useTasks';
 import { usePwaUpdate } from './hooks/usePwaUpdate';
@@ -27,6 +28,7 @@ import NotesTab from './components/NotesTab';
 import TasksTab from './components/TasksTab';
 import NoteTabs from './components/NoteTabs';
 import ReviewTab from './components/ReviewTab';
+import GlossaryTab from './components/GlossaryTab';
 import StatsTab from './components/StatsTab';
 import CategoryManagerModal from './components/CategoryManagerModal';
 import IntegrationsModal from './components/IntegrationsModal';
@@ -105,6 +107,13 @@ export default function App() {
    * 常時走らせると、使っていない機能のために Google を叩き続けることになる。
    */
   const tasks = useTasks({ active: view === 'tasks' });
+  /** 用語辞書。絞り込みは画面側で畳むので、ここは取得と CRUD だけ */
+  const glossary = useGlossary();
+  /**
+   * 辞書を取り直す合図。**復習で「わかった」を押すと習得ステータスが動く**が、
+   * ステータスはカードから導いているので、辞書側は取り直さないと古い値のままになる。
+   */
+  const [glossaryReloadToken, setGlossaryReloadToken] = useState(0);
 
   /**
    * 保存の予約・楽観ロックのトークン・競合を、エディタより長生きさせる。
@@ -542,6 +551,13 @@ export default function App() {
                       onOpenIntegrations={() => setIsIntegrationsOpen(true)}
                     />
                   )}
+                  {view === 'glossary' && (
+                    <GlossaryTab
+                      glossary={glossary}
+                      categories={categories}
+                      reloadToken={glossaryReloadToken}
+                    />
+                  )}
                   {view === 'review' && (
                     <ReviewTab
                       categories={categories}
@@ -552,7 +568,11 @@ export default function App() {
                       onTagChange={setReviewTag}
                       reloadToken={quizReloadToken}
                       nextDueAt={logsData?.stats.quiz.nextDueAt ?? null}
-                      onAnswered={() => void refresh()}
+                      onAnswered={() => {
+                        void refresh();
+                        // 習得ステータスはカードから導くので、辞書側も古くなる
+                        setGlossaryReloadToken((token) => token + 1);
+                      }}
                     />
                   )}
                   {view === 'dashboard' && logsData && <StatsTab data={logsData} />}

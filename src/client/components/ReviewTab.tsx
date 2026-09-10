@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   CalendarClock,
   Check,
-  ChevronDown,
   Download,
   Headphones,
   Loader2,
@@ -22,7 +21,7 @@ import { daysUntil } from '../../shared/srs';
 import { formatDate } from '../lib/format';
 import FlashCard from './FlashCard';
 import SpeechPlayer from './SpeechPlayer';
-import { Banner, IconButton, Popover, Segmented, selectableRow } from '../ui';
+import { Banner, FilterMenu, IconButton, Popover, Segmented } from '../ui';
 
 interface Props {
   categories: CategoryDTO[];
@@ -337,132 +336,6 @@ export default function ReviewTab({
         onClose={() => setIsSpeechOpen(false)}
       />
     </div>
-  );
-}
-
-interface FilterOption {
-  value: string;
-  label: string;
-  dot?: string;
-  count?: number;
-}
-
-/**
- * 1 行に収まる絞り込み。**選択中かどうかがトリガのラベルで分かる**ので、
- * 開かなくても今の条件が読める。中身は今までの chip と同じ並び。
- */
-function FilterMenu({
-  label,
-  value,
-  options,
-  onChange,
-  emptyHint,
-}: {
-  label: string;
-  value: string;
-  options: FilterOption[];
-  onChange: (value: string) => void;
-  emptyHint?: string;
-}) {
-  const selected = options.find((option) => option.value === value);
-
-  return (
-    <Popover
-      role="listbox"
-      trigger={({ open, toggle }) => (
-        <button
-          type="button"
-          onClick={toggle}
-          aria-expanded={open}
-          aria-haspopup="listbox"
-          aria-label={selected ? `${label}: ${selected.label}` : `${label}で絞り込む`}
-          className={cn(
-            'flex h-8 shrink-0 items-center gap-1.5 rounded-control border px-2.5 text-body transition',
-            selected
-              ? 'border-accent bg-accent-soft text-accent-text'
-              : 'border-line-strong text-fg-muted hover:bg-row-hover hover:text-fg',
-          )}
-        >
-          {selected?.dot && (
-            <span
-              className="h-2 w-2 shrink-0 rounded-full"
-              style={{ backgroundColor: selected.dot }}
-              aria-hidden
-            />
-          )}
-          <span className="max-w-[9rem] truncate">{selected ? selected.label : label}</span>
-          <ChevronDown className="h-3.5 w-3.5 shrink-0" aria-hidden />
-        </button>
-      )}
-    >
-      {(close) => (
-        <div className="max-h-72 overflow-y-auto">
-          {options.length === 0 && emptyHint ? (
-            <p className="px-3 py-2 text-caption leading-relaxed text-fg-subtle">{emptyHint}</p>
-          ) : (
-            <>
-              <OptionRow
-                label="すべて"
-                selected={value === ''}
-                onClick={() => {
-                  onChange('');
-                  close();
-                }}
-              />
-              {options.map((option) => (
-                <OptionRow
-                  key={option.value}
-                  label={option.label}
-                  dot={option.dot}
-                  count={option.count}
-                  selected={value === option.value}
-                  onClick={() => {
-                    onChange(option.value);
-                    close();
-                  }}
-                />
-              ))}
-            </>
-          )}
-        </div>
-      )}
-    </Popover>
-  );
-}
-
-function OptionRow({
-  label,
-  dot,
-  count,
-  selected,
-  onClick,
-}: {
-  label: string;
-  dot?: string;
-  count?: number;
-  selected: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="option"
-      aria-selected={selected}
-      onClick={onClick}
-      className={selectableRow(selected, 'flex w-full items-center gap-2 px-3 py-1.5 text-body')}
-    >
-      {dot && (
-        <span
-          className="h-2 w-2 shrink-0 rounded-full"
-          style={{ backgroundColor: dot }}
-          aria-hidden
-        />
-      )}
-      <span className="min-w-0 flex-1 truncate text-left">{label}</span>
-      {count !== undefined && (
-        <span className="shrink-0 text-caption text-fg-subtle tabular-nums">{count}</span>
-      )}
-    </button>
   );
 }
 
