@@ -653,3 +653,143 @@ export async function generateQuestionsFromGlossary(
 
   return value ? { questions: value } : { questions: [], warning };
 }
+
+export interface BulkDefinedTerm {
+  /** 入力した用語名。**入力と完全一致しなければ捨てる** */
+  sourceTerm: string;
+  definition: string;
+  tags: string[];
+}
+
+export interface DefineTermsResult {
+  terms: BulkDefinedTerm[];
+  warning?: string;
+}
+
+const DEFINITIONS_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    terms: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          sourceTerm: { type: Type.STRING, description: '入力した用語名をそのまま書き写す。' },
+          definition: {
+            type: Type.STRING,
+            description: '用語の意味。日本語で2〜3文、200文字以内。',
+          },
+          tags: {
+            type: Type.ARRAY,
+            items: { type: Type.STRING },
+            description: '分野・ジャンルのタグを1〜3個。既存のタグを優先して選ぶ。',
+          },
+        },
+        required: ['sourceTerm', 'definition', 'tags'],
+        propertyOrdering: ['sourceTerm', 'definition', 'tags'],
+      },
+    },
+  },
+  required: ['terms'],
+};
+
+/** 応答を検証する。入力に無い用語・重複・空の意味は捨てる */
+function coerceDefinitions(parsed: unknown, terms: readonly string[]): BulkDefinedTerm[] {
+  if (typeof parsed !== 'object' || parsed === null) return [];
+  const rawList = (parsed as { terms?: unknown }).terms;
+  if (!Array.isArray(rawList)) return [];
+
+  const known = new Set(terms);
+  const used = new Set<string>();
+  const result: BulkDefinedTerm[] = [];
+
+  for (const raw of rawList) {
+    if (typeof raw !== 'object' || raw === null) continue;
+    const item = raw as Record<string, unknown>;
+
+    const sourceTerm = typeof item.sourceTerm === 'string' ? item.sourceTerm.trim() : '';
+    // 貼り付けの取りこぼしに対して、それらしい説明を作ってくることがある
+    if (!known.has(sourceTerm) || used.has(sourceTerm)) continue;
+
+    const definition = typeof item.definition === 'string' ? item.definition.trim() : '';
+    if (!definition) continue;
+
+    used.add(sourceTerm);
+    result.push({
+      sourceTerm,
+      definition: definition.slice(0, MAX_AI_DEFINITION_LENGTH),
+      tags: coerceTags(item.tags),
+    });
+  }
+
+  return result.slice(0, terms.length);
+}
+
+function buildDefineTermsPrompt(
+  terms: readonly string[],
+  existingTags: readonly string[],
+  categoryName: string,
+): string {
+  const list = terms.map((term, index) => `${index + 1}. ${term}`).join('\n');
+
+  /*
+   * 下の 2 行が「まとめて 1 回で呼ぶ」ことの意味そのもの。
+   * - 貼り付けには解釈の取りこぼしが混ざる。それらしい説明を作られるほうが困る
+   * - 1 回で呼べばリスト全体が見えるので、分野ごとにタグを揃えられる（N 回では原理的に無理）
+   */
+  return `あなたは学習者の用語辞書を整える編集者です。
+「${categoryName}」を学んでいる人が、次の用語をまとめて辞書に登録しようとしています。
+
+--- 用語リスト ここから ---
+${list}
+--- 用語リスト ここまで ---
+
+**リストの用語1つにつき、ちょうど1件**の「意味」と「分野タグ」を作ってください。
+sourceTerm には、その用語名をリストからそのまま書き写してください
+（1文字でも変えると対応付けられません）。
+
+制約:
+- definition: 2〜3文で説明する。1文目で「何であるか」を言い切り、残りで役割・使いどころを補う。
+- definition は**200文字以内**。「〜とは、」のような前置きや、同じ内容の言い換えを書かない。
+- **意味の分からない語や、用語になっていない行は、でっち上げずに出力から省く。**
+  貼り付けの取りこぼしが混ざっていることがあり、それらしい説明を作られるほうが困ります。
+- tags: 1〜3個。**まず下の「既存のタグ」から合うものを選ぶ**。
+  合うものが一つも無いときだけ、新しいタグを1個だけ作ってよい。
+  タグは分野名にする（例: 'ネットワーク', 'セキュリティ', 'データベース'）。
+  用語名そのものをタグにしない。
+- **同じ分野の用語には同じタグを付ける。** リストの中でタグが割れないようにする。
+- 出力はすべて日本語で書く。
+
+既存のタグ: ${existingTags.length > 0 ? existingTags.slice(0, MAX_PROMPT_TAGS).join(' / ') : '（まだありません）'}`;
+}
+
+/**
+ * 空の意味をまとめて補う。**1 回の呼び出しでリスト全部を見る。**
+ *
+ * 用語ごとに呼ぶより、同じ分野に同じタグが付く（分野が割れない）のが大きい。
+ * 件数を増やしすぎないのは、応答が途中で切れると `parseJsonSafely` が null を返して
+ * **その回が全滅**するため。危険は件数に比例する（→ MAX_DEFINE_TERMS_PER_REQUEST）。
+ */
+export function defineTermsWithAI(
+  apiKey: string | undefined,
+  /** 意味が空の用語だけ。既に書いてあるものは渡さない */
+  terms: readonly string[],
+  existingTags: readonly string[],
+  categoryName: string,
+): Promise<DefineTermsResult> {
+  if (terms.length === 0) return Promise.resolve({ terms: [] });
+
+  return callGeminiJson(
+    apiKey,
+    buildDefineTermsPrompt(terms, existingTags, categoryName),
+    DEFINITIONS_SCHEMA,
+    (parsed) => {
+      const defined = coerceDefinitions(parsed, terms);
+      return defined.length > 0 ? defined : null;
+    },
+    {
+      missingKey: 'GEMINI_API_KEY が未設定のため補完できませんでした。',
+      unusable: 'AI の応答から意味を取り出せませんでした。もう一度試してください。',
+    },
+  ).then(({ value, warning }) => ({ terms: value ?? [], warning }));
+}

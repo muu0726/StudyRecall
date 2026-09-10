@@ -1,6 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, ClipboardList, Trash2 } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowLeft, ClipboardList, Trash2, Wand2, X } from 'lucide-react';
 import type { CategoryDTO, GlossaryTermDTO } from '../../shared/types';
+import { MAX_DEFINE_TERMS_PER_REQUEST } from '../../shared/types';
+import { api } from '../lib/api';
+import { commitTags, removeTag } from '../lib/tag-input';
 import { normalizeForSearch } from '../../shared/glossary-search';
 import {
   BULK_SKIP_LABELS,
@@ -33,6 +36,11 @@ const PARSE_SKIP_LABELS: Record<BulkParseSkipReason, string> = {
   overLimit: `一度に読み込めるのは ${BULK_MAX_LINES} 行までです`,
 };
 
+/** 表の 1 行。解釈の結果に、AI が付けたタグを足したもの */
+export interface BulkRow extends ParsedBulkRow {
+  tags: string[];
+}
+
 interface Props {
   open: boolean;
   categories: CategoryDTO[];
@@ -58,7 +66,15 @@ export default function GlossaryBulkAddModal({
 }: Props) {
   const [categoryId, setCategoryId] = useState('');
   const [raw, setRaw] = useState('');
-  const [rows, setRows] = useState<ParsedBulkRow[]>([]);
+  /** 表の行。AI が付けたタグはここに乗る（解釈の段階では付かない） */
+  const [rows, setRows] = useState<BulkRow[]>([]);
+  const [isAssisting, setIsAssisting] = useState(false);
+  const [assistNotice, setAssistNotice] = useState<string | null>(null);
+  /**
+   * 一度でも補完を投げた用語。
+   * **この経路は行を作らないので月次の上限が連打を止めない**（GlossaryTermModal と同じ理由）。
+   */
+  const assistAttempted = useRef(new Set<string>());
   /** 表に進んだか。false なら貼り付けの画面 */
   const [reviewing, setReviewing] = useState(false);
 
@@ -68,6 +84,9 @@ export default function GlossaryBulkAddModal({
     setRaw('');
     setRows([]);
     setReviewing(false);
+    setAssistNotice(null);
+    setIsAssisting(false);
+    assistAttempted.current = new Set();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 開いた時点の値で初期化する
   }, [open]);
 
@@ -103,15 +122,55 @@ export default function GlossaryBulkAddModal({
   }, [prepared]);
 
   const goReview = () => {
-    setRows(preview.rows);
+    setRows(preview.rows.map((row) => ({ ...row, tags: [] })));
     setReviewing(true);
   };
 
-  const updateRow = (id: string, patch: Partial<ParsedBulkRow>) => {
+  const updateRow = (id: string, patch: Partial<BulkRow>) => {
     setRows((current) => current.map((row) => (row.id === id ? { ...row, ...patch } : row)));
   };
 
-  const canSubmit = !isSaving && categoryId !== '' && prepared.accepted.length > 0;
+  /** まだ意味が空で、まだ投げていない行 */
+  const fillable = rows.filter(
+    (row) =>
+      row.definition.trim() === '' &&
+      row.term.trim() !== '' &&
+      !assistAttempted.current.has(row.term.trim()),
+  );
+  const assistTargets = fillable.slice(0, MAX_DEFINE_TERMS_PER_REQUEST);
+
+  const assist = async () => {
+    setIsAssisting(true);
+    setAssistNotice(null);
+    const terms = assistTargets.map((row) => row.term.trim());
+    for (const term of terms) assistAttempted.current.add(term);
+
+    try {
+      const result = await api.glossaryBulkAssist({ categoryId, terms });
+      const byTerm = new Map(result.terms.map((item) => [item.term, item]));
+
+      setRows((current) =>
+        current.map((row) => {
+          const filled = byTerm.get(row.term.trim());
+          // **まだ空の行にだけ入れる。** 飛んでいる最中に打った内容を上書きしない
+          if (!filled || row.definition.trim() !== '') return row;
+          return {
+            ...row,
+            definition: filled.definition,
+            tags: filled.tags.length > 0 ? commitTags([], filled.tags.join(',')) : row.tags,
+          };
+        }),
+      );
+      setAssistNotice(result.warning ?? null);
+    } catch (error) {
+      // 上限（429）もここに来る。表は残したまま知らせるだけ
+      setAssistNotice(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsAssisting(false);
+    }
+  };
+
+  const canSubmit = !isSaving && !isAssisting && categoryId !== '' && prepared.accepted.length > 0;
 
   return (
     <Modal
@@ -148,6 +207,7 @@ export default function GlossaryBulkAddModal({
                   prepared.accepted.map((term) => ({
                     term: term.term,
                     definition: term.definition,
+                    tags: rows[term.index]?.tags ?? [],
                   })),
                 )
               }
@@ -201,6 +261,11 @@ export default function GlossaryBulkAddModal({
             isSaving={isSaving}
             truncated={truncated}
             acceptedCount={prepared.accepted.length}
+            fillableCount={fillable.length}
+            assistCount={assistTargets.length}
+            isAssisting={isAssisting}
+            assistNotice={assistNotice}
+            onAssist={() => void assist()}
             onChange={updateRow}
             onRemove={(id) => setRows((current) => current.filter((row) => row.id !== id))}
           />
@@ -273,15 +338,27 @@ function ReviewStep({
   isSaving,
   truncated,
   acceptedCount,
+  fillableCount,
+  assistCount,
+  isAssisting,
+  assistNotice,
+  onAssist,
   onChange,
   onRemove,
 }: {
-  rows: ParsedBulkRow[];
+  rows: BulkRow[];
   problems: Map<number, BulkSkipReason>;
   isSaving: boolean;
   truncated: boolean;
   acceptedCount: number;
-  onChange: (id: string, patch: Partial<ParsedBulkRow>) => void;
+  /** 意味が空で、まだ補完を投げていない行の数 */
+  fillableCount: number;
+  /** そのうち今回投げる数（上限で切ったあと） */
+  assistCount: number;
+  isAssisting: boolean;
+  assistNotice: string | null;
+  onAssist: () => void;
+  onChange: (id: string, patch: Partial<BulkRow>) => void;
   onRemove: (id: string) => void;
 }) {
   const skippedCount = rows.length - acceptedCount;
@@ -304,6 +381,33 @@ function ReviewStep({
       <p className="mt-0.5 text-caption text-fg-muted">
         ここで直せます。意味は空のままでも登録できます。
       </p>
+
+      {fillableCount > 0 && (
+        <div className="mt-3">
+          <Button
+            variant="secondary"
+            icon={<Wand2 className="h-4 w-4" aria-hidden />}
+            loading={isAssisting}
+            disabled={isSaving}
+            onClick={onAssist}
+          >
+            空の意味を AI で埋める（{assistCount} 件）
+          </Button>
+          {fillableCount > assistCount && (
+            <p className="mt-1.5 text-caption text-fg-subtle tabular-nums">
+              一度に埋められるのは {MAX_DEFINE_TERMS_PER_REQUEST} 件までです。 残り{' '}
+              {fillableCount - assistCount} 件は、もう一度押すと続きを埋めます。
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* 上限（429）もここに出る。表は残したまま知らせるだけ */}
+      {assistNotice && (
+        <p className="mt-2 text-caption text-warning" role="status">
+          {assistNotice}
+        </p>
+      )}
 
       {/* 見出し。md 未満では行が縦に積まれるので出さない */}
       <div className="mt-3 hidden gap-2 px-1 text-caption text-fg-subtle md:grid md:grid-cols-[minmax(8rem,1fr)_2.2fr_auto]">
@@ -347,6 +451,29 @@ function ReviewStep({
                   onClick={() => onRemove(row.id)}
                 />
               </div>
+              {/* AI が付けたタグ。ここでは外せるだけ（足すのは登録後にカードから） */}
+              {row.tags.length > 0 && (
+                <div className="mt-1 flex flex-wrap gap-1.5 px-1">
+                  {row.tags.map((tag, tagIndex) => (
+                    <span
+                      key={tag}
+                      className="flex items-center gap-1 rounded-full bg-accent-soft py-0.5 pr-1 pl-2 text-caption font-medium text-accent-text"
+                    >
+                      #{tag}
+                      <button
+                        type="button"
+                        disabled={isSaving}
+                        onClick={() => onChange(row.id, { tags: removeTag(row.tags, tagIndex) })}
+                        aria-label={`${row.term} のタグ ${tag} を外す`}
+                        className="flex h-4 w-4 items-center justify-center rounded-full transition hover:bg-accent/20 disabled:cursor-not-allowed"
+                      >
+                        <X className="h-3 w-3" aria-hidden />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+
               {problem && (
                 <p className="mt-1 px-1 text-caption text-warning">{BULK_SKIP_LABELS[problem]}</p>
               )}

@@ -22,6 +22,8 @@ import type {
   GenerateNotebookQuizResponse,
   GlossaryAiAssistRequest,
   GlossaryAiAssistResponse,
+  GlossaryBulkAssistRequest,
+  GlossaryBulkAssistResponse,
   GlossaryDuplicateResponse,
   GlossarySyncResponse,
   GlossaryTermResponse,
@@ -309,6 +311,16 @@ export const api = {
    */
   createGlossaryTerms: (body: CreateGlossaryTermsRequest) =>
     request<CreateGlossaryTermsResponse>('/api/glossary/bulk', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  /**
+   * 空の意味をまとめて補う。**1 リクエストで Gemini 1 回。**
+   * 上限（MAX_DEFINE_TERMS_PER_REQUEST）を超える数は送らないこと。
+   */
+  glossaryBulkAssist: (body: GlossaryBulkAssistRequest) =>
+    request<GlossaryBulkAssistResponse>('/api/glossary/bulk/ai-assist', {
       method: 'POST',
       body: JSON.stringify(body),
     }),

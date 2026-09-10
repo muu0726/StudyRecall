@@ -5,7 +5,12 @@ import { getDb, type AppEnv, type Db } from '../lib/db';
 import { toGlossaryTermDto } from '../lib/dto';
 import { newId } from '../lib/ids';
 import { glossaryCardsJoin, glossarySelectWithStats } from '../lib/queries';
-import { MAX_PROMPT_TAGS, defineTermWithAI, generateQuestionsFromGlossary } from '../lib/gemini';
+import {
+  MAX_PROMPT_TAGS,
+  defineTermWithAI,
+  defineTermsWithAI,
+  generateQuestionsFromGlossary,
+} from '../lib/gemini';
 import { insertQuizQuestions } from '../lib/quiz-insert';
 import { insertGlossaryTerms } from '../lib/glossary-insert';
 import { MAX_BULK_TERMS, prepareBulkTerms, type BulkTermInput } from '../../shared/glossary-bulk';
@@ -26,6 +31,7 @@ import {
   MAX_DEFINITION_LENGTH,
   MAX_TAGS_PER_TERM,
   GLOSSARY_SYNC_MIN_INTERVAL_MS,
+  MAX_DEFINE_TERMS_PER_REQUEST,
   MAX_GLOSSARY_GENERATE_TERMS,
   MAX_TERM_LENGTH,
   type CreateGlossaryTermsRequest,
@@ -34,6 +40,8 @@ import {
   type GenerateGlossaryCardsRequest,
   type GenerateGlossaryCardsResponse,
   type GlossaryAiAssistRequest,
+  type GlossaryBulkAssistRequest,
+  type GlossaryBulkAssistResponse,
   type GlossaryAiAssistResponse,
   type DeleteGlossaryTermResponse,
   type GlossaryDuplicateResponse,
@@ -559,6 +567,65 @@ export const glossaryRoute = new Hono<AppEnv>()
       skipped: skipped.sort((a, b) => a.index - b.index),
     };
     return c.json(response, 201);
+  })
+
+  /**
+   * 空の意味をまとめて補う。**保存はしない。**
+   *
+   * **1 回の呼び出しでリスト全部を見る。** 用語ごとに呼ぶより、
+   * 同じ分野に同じタグが付く（分野が割れない）のが大きい。
+   *
+   * 上限に当たったら 429。`/ai-assist` の複数版そのものなので、
+   * 単数と複数で契約が食い違わないようにする
+   * （`/generate-cards` が 200+warning なのは「保存が本体で生成はおまけ」だから。ここは何も保存しない）。
+   */
+  .post('/bulk/ai-assist', async (c) => {
+    const body = await c.req.json<Partial<GlossaryBulkAssistRequest>>().catch(() => null);
+
+    const categoryId = typeof body?.categoryId === 'string' ? body.categoryId : '';
+    const terms = Array.isArray(body?.terms)
+      ? body.terms.filter((term): term is string => typeof term === 'string' && term.trim() !== '')
+      : [];
+
+    if (!categoryId) return c.json({ error: 'categoryId は必須です' }, 400);
+    if (terms.length === 0) return c.json({ error: '用語を入力してください' }, 400);
+    if (terms.length > MAX_DEFINE_TERMS_PER_REQUEST) {
+      return c.json(
+        { error: `一度に補完できるのは ${MAX_DEFINE_TERMS_PER_REQUEST} 件までです` },
+        400,
+      );
+    }
+
+    const db = getDb(c.env);
+    const userId = c.get('userId');
+
+    const [category] = await db
+      .select({ name: categories.name })
+      .from(categories)
+      .where(and(eq(categories.id, categoryId), eq(categories.userId, userId)))
+      .limit(1);
+    if (!category) return c.json({ error: '指定されたカテゴリが見つかりません' }, 404);
+
+    const quota = await getMonthlyQuota(db, userId);
+    if (quota.exceeded) return c.json({ error: quotaWarning(quota) }, 429);
+
+    const existingTags = await listUserTags(db, userId);
+    const result = await defineTermsWithAI(
+      c.env.GEMINI_API_KEY,
+      terms.map((term) => term.trim()),
+      existingTags,
+      category.name,
+    );
+
+    const response: GlossaryBulkAssistResponse = {
+      terms: result.terms.map((term) => ({
+        term: term.sourceTerm,
+        definition: term.definition,
+        tags: term.tags,
+      })),
+      warning: result.warning,
+    };
+    return c.json(response);
   })
 
   .put('/:id', async (c) => {
