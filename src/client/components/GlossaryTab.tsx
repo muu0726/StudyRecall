@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BookMarked, Loader2, Plus, Sparkles } from 'lucide-react';
-import type { CategoryDTO, GlossaryTermDTO } from '../../shared/types';
+import type { CategoryDTO, GlossaryTermDTO, QuestionType } from '../../shared/types';
+import { api } from '../lib/api';
 import {
   collectTags,
   filterGlossaryTerms,
@@ -12,6 +13,7 @@ import type { GlossaryApi } from '../hooks/useGlossary';
 import { cn } from '../lib/cn';
 import { Banner, Button, EmptyState, FilterMenu, SearchInput, Segmented } from '../ui';
 import ConfirmDialog from './ConfirmDialog';
+import GenerateFromGlossaryModal from './GenerateFromGlossaryModal';
 import GlossaryTermCard from './GlossaryTermCard';
 import GlossaryTermModal from './GlossaryTermModal';
 import { useToast } from './Toast';
@@ -38,9 +40,20 @@ interface Props {
    * ここで知らせないと数字が古いまま残る（意味の手直しでは動かないので呼ばない）。
    */
   onTermsChanged: () => void;
+  /**
+   * サイドバーの「用語を追加」から開く合図。増えたら追加ダイアログを出す。
+   * boolean にすると、閉じたあとに親へ戻す往復が要る。
+   */
+  openAddToken: number;
 }
 
-export default function GlossaryTab({ glossary, categories, reloadToken, onTermsChanged }: Props) {
+export default function GlossaryTab({
+  glossary,
+  categories,
+  reloadToken,
+  onTermsChanged,
+  openAddToken,
+}: Props) {
   const { showToast } = useToast();
 
   const [query, setQuery] = useState('');
@@ -53,10 +66,19 @@ export default function GlossaryTab({ glossary, categories, reloadToken, onTerms
   const [editing, setEditing] = useState<GlossaryTermDTO | null>(null);
   const [deleting, setDeleting] = useState<GlossaryTermDTO | null>(null);
   const [deleteCards, setDeleteCards] = useState(false);
+  const [isGenerateOpen, setIsGenerateOpen] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   useEffect(() => {
     void glossary.reload();
   }, [glossary.reload, reloadToken]);
+
+  useEffect(() => {
+    // 初回（0）では開かない。押されたときだけ増える
+    if (openAddToken === 0) return;
+    setEditing(null);
+    setIsModalOpen(true);
+  }, [openAddToken]);
 
   const { terms } = glossary;
 
@@ -127,6 +149,35 @@ export default function GlossaryTab({ glossary, categories, reloadToken, onTerms
     showToast('辞書に登録しました', { kind: 'success' });
   };
 
+  const generate = async (termIds: string[], questionType: QuestionType) => {
+    setIsGenerating(true);
+    try {
+      const result = await api.generateGlossaryCards({ termIds, questionType });
+      setIsGenerateOpen(false);
+      setSelectedIds(new Set());
+      // カードが増えると習得ステータスの母数が変わるので、辞書も取り直す
+      await glossary.reload();
+      onTermsChanged();
+
+      if (result.questions.length === 0) {
+        showToast(result.warning ?? '問題を作れませんでした', { kind: 'error' });
+      } else {
+        showToast(
+          result.warning
+            ? `${result.questions.length} 問を作りました（${result.warning}）`
+            : `${result.questions.length} 問を作りました。フラッシュカードで復習できます。`,
+          { kind: 'success' },
+        );
+      }
+    } catch (generateError) {
+      showToast(generateError instanceof Error ? generateError.message : String(generateError), {
+        kind: 'error',
+      });
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   const isFiltering =
     query !== '' || selectedTags.length > 0 || mastery !== 'all' || categoryId !== '';
 
@@ -164,8 +215,8 @@ export default function GlossaryTab({ glossary, categories, reloadToken, onTerms
         <Button
           variant="secondary"
           icon={<Sparkles className="h-4 w-4" aria-hidden />}
-          disabled
-          title="次の段階で実装します"
+          disabled={terms.length === 0}
+          onClick={() => setIsGenerateOpen(true)}
         >
           辞書から問題を生成
         </Button>
@@ -277,6 +328,16 @@ export default function GlossaryTab({ glossary, categories, reloadToken, onTerms
           ))}
         </ul>
       )}
+
+      <GenerateFromGlossaryModal
+        open={isGenerateOpen}
+        filtered={visible}
+        all={terms}
+        selectedIds={selectedIds}
+        isGenerating={isGenerating}
+        onClose={() => setIsGenerateOpen(false)}
+        onGenerate={(termIds, questionType) => void generate(termIds, questionType)}
+      />
 
       <GlossaryTermModal
         open={isModalOpen}

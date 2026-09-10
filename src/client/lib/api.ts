@@ -15,13 +15,14 @@ import type {
   CreateStudyLogResponse,
   CreateGlossaryTermRequest,
   DeleteGlossaryTermResponse,
+  GenerateGlossaryCardsRequest,
+  GenerateGlossaryCardsResponse,
   GenerateNotebookQuizResponse,
   GlossaryAiAssistRequest,
   GlossaryAiAssistResponse,
   GlossaryDuplicateResponse,
   GlossaryTermResponse,
   GlossaryTermsResponse,
-  ManualAddQuizResponse,
   UpdateGlossaryTermRequest,
   NotebookDTO,
   NotebookResponse,
@@ -256,12 +257,6 @@ export const api = {
       body: JSON.stringify({ correct }),
     }),
 
-  manualAddQuiz: (body: { categoryId: string; term: string; description: string }) =>
-    request<ManualAddQuizResponse>('/api/quizzes/manual-add', {
-      method: 'POST',
-      body: JSON.stringify(body),
-    }),
-
   // --- タグ ---
   listTags: () => request<TagsResponse>('/api/tags'),
 
@@ -294,6 +289,13 @@ export const api = {
    */
   glossaryAiAssist: (body: GlossaryAiAssistRequest) =>
     request<GlossaryAiAssistResponse>('/api/glossary/ai-assist', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  /** 選んだ用語からカードを作る。**対象は id で送る**（サーバー側で選び直さない） */
+  generateGlossaryCards: (body: GenerateGlossaryCardsRequest) =>
+    request<GenerateGlossaryCardsResponse>('/api/glossary/generate-cards', {
       method: 'POST',
       body: JSON.stringify(body),
     }),

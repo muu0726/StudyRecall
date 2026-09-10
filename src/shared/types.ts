@@ -209,18 +209,6 @@ export interface QuizResultResponse {
   question: QuizQuestionDTO;
 }
 
-/** 用語のクイック追加 */
-export interface ManualAddQuizRequest {
-  categoryId: string;
-  term: string;
-  description: string;
-}
-
-export interface ManualAddQuizResponse {
-  question: QuizQuestionDTO | null;
-  warning?: string;
-}
-
 // --- タグ -------------------------------------------------------------------
 
 export interface TagsResponse {
@@ -308,6 +296,21 @@ export interface GlossaryAiAssistResponse {
   definition: string;
   tags: string[];
   /** 補完できなかった理由。**入力は消さずにそのまま残す** */
+  warning?: string;
+}
+
+/** 1 回の生成で扱える用語の数。1 用語 = 1 問 */
+export const MAX_GLOSSARY_GENERATE_TERMS = 10;
+
+export interface GenerateGlossaryCardsRequest {
+  /** 対象の用語。**画面で選ばれたものをそのまま送る**（サーバー側で選び直さない） */
+  termIds: string[];
+  questionType: QuestionType;
+}
+
+export interface GenerateGlossaryCardsResponse {
+  questions: QuizQuestionDTO[];
+  /** 生成できなかった理由。カードが 0 枚でもエラーにはしない */
   warning?: string;
 }
 

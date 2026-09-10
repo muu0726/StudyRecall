@@ -36,7 +36,6 @@ import RestoreBackupDialog from './components/RestoreBackupDialog';
 import PrintableNote from './components/PrintableNote';
 import DeleteCategoryDialog from './components/DeleteCategoryDialog';
 import CreateCategoryDialog from './components/CreateCategoryDialog';
-import AddTermModal from './components/AddTermModal';
 import MoveNoteDialog from './components/MoveNoteDialog';
 import ConfirmDialog from './components/ConfirmDialog';
 import TrashDialog from './components/TrashDialog';
@@ -91,7 +90,8 @@ export default function App() {
   const [isCategoryOpen, setIsCategoryOpen] = useState(false);
   /** ツリーの「ノート」見出しの ＋ から開く、フォルダを作るだけのダイアログ */
   const [isCreateCategoryOpen, setIsCreateCategoryOpen] = useState(false);
-  const [isAddTermOpen, setIsAddTermOpen] = useState(false);
+  /** サイドバーの「用語を追加」から辞書のダイアログを開く合図 */
+  const [addTermToken, setAddTermToken] = useState(0);
   const [isTrashOpen, setIsTrashOpen] = useState(false);
   const [isIntegrationsOpen, setIsIntegrationsOpen] = useState(false);
 
@@ -194,8 +194,13 @@ export default function App() {
     setIsIntegrationsOpen(true);
   }, []);
 
+  /*
+   * 用語のダイアログを除外条件から外してある。旧 AddTermModal は categories を
+   * 依存に入れていて、取得のたびに選択中のカテゴリが戻っていた。
+   * 新しいダイアログは開いた時点の値だけで初期化するので、取得では動かない。
+   */
   const { markFetched } = useRevalidateOnFocus(() => refresh(), {
-    enabled: !isCategoryOpen && !isAddTermOpen,
+    enabled: !isCategoryOpen,
   });
   markFetchedRef.current = markFetched;
 
@@ -426,8 +431,9 @@ export default function App() {
           activeTag={reviewTag}
           onSelectTag={handleSelectTag}
           onAddTerm={() => {
-            setIsAddTermOpen(true);
-            setDrawerOpen(false);
+            // 辞書の画面へ連れていってから、その画面のダイアログを開く
+            goTo('glossary');
+            setAddTermToken((token) => token + 1);
           }}
           onManageCategories={() => {
             setIsCategoryOpen(true);
@@ -556,7 +562,12 @@ export default function App() {
                       glossary={glossary}
                       categories={categories}
                       reloadToken={glossaryReloadToken}
-                      onTermsChanged={() => void refresh()}
+                      onTermsChanged={() => {
+                        void refresh();
+                        // 生成したカードは復習画面にも出る
+                        setQuizReloadToken((previous) => previous + 1);
+                      }}
+                      openAddToken={addTermToken}
                     />
                   )}
                   {view === 'review' && (
@@ -798,16 +809,6 @@ export default function App() {
           onClose={() => setIsTrashOpen(false)}
           onRestore={(id) => notes.restore(id)}
           onPurge={(id) => notes.purge(id)}
-        />
-
-        <AddTermModal
-          open={isAddTermOpen}
-          categories={categories}
-          onClose={() => setIsAddTermOpen(false)}
-          onAdded={() => {
-            setQuizReloadToken((previous) => previous + 1);
-            void refresh();
-          }}
         />
 
         {/* タイマー画面には同じ情報が大きく出ているので、そこでは出さない */}

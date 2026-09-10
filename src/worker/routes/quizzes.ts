@@ -3,17 +3,9 @@ import { and, asc, desc, eq, isNull, lte, or, sql, type SQL } from 'drizzle-orm'
 import { categories, quizQuestions } from '../../db/schema';
 import { getDb, type AppEnv } from '../lib/db';
 import { toQuizQuestionDto } from '../lib/dto';
-import { newId } from '../lib/ids';
 import { quizSelectWithCategory } from '../lib/queries';
-import { generateQuizFromTerm } from '../lib/gemini';
-import { getMonthlyQuota, quotaWarning } from '../lib/quota';
 import { nextSchedule } from '../../shared/srs';
-import {
-  MASTERY_THRESHOLD,
-  type ManualAddQuizRequest,
-  type ManualAddQuizResponse,
-  type QuizResultRequest,
-} from '../../shared/types';
+import { MASTERY_THRESHOLD, type QuizResultRequest } from '../../shared/types';
 
 const QUIZ_LIMIT = 200;
 
@@ -62,77 +54,6 @@ export const quizzesRoute = new Hono<AppEnv>()
   })
 
   /** 用語のクイック追加。Gemini で 1 問だけ生成して保存する。 */
-  .post('/manual-add', async (c) => {
-    const body = await c.req.json<Partial<ManualAddQuizRequest>>().catch(() => null);
-
-    const categoryId = typeof body?.categoryId === 'string' ? body.categoryId : '';
-    const term = typeof body?.term === 'string' ? body.term.trim() : '';
-    const description = typeof body?.description === 'string' ? body.description.trim() : '';
-
-    if (!categoryId) return c.json({ error: 'categoryId は必須です' }, 400);
-    if (!term) return c.json({ error: 'term は必須です' }, 400);
-    if (!description) return c.json({ error: 'description は必須です' }, 400);
-
-    const db = getDb(c.env);
-    const userId = c.get('userId');
-
-    const [category] = await db
-      .select()
-      .from(categories)
-      .where(and(eq(categories.id, categoryId), eq(categories.userId, userId)))
-      .limit(1);
-
-    if (!category) return c.json({ error: '指定されたカテゴリが見つかりません' }, 404);
-
-    // 用語のクイック追加は生成が本体なので、上限に当たったら断る（保存するものが無い）
-    const quota = await getMonthlyQuota(db, userId);
-    if (quota.exceeded) {
-      return c.json({ error: quotaWarning(quota) }, 429);
-    }
-
-    const { questions, warning } = await generateQuizFromTerm(
-      c.env.GEMINI_API_KEY,
-      term,
-      description,
-      category.name,
-    );
-
-    const generated = questions[0];
-    if (!generated) {
-      // 生成できなかった場合は保存しない。用語追加は生成が本体のため。
-      const failed: ManualAddQuizResponse = {
-        question: null,
-        warning: warning ?? '問題を生成できませんでした。',
-      };
-      return c.json(failed, 502);
-    }
-
-    const [saved] = await db
-      .insert(quizQuestions)
-      .values({
-        id: newId('qz'),
-        userId,
-        categoryId,
-        // 学習記録にもノートにも属さない、手動追加の問題
-        studyLogId: null,
-        notebookId: null,
-        question: generated.question,
-        answer: generated.answer,
-        explanation: generated.explanation || null,
-        tags: generated.tags,
-      })
-      .returning();
-
-    const response: ManualAddQuizResponse = {
-      question: toQuizQuestionDto({
-        ...saved,
-        categoryName: category.name,
-        categoryColor: category.color,
-      }),
-    };
-    return c.json(response, 201);
-  })
-
   .post('/:id/result', async (c) => {
     const id = c.req.param('id');
     const body = await c.req.json<Partial<QuizResultRequest>>().catch(() => null);

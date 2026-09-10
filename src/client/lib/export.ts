@@ -38,7 +38,18 @@ export function buildAnkiCsv(questions: QuizQuestionDTO[]): string {
     text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
   const lines = questions.map((q) => {
-    const front = escapeHtml(q.question);
+    /*
+     * 4択は**選択肢まで書かないと Anki 側で答えられない**（choices 列は向こうに無い）。
+     * 問題文の下に番号付きで並べて 1 枚のカードに収める。
+     * 穴埋めは ____ がそのまま出れば成立するので、何もしない。
+     */
+    const front =
+      q.questionType === 'quiz' && q.choices.length > 0
+        ? [
+            escapeHtml(q.question),
+            ...q.choices.map((choice, index) => `${index + 1}. ${escapeHtml(choice)}`),
+          ].join('<br>')
+        : escapeHtml(q.question);
     const back = q.explanation
       ? `${escapeHtml(q.answer)}<br><br>${escapeHtml(q.explanation)}`
       : escapeHtml(q.answer);

@@ -1,19 +1,24 @@
 import { Hono } from 'hono';
-import { and, desc, eq, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, ne, sql } from 'drizzle-orm';
 import { categories, glossaryTerms, quizQuestions } from '../../db/schema';
 import { getDb, type AppEnv, type Db } from '../lib/db';
 import { toGlossaryTermDto } from '../lib/dto';
 import { newId } from '../lib/ids';
 import { glossaryCardsJoin, glossarySelectWithStats } from '../lib/queries';
-import { MAX_PROMPT_TAGS, defineTermWithAI } from '../lib/gemini';
+import { MAX_PROMPT_TAGS, defineTermWithAI, generateQuestionsFromGlossary } from '../lib/gemini';
+import { insertQuizQuestions } from '../lib/quiz-insert';
+import { toQuizQuestionDto } from '../lib/dto';
 import { getMonthlyQuota, quotaWarning } from '../lib/quota';
 import { normalizeForSearch } from '../../shared/glossary-search';
 import {
   GLOSSARY_LIMIT,
   MAX_DEFINITION_LENGTH,
   MAX_TAGS_PER_TERM,
+  MAX_GLOSSARY_GENERATE_TERMS,
   MAX_TERM_LENGTH,
   type CreateGlossaryTermRequest,
+  type GenerateGlossaryCardsRequest,
+  type GenerateGlossaryCardsResponse,
   type GlossaryAiAssistRequest,
   type GlossaryAiAssistResponse,
   type DeleteGlossaryTermResponse,
@@ -278,6 +283,130 @@ export const glossaryRoute = new Hono<AppEnv>()
       warning: result.warning,
     };
     return c.json(response);
+  })
+
+  /**
+   * 選んだ用語からカードを作る。
+   *
+   * **対象はクライアントが選んで id で送る。** サーバーで条件から選び直すと、
+   * 画面に出ている件数と作られる件数が食い違いうる。
+   *
+   * 生成は 1 カテゴリぶんずつ回す。プロンプトにカテゴリ名を載せているのと、
+   * カードの categoryId が用語ごとに違うため。
+   */
+  .post('/generate-cards', async (c) => {
+    const body = await c.req.json<Partial<GenerateGlossaryCardsRequest>>().catch(() => null);
+
+    const termIds = Array.isArray(body?.termIds)
+      ? body.termIds.filter((id): id is string => typeof id === 'string')
+      : [];
+    const questionType =
+      body?.questionType === 'cloze' || body?.questionType === 'quiz' ? body.questionType : 'qa';
+
+    if (termIds.length === 0) return c.json({ error: '用語を選んでください' }, 400);
+    if (termIds.length > MAX_GLOSSARY_GENERATE_TERMS) {
+      return c.json(
+        { error: `一度に生成できるのは ${MAX_GLOSSARY_GENERATE_TERMS} 件までです` },
+        400,
+      );
+    }
+
+    const db = getDb(c.env);
+    const userId = c.get('userId');
+
+    const rows = await db
+      .select({
+        id: glossaryTerms.id,
+        categoryId: glossaryTerms.categoryId,
+        categoryName: categories.name,
+        categoryColor: categories.color,
+        term: glossaryTerms.term,
+        definition: glossaryTerms.definition,
+        tags: glossaryTerms.tags,
+      })
+      .from(glossaryTerms)
+      .innerJoin(categories, eq(glossaryTerms.categoryId, categories.id))
+      .where(and(eq(glossaryTerms.userId, userId), inArray(glossaryTerms.id, termIds)));
+
+    if (rows.length === 0) return c.json({ error: '指定された用語が見つかりません' }, 404);
+
+    const quota = await getMonthlyQuota(db, userId);
+    if (quota.exceeded) {
+      const exceeded: GenerateGlossaryCardsResponse = {
+        questions: [],
+        warning: quotaWarning(quota),
+      };
+      return c.json(exceeded);
+    }
+
+    // カテゴリごとにまとめる（4択の誤答も同じカテゴリの用語から作りたい）
+    const byCategory = new Map<string, typeof rows>();
+    for (const row of rows) {
+      const group = byCategory.get(row.categoryId);
+      if (group) group.push(row);
+      else byCategory.set(row.categoryId, [row]);
+    }
+
+    const inserts: (typeof quizQuestions.$inferInsert)[] = [];
+    const meta = new Map<string, { categoryName: string; categoryColor: string }>();
+    const warnings: string[] = [];
+
+    for (const group of byCategory.values()) {
+      const first = group[0];
+      if (!first) continue;
+
+      const { questions, warning } = await generateQuestionsFromGlossary(
+        c.env.GEMINI_API_KEY,
+        group.map((row) => ({
+          term: row.term,
+          definition: row.definition,
+          tags: Array.isArray(row.tags) ? row.tags : [],
+        })),
+        questionType,
+        first.categoryName,
+      );
+      if (warning) warnings.push(warning);
+
+      const idByTerm = new Map(group.map((row) => [row.term, row.id]));
+      for (const generated of questions) {
+        const glossaryTermId = idByTerm.get(generated.sourceTerm);
+        // coerce 側で弾いているはずだが、対応付かないものは保存しない
+        if (!glossaryTermId) continue;
+
+        const id = newId('qz');
+        meta.set(id, { categoryName: first.categoryName, categoryColor: first.categoryColor });
+        inserts.push({
+          id,
+          userId,
+          categoryId: first.categoryId,
+          studyLogId: null,
+          notebookId: null,
+          glossaryTermId,
+          question: generated.question,
+          answer: generated.answer,
+          explanation: generated.explanation || null,
+          questionType,
+          choices: generated.choices,
+          tags: generated.tags,
+        });
+      }
+    }
+
+    // D1 のバインド変数上限（100）に当たるので、必ずここを通す
+    const saved = await insertQuizQuestions(db, inserts);
+
+    const response: GenerateGlossaryCardsResponse = {
+      questions: saved.map((row) => {
+        const found = meta.get(row.id);
+        return toQuizQuestionDto({
+          ...row,
+          categoryName: found?.categoryName ?? '',
+          categoryColor: found?.categoryColor ?? '#3b82f6',
+        });
+      }),
+      ...(warnings.length > 0 ? { warning: warnings.join(' ') } : {}),
+    };
+    return c.json(response, 201);
   })
 
   .put('/:id', async (c) => {

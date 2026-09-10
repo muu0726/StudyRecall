@@ -80,6 +80,26 @@ describe('buildAnkiCsv', () => {
   it('空配列なら空文字（ヘッダ行は出さない）', () => {
     expect(buildAnkiCsv([])).toBe('');
   });
+
+  it('4択は選択肢を問題文に並べる（Anki 側に choices 列が無い）', () => {
+    const csv = buildAnkiCsv([
+      question({
+        questionType: 'quiz',
+        question: '次の説明にあてはまる用語はどれか。',
+        answer: 'TCP',
+        choices: ['DNS', 'TCP', 'ARP', 'DHCP'],
+      }),
+    ]);
+    expect(csv).toContain('1. DNS');
+    expect(csv).toContain('2. TCP');
+    expect(csv).toContain('4. DHCP');
+  });
+
+  it('一問一答の書き出しは形式を足す前と変わらない', () => {
+    const csv = buildAnkiCsv([question()]);
+    expect(csv).not.toContain('1. ');
+    expect(csv).toContain('3ウェイハンドシェイクとは？');
+  });
 });
 
 describe('buildNotebookMarkdown', () => {

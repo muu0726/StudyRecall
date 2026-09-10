@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { speechTextOf } from '../../shared/cloze';
 import type { QuizQuestionDTO } from '../../shared/types';
 
 /**
@@ -111,7 +112,8 @@ export function useSpeechQueue(questions: QuizQuestionDTO[]): SpeechQueueState {
         if (!question) break;
 
         setPhase('question');
-        if (!(await speak(question.question, runId))) return;
+        // 穴埋めの ____ をそのまま渡すと「アンダーバー」を4回読む
+        if (!(await speak(speechTextOf(question.question, question.questionType), runId))) return;
 
         setPhase('thinking');
         if (!(await wait(thinkingRef.current * 1000, runId))) return;

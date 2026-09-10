@@ -1,16 +1,17 @@
 import { GoogleGenAI, ThinkingLevel, Type } from '@google/genai';
-import { MAX_GENERATED_QUESTIONS } from '../../shared/types';
+import { MAX_GENERATED_QUESTIONS, type QuestionType } from '../../shared/types';
+import { CLOZE_BLANK, ensureCloze } from '../../shared/cloze';
+import { normalizeChoices } from '../../shared/choices';
 import { describeGeminiError, isRetryable, retryDelayMs } from './gemini-error';
 
 /**
- * 学習メモ・ノート本文・単一用語から一問一答を生成する。
+ * 学習メモ・ノート本文・用語辞書から問題を生成し、用語の意味を補う。
  *
- * 呼び出し側の前提: この関数群は例外を投げない。失敗しても { questions: [], warning }
- * を返し、学習記録やノートの保存という主機能を AI 側の障害に巻き込ませない。
+ * 呼び出し側の前提: この関数群は例外を投げない。失敗しても空の結果と warning を返し、
+ * 学習記録やノートの保存という主機能を AI 側の障害に巻き込ませない。
  *
- * **warning は「生成できなかった理由」だけを書く。** 元の入力が保存されたかどうかは
- * 呼び出し側の事情で、用語のクイック追加のように保存しない経路もある。
- * 保存された旨を添えたい経路は CONTENT_KEPT を自分で足す。
+ * **warning は「できなかった理由」だけを書く。** 元の入力が保存されたかどうかは
+ * 呼び出し側の事情なので、保存済みだと添えたい経路は CONTENT_KEPT を自分で足す。
  */
 
 export interface GeneratedQuestion {
@@ -130,18 +131,6 @@ ${content}
 見出しや箇条書きの記法そのものは問題にせず、内容から出題すること。
 
 ${commonRules(maxQuestions)}`;
-}
-
-function buildSingleTermPrompt(term: string, description: string, categoryName: string): string {
-  return `あなたは学習者の復習を支援する出題者です。
-「${categoryName}」の学習者が、次の用語を復習用に登録しようとしています。
-
-用語: ${term}
-説明: ${description}
-
-この用語について、一問一答形式の問題を【ちょうど1問】作成してください。
-
-${commonRules(1)}`;
 }
 
 /**
@@ -334,16 +323,6 @@ export function generateQuizFromNotebook(
   );
 }
 
-/** 用語＋説明から 1 問だけ生成する */
-export function generateQuizFromTerm(
-  apiKey: string | undefined,
-  term: string,
-  description: string,
-  categoryName: string,
-): Promise<GenerateQuizResult> {
-  return callGemini(apiKey, buildSingleTermPrompt(term, description, categoryName), 1);
-}
-
 // ---------------------------------------------------------------------------
 // 用語辞書の補完
 // ---------------------------------------------------------------------------
@@ -459,4 +438,218 @@ export function defineTermWithAI(
       unusable: 'AI の応答から意味を取り出せませんでした。もう一度試してください。',
     },
   ).then(({ value, warning }) => ({ term: value, warning }));
+}
+
+// ---------------------------------------------------------------------------
+// 用語辞書からの出題（一問一答 / 穴埋め / 4択）
+// ---------------------------------------------------------------------------
+
+export interface GlossarySourceTerm {
+  term: string;
+  definition: string;
+  tags: string[];
+}
+
+export interface GeneratedGlossaryQuestion extends GeneratedQuestion {
+  /** 4択のときだけ 4 要素。正解を必ず 1 つ含む。それ以外は空配列 */
+  choices: string[];
+  /**
+   * どの用語から作ったか。**入力の term と完全一致しなければ捨てる。**
+   *
+   * これが無いと、返ってきた N 問を用語に対応付ける手段が順番しか無くなる。
+   * 順番は保証されないし、モデルは平気で 1 問落とす。
+   */
+  sourceTerm: string;
+}
+
+export interface GenerateGlossaryResult {
+  questions: GeneratedGlossaryQuestion[];
+  warning?: string;
+}
+
+/** 1 回の生成で渡せる用語の数。1 用語 = 1 問 */
+export const MAX_GLOSSARY_TERMS_PER_REQUEST = 10;
+
+const GLOSSARY_RESPONSE_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    questions: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          sourceTerm: { type: Type.STRING, description: '入力した用語名をそのまま書き写す。' },
+          question: { type: Type.STRING, description: '問題文。形式ごとの指示に従う。' },
+          answer: { type: Type.STRING, description: '正解となる用語名のみ。短く。' },
+          explanation: { type: Type.STRING, description: '100文字前後の簡潔な解説。' },
+          choices: {
+            type: Type.ARRAY,
+            items: { type: Type.STRING },
+            description: '4択のときだけ、正解1個＋誤答3個のちょうど4個。他の形式では空配列。',
+          },
+          tags: {
+            type: Type.ARRAY,
+            items: { type: Type.STRING },
+            description: '分野・ジャンルのタグを1〜3個。元の用語のタグをそのまま使ってよい。',
+          },
+        },
+        required: ['sourceTerm', 'question', 'answer', 'explanation', 'choices', 'tags'],
+        propertyOrdering: ['sourceTerm', 'question', 'answer', 'explanation', 'choices', 'tags'],
+      },
+    },
+  },
+  required: ['questions'],
+};
+
+const FORMAT_RULES: Record<QuestionType, string> = {
+  qa: `形式: 一問一答。
+
+制約:
+- question: その用語の定義・役割・特徴を説明する文にする。答えの用語そのものを問題文に含めてはいけない。
+- answer: 正解となる用語名のみを**30文字以内**で短く書く。文章にしない。
+- explanation: **100文字以内**で簡潔に解説する。
+- tags: 元の用語のタグをそのまま使う。無い場合だけ1〜3個付ける。
+- choices: 空配列にする。
+- 出力はすべて日本語で書く。`,
+
+  cloze: `形式: 穴埋め。
+
+制約:
+- question: その用語の意味・役割を説明する1〜2文を書き、**用語そのものを ${CLOZE_BLANK}（半角アンダースコア4個）に置き換える**。
+  ${CLOZE_BLANK} は1問につきちょうど1か所だけ置く。
+- answer: ${CLOZE_BLANK} に入る用語名のみを**30文字以内**で書く。
+- 「${CLOZE_BLANK}とは何か」のような、穴が問いになっていない文を書かない。空欄の前後から答えが推測できる文にする。
+- explanation: **100文字以内**で簡潔に解説する。
+- tags: 元の用語のタグをそのまま使う。無い場合だけ1〜3個付ける。
+- choices: 空配列にする。
+- 出力はすべて日本語で書く。`,
+
+  quiz: `形式: 4択。
+
+制約:
+- question: その用語の定義・役割を説明した文にし、「次の説明にあてはまる用語はどれか。」で始める。
+  答えの用語そのものを問題文に含めてはいけない。
+- answer: 正解の用語名のみを**30文字以内**で書く。
+- choices: **ちょうど4個**。正解を1つ含め、残り3個は**上の用語リストにある他の用語から選ぶ**。
+  リストに使える用語が足りないときだけ、同じ分野のもっともらしい用語を作ってよい。
+  紛らわしさが大事なので、明らかに分野違いのものを混ぜない。同じ語を2回入れない。
+- explanation: **100文字以内**。なぜ他の選択肢では違うのかに1文触れる。
+- tags: 元の用語のタグをそのまま使う。無い場合だけ1〜3個付ける。
+- 出力はすべて日本語で書く。`,
+};
+
+function buildGlossaryPrompt(
+  terms: readonly GlossarySourceTerm[],
+  questionType: QuestionType,
+  categoryName: string,
+): string {
+  const list = terms
+    .map((term, index) => {
+      const lines = [`${index + 1}. ${term.term}`, `   意味: ${term.definition || '（未記入）'}`];
+      if (term.tags.length > 0) lines.push(`   タグ: ${term.tags.join(', ')}`);
+      return lines.join('\n');
+    })
+    .join('\n');
+
+  return `あなたは学習者の復習を支援する出題者です。
+「${categoryName}」を学んでいる人の用語辞書から、${terms.length}問を作成してください。
+
+--- 用語リスト ここから ---
+${list}
+--- 用語リスト ここまで ---
+
+**リストの用語1つにつき、ちょうど1問**を作ってください。
+sourceTerm には、その問題の元になった用語名をリストからそのまま書き写してください
+（1文字でも変えると対応付けられません）。
+入力に含まれない知識を持ち出さず、意味の内容に忠実に作ってください。
+
+${FORMAT_RULES[questionType]}`;
+}
+
+/**
+ * 応答を検証する。**入力に無い用語や、形式を満たせない問題はここで捨てる。**
+ * 直せるものだけ直す（穴埋めの空欄・4択の選択肢）。
+ */
+function coerceGlossaryQuestions(
+  parsed: unknown,
+  terms: readonly GlossarySourceTerm[],
+  questionType: QuestionType,
+): GeneratedGlossaryQuestion[] {
+  if (typeof parsed !== 'object' || parsed === null) return [];
+  const rawList = (parsed as { questions?: unknown }).questions;
+  if (!Array.isArray(rawList)) return [];
+
+  const known = new Map(terms.map((term) => [term.term, term]));
+  // 4択の誤答を埋める材料。同じ生成に含まれる他の用語名
+  const pool = terms.map((term) => term.term);
+
+  const used = new Set<string>();
+  const result: GeneratedGlossaryQuestion[] = [];
+
+  for (const raw of rawList) {
+    if (typeof raw !== 'object' || raw === null) continue;
+    const item = raw as Record<string, unknown>;
+
+    const sourceTerm = typeof item.sourceTerm === 'string' ? item.sourceTerm.trim() : '';
+    const source = known.get(sourceTerm);
+    // 入力に無い用語を返してきたら捨てる（対応付けられないものは保存できない）
+    if (!source || used.has(sourceTerm)) continue;
+
+    const answer = typeof item.answer === 'string' ? item.answer.trim() : '';
+    let question = typeof item.question === 'string' ? item.question.trim() : '';
+    const explanation = typeof item.explanation === 'string' ? item.explanation.trim() : '';
+    if (!question || !answer) continue;
+
+    let choices: string[] = [];
+    if (questionType === 'cloze') {
+      const repaired = ensureCloze(question, answer);
+      if (repaired === null) continue;
+      question = repaired;
+    } else if (questionType === 'quiz') {
+      choices = normalizeChoices(item.choices, answer, pool);
+      if (choices.length === 0) continue;
+    }
+
+    used.add(sourceTerm);
+    result.push({
+      sourceTerm,
+      question,
+      answer,
+      explanation,
+      choices,
+      // 元の用語のタグを引き継ぐ。辞書とカードでタグが割れないようにする
+      tags:
+        source.tags.length > 0
+          ? source.tags.slice(0, MAX_TAGS_PER_QUESTION)
+          : coerceTags(item.tags),
+    });
+  }
+
+  return result.slice(0, terms.length);
+}
+
+/** 用語辞書から、指定した形式で 1 用語 1 問ずつ作る */
+export async function generateQuestionsFromGlossary(
+  apiKey: string | undefined,
+  terms: readonly GlossarySourceTerm[],
+  questionType: QuestionType,
+  categoryName: string,
+): Promise<GenerateGlossaryResult> {
+  if (terms.length === 0) return { questions: [] };
+
+  const { value, warning } = await callGeminiJson(
+    apiKey,
+    buildGlossaryPrompt(terms, questionType, categoryName),
+    GLOSSARY_RESPONSE_SCHEMA,
+    (parsed) => {
+      const questions = coerceGlossaryQuestions(parsed, terms, questionType);
+      return questions.length > 0 ? questions : null;
+    },
+    {
+      missingKey: 'GEMINI_API_KEY が未設定のため問題を生成できませんでした。',
+      unusable: 'AI の応答から問題を抽出できませんでした。用語の意味を書くと作りやすくなります。',
+    },
+  );
+
+  return value ? { questions: value } : { questions: [], warning };
 }
