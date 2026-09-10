@@ -43,6 +43,12 @@ interface Props {
   /** モバイルでサイドバー（ツリー）を開く */
   onOpenExplorer: () => void;
   onQuizChanged: () => void;
+  /** 辞書へのクイック登録で候補に出す既存のタグ */
+  tagSuggestions: string[];
+  /** 辞書に登録済みの用語名。プレビューで印を付ける */
+  glossaryTerms: string[];
+  /** 用語が増えたとき */
+  onGlossaryChanged: () => void;
   onFocusPane: (pane: PaneId) => void;
   onChangeRatio: (ratio: number) => void;
 }
@@ -123,6 +129,9 @@ function Pane({
   onRequestDelete,
   onOpenExplorer,
   onQuizChanged,
+  tagSuggestions,
+  glossaryTerms,
+  onGlossaryChanged,
   onFocusPane,
 }: Props & { notebook: NotebookDTO | null; pane: PaneId }) {
   const content = notebook ? (
@@ -140,6 +149,9 @@ function Pane({
       onRequestDelete={onRequestDelete}
       onOpenExplorer={onOpenExplorer}
       onQuizChanged={onQuizChanged}
+      tagSuggestions={tagSuggestions}
+      glossaryTerms={glossaryTerms}
+      onGlossaryChanged={onGlossaryChanged}
     />
   ) : (
     <div className="flex min-h-64 items-center justify-center rounded-card border border-dashed border-line-strong px-6 py-20 text-center">

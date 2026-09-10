@@ -1,5 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
-import { Eye, Highlighter, Loader2, PanelLeft, Pencil, Save, Sparkles, Trash2 } from 'lucide-react';
+import {
+  BookMarked,
+  Eye,
+  Highlighter,
+  Loader2,
+  PanelLeft,
+  Pencil,
+  Save,
+  Sparkles,
+  Trash2,
+} from 'lucide-react';
 import type { CategoryDTO, NotebookDTO, QuizQuestionDTO } from '../../shared/types';
 import { DEFAULT_GENERATED_QUESTIONS, MAX_GENERATED_QUESTIONS } from '../../shared/types';
 import { api } from '../lib/api';
@@ -11,11 +21,13 @@ import { Banner } from '../ui';
 import { useRevalidateOnFocus } from '../hooks/useRevalidateOnFocus';
 import { decideRecovery, readDraft } from '../lib/note-draft';
 import { toggleMarker } from '../lib/markdown-edit';
+import { readSelection } from '../lib/note-selection';
 import type { NoteSaver } from '../hooks/useNoteSaver';
 import { useToast } from './Toast';
 import ConflictDialog from './ConflictDialog';
 import MarkdownView from './MarkdownView';
 import FlashCard from './FlashCard';
+import GlossaryQuickAddPopover from './GlossaryQuickAddPopover';
 
 /**
  * ノート 1 枚ぶんのエディタ。**`key={noteId}` でマウントする前提**。
@@ -48,6 +60,12 @@ interface Props {
   onOpenExplorer: () => void;
   /** 問題が増減したとき。タグ・統計が動くのでここだけ全体を取り直す */
   onQuizChanged: () => void;
+  /** 候補に出す既存のタグ。辞書へのクイック登録で使う */
+  tagSuggestions: string[];
+  /** 辞書に登録済みの用語名。プレビューで印を付ける */
+  glossaryTerms: string[];
+  /** 用語が増えたとき。サイドバーのジャンルと辞書の件数が動く */
+  onGlossaryChanged: () => void;
 }
 
 export default function NoteEditor({
@@ -61,6 +79,9 @@ export default function NoteEditor({
   onRequestDelete,
   onOpenExplorer,
   onQuizChanged,
+  tagSuggestions,
+  glossaryTerms,
+  onGlossaryChanged,
 }: Props) {
   const { showToast } = useToast();
 
@@ -85,6 +106,8 @@ export default function NoteEditor({
   const [draftTitle, setDraftTitle] = useState(initial.source.title);
   const [draftContent, setDraftContent] = useState(initial.source.content);
   const [draftCategoryId, setDraftCategoryId] = useState(initial.source.categoryId);
+  /** 辞書へのクイック登録。選んだ語が入っているあいだ開く */
+  const [quickAddTerm, setQuickAddTerm] = useState<string | null>(null);
   const [mode, setMode] = useState<'edit' | 'preview'>('edit');
   const [questions, setQuestions] = useState<QuizQuestionDTO[]>([]);
   const [genCount, setGenCount] = useState(DEFAULT_GENERATED_QUESTIONS);
@@ -229,6 +252,28 @@ export default function NoteEditor({
     });
   };
 
+  /**
+   * 選択範囲を辞書に登録する。
+   *
+   * **本文は書き換えない。** マーカーと違って辞書登録はノートの中身を変えないので、
+   * `setDraftContent` も `schedule` も呼ばない（呼ぶと書いてもいないのに自動保存が走る）。
+   * ボタン側の `onMouseDown` の preventDefault は**マーカーと同じ理由で必須** —
+   * 止めないと textarea からフォーカスが外れ、selectionStart/End が潰れる。
+   */
+  const openGlossaryQuickAdd = () => {
+    const textarea = bodyRef.current;
+    if (!textarea) return;
+
+    const selection = readSelection(draftContent, textarea.selectionStart, textarea.selectionEnd);
+    if (selection === null) {
+      showToast('登録したい語を選んでから押してください（改行を含む選択は登録できません）', {
+        kind: 'info',
+      });
+      return;
+    }
+    setQuickAddTerm(selection);
+  };
+
   // ノート一覧は App が取り直すので、ここで面倒を見るのは生成済み問題だけ
   useRevalidateOnFocus(
     async () => {
@@ -320,7 +365,7 @@ export default function NoteEditor({
             />
           ) : (
             <div className="min-h-96">
-              <MarkdownView content={draftContent} />
+              <MarkdownView content={draftContent} glossaryTerms={glossaryTerms} />
             </div>
           )}
         </div>
@@ -380,7 +425,18 @@ export default function NoteEditor({
         )}
 
         {/* 生成された問題はさらに下に並ぶので、押すボタンと結果が近い。 */}
-        <div className="flex flex-wrap items-center gap-2 border-t border-line px-4 py-2.5">
+        {/* relative はクイック登録のポップオーバーの基準。ツールバーの真上に出す */}
+        <div className="relative flex flex-wrap items-center gap-2 border-t border-line px-4 py-2.5">
+          <GlossaryQuickAddPopover
+            term={quickAddTerm}
+            categoryId={draftCategoryId}
+            categories={categories}
+            notebookId={noteId}
+            suggestions={tagSuggestions}
+            onClose={() => setQuickAddTerm(null)}
+            onSaved={onGlossaryChanged}
+          />
+
           <select
             value={draftCategoryId}
             onChange={(event) => {
@@ -414,6 +470,19 @@ export default function NoteEditor({
             className="rounded-control border border-line-strong bg-surface p-1.5 text-fg-muted transition hover:bg-row-hover hover:text-fg disabled:cursor-not-allowed disabled:opacity-45"
           >
             <Highlighter className="h-4 w-4" aria-hidden />
+          </button>
+
+          <button
+            type="button"
+            // マーカーと同じ理由で必須。止めないと選択範囲が読めなくなる
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={openGlossaryQuickAdd}
+            disabled={mode !== 'edit'}
+            title="選択範囲を辞書に登録"
+            aria-label="選択範囲を辞書に登録"
+            className="rounded-control border border-line-strong bg-surface p-1.5 text-fg-muted transition hover:bg-row-hover hover:text-fg disabled:cursor-not-allowed disabled:opacity-45"
+          >
+            <BookMarked className="h-4 w-4" aria-hidden />
           </button>
 
           <div className="flex rounded-control bg-surface-3 p-0.5">

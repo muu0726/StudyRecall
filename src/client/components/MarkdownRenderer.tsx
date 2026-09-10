@@ -1,6 +1,8 @@
+import { useMemo } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMark from '../lib/remark-mark';
+import remarkGlossary, { buildTermPattern } from '../lib/remark-glossary';
 
 /**
  * Markdown の実描画。react-markdown と remark-gfm を引き込む重い側。
@@ -9,11 +11,25 @@ import remarkMark from '../lib/remark-mark';
  * 使わないので、初回のバンドルに載せない（合わせて 140KB ほどある）。
  * Tailwind のリセットが効いているため、要素ごとにクラスを与えて見た目を作る。
  */
-export default function MarkdownRenderer({ content }: { content: string }) {
+export default function MarkdownRenderer({
+  content,
+  glossaryTerms,
+}: {
+  content: string;
+  /** 辞書に登録済みの用語。本文の中で見つけたら印を付ける */
+  glossaryTerms?: readonly string[];
+}) {
+  /*
+   * **必ずメモ化する。** 数百件から正規表現を組み立てる処理なので、
+   * 毎レンダーで作り直すとプレビューを開くたびに効いてくる。
+   */
+  const pattern = useMemo(() => buildTermPattern(glossaryTerms ?? []), [glossaryTerms]);
+  const plugins = useMemo(() => [remarkGfm, remarkMark, remarkGlossary(pattern)], [pattern]);
+
   return (
     <div className="text-body leading-relaxed text-fg">
       <Markdown
-        remarkPlugins={[remarkGfm, remarkMark]}
+        remarkPlugins={plugins}
         components={{
           h1: (props) => <h1 className="mt-6 mb-3 text-2xl font-bold text-fg" {...props} />,
           h2: (props) => (
@@ -27,6 +43,20 @@ export default function MarkdownRenderer({ content }: { content: string }) {
           // 消えているので、背景も文字色も明示する。文字色をトークンに従わせておくと
           // ライトでもダークでも必ず読める。
           mark: (props) => <mark className="rounded-[2px] bg-hl px-0.5 text-fg" {...props} />,
+          // 辞書に登録済みの用語。**下線だけ**にしてある。背景を付けると
+          // ==マーカー== と見分けが付かず、自分で引いた印が埋もれる。
+          span: (props) => {
+            const { className, ...rest } = props;
+            return className === 'studyrecall-term' ? (
+              <span
+                className="underline decoration-accent decoration-dotted decoration-2 underline-offset-4"
+                title="辞書に登録済み"
+                {...rest}
+              />
+            ) : (
+              <span className={className} {...rest} />
+            );
+          },
           p: (props) => <p className="my-3" {...props} />,
           ul: (props) => <ul className="my-3 list-disc space-y-1 pl-5" {...props} />,
           ol: (props) => <ol className="my-3 list-decimal space-y-1 pl-5" {...props} />,

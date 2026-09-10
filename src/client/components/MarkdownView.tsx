@@ -9,14 +9,21 @@ import { Suspense, lazy } from 'react';
  */
 const MarkdownRenderer = lazy(() => import('./MarkdownRenderer'));
 
-export default function MarkdownView({ content }: { content: string }) {
+export default function MarkdownView({
+  content,
+  glossaryTerms,
+}: {
+  content: string;
+  /** 辞書に登録済みの用語。渡すと本文の中で印が付く */
+  glossaryTerms?: readonly string[];
+}) {
   if (!content.trim()) {
     return <p className="text-body text-fg-subtle">本文がまだありません。</p>;
   }
 
   return (
     <Suspense fallback={<p className="text-body text-fg-subtle">プレビューを準備しています…</p>}>
-      <MarkdownRenderer content={content} />
+      <MarkdownRenderer content={content} glossaryTerms={glossaryTerms} />
     </Suspense>
   );
 }

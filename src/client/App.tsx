@@ -110,6 +110,7 @@ export default function App() {
   const tasks = useTasks({ active: view === 'tasks' });
   /** 用語辞書。絞り込みは画面側で畳むので、ここは取得と CRUD だけ */
   const glossary = useGlossary();
+  const { reload: reloadGlossary } = glossary;
   /**
    * 用語辞書の Drive 書き出しの状態。連携設定と同じ DTO から取る。
    * **辞書の画面を開いたときだけ引く**（全ユーザーが毎回叩く理由が無い）。
@@ -134,6 +135,12 @@ export default function App() {
 
   /** 編集が止まってから Drive へ書きに行く。理由はフックの冒頭に書いてある */
   const glossarySync = useGlossaryDriveSync(glossaryDrive.enabled);
+
+  /** プレビューで印を付ける用語名。**参照を安定させないと正規表現を組み直す** */
+  const glossaryTermNames = useMemo(
+    () => glossary.terms.map((term) => term.term),
+    [glossary.terms],
+  );
 
   /**
    * 保存の予約・楽観ロックのトークン・競合を、エディタより長生きさせる。
@@ -182,6 +189,8 @@ export default function App() {
         api.getStudyLogs(),
         api.listTags(),
         reloadNotebooks(),
+        // 用語はノートのプレビューでも印を付けるので、辞書を開かなくても要る
+        reloadGlossary(),
       ]);
       setCategories(categoriesResult.categories);
       setLogsData(logsResult);
@@ -193,7 +202,7 @@ export default function App() {
     } finally {
       setIsLoading(false);
     }
-  }, [reloadNotebooks]);
+  }, [reloadNotebooks, reloadGlossary]);
 
   useEffect(() => {
     void refresh();
@@ -564,6 +573,13 @@ export default function App() {
                           onRequestDelete={setDeleteTarget}
                           onOpenExplorer={() => setDrawerOpen(true)}
                           onQuizChanged={() => void refresh()}
+                          tagSuggestions={tags.map((item) => item.tag)}
+                          glossaryTerms={glossaryTermNames}
+                          onGlossaryChanged={() => {
+                            void refresh();
+                            void glossary.reload();
+                            glossarySync.touch();
+                          }}
                           onFocusPane={tabs.focusPane}
                           onChangeRatio={tabs.setRatio}
                         />
