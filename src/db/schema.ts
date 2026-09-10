@@ -469,6 +469,17 @@ export const userSettings = sqliteTable('user_settings', {
   driveBackupAt: integer('drive_backup_at', { mode: 'timestamp_ms' }),
   /** ノートを .md としてもミラーするか。**既定は false** */
   driveNotesEnabled: integer('drive_notes_enabled', { mode: 'boolean' }).notNull().default(false),
+  /** 用語辞書を Drive に書き出すか。**既定は false**（人の Drive に勝手に書かない） */
+  driveGlossaryEnabled: integer('drive_glossary_enabled', { mode: 'boolean' })
+    .notNull()
+    .default(false),
+  /*
+   * 書き出したファイルの id。**覚えておかないと同名ファイルが積み上がる**
+   * （Drive は同じフォルダ内の同名を許すので、毎回 upload すると増える一方になる）。
+   */
+  glossaryJsonFileId: text('glossary_json_file_id'),
+  glossaryMdFileId: text('glossary_md_file_id'),
+  glossarySyncedAt: integer('glossary_synced_at', { mode: 'timestamp_ms' }),
   createdAt: integer('created_at', { mode: 'timestamp_ms' })
     .notNull()
     .$defaultFn(() => new Date()),

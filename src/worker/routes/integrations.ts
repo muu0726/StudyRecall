@@ -51,7 +51,9 @@ async function buildDto(env: Env, requestUrl: string, userId: string): Promise<I
     tasksSyncedAt: settings.tasksSyncedAt?.toISOString() ?? null,
     driveBackupEnabled: settings.driveBackupEnabled,
     driveNotesEnabled: settings.driveNotesEnabled,
+    driveGlossaryEnabled: settings.driveGlossaryEnabled,
     driveBackupAt: settings.driveBackupAt?.toISOString() ?? null,
+    glossarySyncedAt: settings.glossarySyncedAt?.toISOString() ?? null,
   };
 }
 
@@ -109,6 +111,21 @@ export const integrationsRoute = new Hono<AppEnv>()
       }
       await saveSettings(getDb(c.env), userId, {
         driveNotesEnabled: body.driveNotesEnabled,
+      });
+    }
+
+    if (typeof body.driveGlossaryEnabled === 'boolean') {
+      if (body.driveGlossaryEnabled) {
+        const current = await buildDto(c.env, c.req.url, userId);
+        if (!current.hasDriveScope) {
+          return c.json(
+            { error: 'ドライブの権限がありません。Google と接続し直してください。' },
+            400,
+          );
+        }
+      }
+      await saveSettings(getDb(c.env), userId, {
+        driveGlossaryEnabled: body.driveGlossaryEnabled,
       });
     }
 

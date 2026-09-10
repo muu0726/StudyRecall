@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BookMarked, Loader2, Plus, Sparkles } from 'lucide-react';
+import { BookMarked, Cloud, CloudOff, Loader2, Plus, Sparkles } from 'lucide-react';
 import type { CategoryDTO, GlossaryTermDTO, QuestionType } from '../../shared/types';
 import { api } from '../lib/api';
 import {
@@ -38,6 +38,18 @@ interface Props {
    * ここで知らせないと数字が古いまま残る（意味の手直しでは動かないので呼ばない）。
    */
   onTermsChanged: () => void;
+  /** Drive への書き出しが有効か。無効なら ☁️ は「設定へ」の案内になる */
+  driveGlossaryEnabled: boolean;
+  /** 最後に書き出した時刻（ISO）。**裏の失敗に気付く手掛かり** */
+  glossarySyncedAt: string | null;
+  onOpenIntegrations: () => void;
+  /** 書き出したあとに連携設定を取り直させる */
+  onSynced: () => void;
+  /**
+   * 用語の**中身が変わった**ときに呼ぶ。Drive への自動書き出しの予約が延びる。
+   * `onTermsChanged`（件数が変わったとき）とは別物で、意味の手直しでも呼ぶ。
+   */
+  onDriveTouch: () => void;
   /**
    * サイドバーの「用語を追加」から開く合図。増えたら追加ダイアログを出す。
    * boolean にすると、閉じたあとに親へ戻す往復が要る。
@@ -45,7 +57,17 @@ interface Props {
   openAddToken: number;
 }
 
-export default function GlossaryTab({ glossary, categories, onTermsChanged, openAddToken }: Props) {
+export default function GlossaryTab({
+  glossary,
+  categories,
+  onTermsChanged,
+  openAddToken,
+  driveGlossaryEnabled,
+  glossarySyncedAt,
+  onOpenIntegrations,
+  onSynced,
+  onDriveTouch,
+}: Props) {
   const { showToast } = useToast();
 
   const [query, setQuery] = useState('');
@@ -60,6 +82,7 @@ export default function GlossaryTab({ glossary, categories, onTermsChanged, open
   const [deleteCards, setDeleteCards] = useState(false);
   const [isGenerateOpen, setIsGenerateOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   /*
    * 開くたびに取り直す。
@@ -129,6 +152,7 @@ export default function GlossaryTab({ glossary, categories, onTermsChanged, open
       const saved = await glossary.update(editing.id, values);
       if (saved) {
         setIsModalOpen(false);
+        onDriveTouch();
         showToast('用語を更新しました', { kind: 'success' });
       }
       return;
@@ -146,6 +170,7 @@ export default function GlossaryTab({ glossary, categories, onTermsChanged, open
 
     setIsModalOpen(false);
     onTermsChanged();
+    onDriveTouch();
     showToast('辞書に登録しました', { kind: 'success' });
   };
 
@@ -175,6 +200,31 @@ export default function GlossaryTab({ glossary, categories, onTermsChanged, open
       });
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const syncDrive = async () => {
+    if (!driveGlossaryEnabled) {
+      onOpenIntegrations();
+      return;
+    }
+    setIsSyncing(true);
+    try {
+      // 手動なので `auto` は付けない（最短間隔の床を素通りする）
+      const result = await api.syncGlossaryDrive();
+      onSynced();
+      showToast(
+        result.skipped
+          ? '書き出しませんでした。連携設定を確認してください。'
+          : `ドライブに ${result.terms ?? 0} 件を書き出しました`,
+        { kind: result.skipped ? 'info' : 'success' },
+      );
+    } catch (syncError) {
+      showToast(syncError instanceof Error ? syncError.message : String(syncError), {
+        kind: 'error',
+      });
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -219,6 +269,27 @@ export default function GlossaryTab({ glossary, categories, onTermsChanged, open
           onClick={() => setIsGenerateOpen(true)}
         >
           辞書から問題を生成
+        </Button>
+        <Button
+          variant="ghost"
+          icon={
+            driveGlossaryEnabled ? (
+              <Cloud className="h-4 w-4" aria-hidden />
+            ) : (
+              <CloudOff className="h-4 w-4" aria-hidden />
+            )
+          }
+          loading={isSyncing}
+          onClick={() => void syncDrive()}
+          title={
+            driveGlossaryEnabled
+              ? glossarySyncedAt
+                ? `最後の書き出し: ${new Date(glossarySyncedAt).toLocaleString('ja-JP')}`
+                : 'まだ書き出していません'
+              : '連携設定で有効にすると使えます'
+          }
+        >
+          {driveGlossaryEnabled ? 'ドライブに書き出す' : 'ドライブ連携'}
         </Button>
       </div>
 
@@ -322,6 +393,7 @@ export default function GlossaryTab({ glossary, categories, onTermsChanged, open
               }}
               onSaveInline={async (values) => {
                 const saved = await glossary.update(term.id, values);
+                if (saved) onDriveTouch();
                 return saved !== null;
               }}
             />
@@ -367,7 +439,10 @@ export default function GlossaryTab({ glossary, categories, onTermsChanged, open
           const target = deleting;
           setDeleting(null);
           if (target) {
-            void glossary.remove(target.id, deleteCards ? 'delete' : 'keep').then(onTermsChanged);
+            void glossary.remove(target.id, deleteCards ? 'delete' : 'keep').then(() => {
+              onTermsChanged();
+              onDriveTouch();
+            });
           }
         }}
       >

@@ -2,12 +2,14 @@ import { eq, getTableColumns } from 'drizzle-orm';
 import type { SQLiteTable } from 'drizzle-orm/sqlite-core';
 import {
   categories,
+  glossaryTerms,
   notebooks,
   quizQuestions,
   studyLogs,
   tasks,
   timerSessions,
 } from '../../db/schema';
+import { normalizeForSearch } from '../../shared/glossary-search';
 import { countRows, type BackupData, type SnapshotRows } from '../../shared/backup';
 import type { Db } from './db';
 import { chunkRows, maxRowsPerInsert } from './quiz-insert';
@@ -30,20 +32,30 @@ export const MAX_ROWS = 50_000;
 export const MAX_BYTES = 8 * 1024 * 1024;
 
 export async function collectSnapshotRows(db: Db, userId: string): Promise<SnapshotRows> {
-  const [categoryRows, notebookRows, logRows, timerRows, quizRows, taskRows, settings] =
-    await Promise.all([
-      db.select().from(categories).where(eq(categories.userId, userId)),
-      db.select().from(notebooks).where(eq(notebooks.userId, userId)),
-      db.select().from(studyLogs).where(eq(studyLogs.userId, userId)),
-      db.select().from(timerSessions).where(eq(timerSessions.userId, userId)),
-      db.select().from(quizQuestions).where(eq(quizQuestions.userId, userId)),
-      db.select().from(tasks).where(eq(tasks.userId, userId)),
-      getSettings(db, userId),
-    ]);
+  const [
+    categoryRows,
+    notebookRows,
+    glossaryRows,
+    logRows,
+    timerRows,
+    quizRows,
+    taskRows,
+    settings,
+  ] = await Promise.all([
+    db.select().from(categories).where(eq(categories.userId, userId)),
+    db.select().from(notebooks).where(eq(notebooks.userId, userId)),
+    db.select().from(glossaryTerms).where(eq(glossaryTerms.userId, userId)),
+    db.select().from(studyLogs).where(eq(studyLogs.userId, userId)),
+    db.select().from(timerSessions).where(eq(timerSessions.userId, userId)),
+    db.select().from(quizQuestions).where(eq(quizQuestions.userId, userId)),
+    db.select().from(tasks).where(eq(tasks.userId, userId)),
+    getSettings(db, userId),
+  ]);
 
   return {
     categories: categoryRows,
     notebooks: notebookRows,
+    glossaryTerms: glossaryRows,
     studyLogs: logRows,
     timerSessions: timerRows,
     quizQuestions: quizRows,
@@ -87,6 +99,8 @@ async function insertAll<T>(
  *
  * `user_settings` の行は消さない。消すと **Drive のフォルダ id を失って
  * 復元元のフォルダを見失う**。カレンダーの 2 項目だけスナップショットから戻す。
+ * 用語辞書の書き出し先も同じ理由で触らないが、中身は総入れ替えになるので、
+ * 呼び出し側が `discardGlossaryMirror` で Drive 側を作り直させる。
  */
 export async function applySnapshot(
   db: Db,
@@ -98,6 +112,8 @@ export async function applySnapshot(
    * 効いているかに挙動を依存させないため（categories.ts の purge と同じ理由）。
    */
   await db.delete(quizQuestions).where(eq(quizQuestions.userId, userId));
+  // 用語は問題より**あと**。問題が用語を参照している
+  await db.delete(glossaryTerms).where(eq(glossaryTerms.userId, userId));
   await db.delete(timerSessions).where(eq(timerSessions.userId, userId));
   await db.delete(tasks).where(eq(tasks.userId, userId));
   await db.delete(studyLogs).where(eq(studyLogs.userId, userId));
@@ -151,6 +167,28 @@ export async function applySnapshot(
     (chunk) => db.insert(notebooks).values(chunk),
   );
 
+  /*
+   * 用語はノートのあと・問題の前。ノートを参照し、問題から参照される。
+   * **termKey は載せていないので作り直す。** 検索と同じ関数を通すことで、
+   * 復元したデータでも「ＴＣＰ で TCP が引ける」が成り立つ。
+   */
+  await insertAll(
+    glossaryTerms,
+    data.glossaryTerms.map((row) => ({
+      id: row.id,
+      userId,
+      categoryId: row.categoryId,
+      notebookId: row.notebookId,
+      term: row.term,
+      termKey: normalizeForSearch(row.term),
+      definition: row.definition,
+      tags: row.tags,
+      createdAt: date(row.createdAt),
+      updatedAt: date(row.updatedAt),
+    })),
+    (chunk) => db.insert(glossaryTerms).values(chunk),
+  );
+
   await insertAll(
     timerSessions,
     data.timerSessions.map((row) => ({
@@ -176,9 +214,12 @@ export async function applySnapshot(
       categoryId: row.categoryId,
       studyLogId: row.studyLogId,
       notebookId: row.notebookId,
+      glossaryTermId: row.glossaryTermId,
       question: row.question,
       answer: row.answer,
       explanation: row.explanation,
+      questionType: row.questionType,
+      choices: row.choices,
       tags: row.tags,
       isMastered: row.isMastered,
       correctCount: row.correctCount,

@@ -21,6 +21,7 @@ import type {
   GlossaryAiAssistRequest,
   GlossaryAiAssistResponse,
   GlossaryDuplicateResponse,
+  GlossarySyncResponse,
   GlossaryTermResponse,
   GlossaryTermsResponse,
   UpdateGlossaryTermRequest,
@@ -296,6 +297,16 @@ export const api = {
   /** 選んだ用語からカードを作る。**対象は id で送る**（サーバー側で選び直さない） */
   generateGlossaryCards: (body: GenerateGlossaryCardsRequest) =>
     request<GenerateGlossaryCardsResponse>('/api/glossary/generate-cards', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  /**
+   * 用語辞書を Drive に書き出す。
+   * `auto` は裏の同期で、**条件に合わなければ 200 + skipped**（エラーにしない）。
+   */
+  syncGlossaryDrive: (body: { auto?: boolean } = {}) =>
+    request<GlossarySyncResponse>('/api/glossary/sync-drive', {
       method: 'POST',
       body: JSON.stringify(body),
     }),

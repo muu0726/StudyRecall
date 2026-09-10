@@ -16,8 +16,18 @@
  * ─────────────────────────────────────────────────────────────
  */
 
-/** ファイル形式の版。読めない版は復元しない（黙って壊すより断る） */
-export const BACKUP_VERSION = 1;
+/** いま書き出す版 */
+export const BACKUP_VERSION = 2;
+
+/**
+ * まだ読める版。
+ *
+ * **上げるときにここを足し忘れると、既存のバックアップが全部読めなくなる。**
+ * 復元できないバックアップにはバックアップの意味が無いので、
+ * 版を上げても古いものは読み続ける（足りない項目は既定値で埋める）。
+ * v1 との差: glossaryTerms が無く、問題に questionType / choices / glossaryTermId が無い。
+ */
+const READABLE_VERSIONS: readonly number[] = [1, 2];
 export const BACKUP_APP = 'study-recall';
 
 /** 全テーブル合計の行数の上限。これを超えるものは扱わない */
@@ -74,14 +84,30 @@ export interface BackupTimerSession {
   updatedAt: string;
 }
 
+export interface BackupGlossaryTerm {
+  id: string;
+  categoryId: string;
+  notebookId: string | null;
+  term: string;
+  definition: string;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface BackupQuiz {
   id: string;
   categoryId: string;
   studyLogId: string | null;
   notebookId: string | null;
+  /** 用語辞書から作った問題の出所 */
+  glossaryTermId: string | null;
   question: string;
   answer: string;
   explanation: string | null;
+  questionType: 'qa' | 'cloze' | 'quiz';
+  /** 4択のときだけ 4 要素 */
+  choices: string[];
   tags: string[];
   isMastered: boolean;
   correctCount: number;
@@ -121,6 +147,8 @@ export interface BackupData {
   categories: BackupCategory[];
   /** 親が子より先に並ぶ。復元は自己参照の FK があるのでこの順序が要る */
   notebooks: BackupNotebook[];
+  /** **termKey は載せない。** 用語名から作り直せるので、復元時に計算する */
+  glossaryTerms: BackupGlossaryTerm[];
   studyLogs: BackupStudyLog[];
   timerSessions: BackupTimerSession[];
   quizQuestions: BackupQuiz[];
@@ -162,6 +190,16 @@ export interface SnapshotRows {
     createdAt: Date;
     updatedAt: Date;
   }[];
+  glossaryTerms: {
+    id: string;
+    categoryId: string;
+    notebookId: string | null;
+    term: string;
+    definition: string;
+    tags: string[];
+    createdAt: Date;
+    updatedAt: Date;
+  }[];
   studyLogs: {
     id: string;
     categoryId: string;
@@ -185,9 +223,12 @@ export interface SnapshotRows {
     categoryId: string;
     studyLogId: string | null;
     notebookId: string | null;
+    glossaryTermId: string | null;
     question: string;
     answer: string;
     explanation: string | null;
+    questionType: 'qa' | 'cloze' | 'quiz';
+    choices: string[];
     tags: string[];
     isMastered: boolean;
     correctCount: number;
@@ -240,6 +281,16 @@ export function buildSnapshot(rows: SnapshotRows, now: Date): BackupSnapshot {
       createdAt: iso(row.createdAt),
       updatedAt: iso(row.updatedAt),
     })),
+    glossaryTerms: rows.glossaryTerms.map((row) => ({
+      id: row.id,
+      categoryId: row.categoryId,
+      notebookId: row.notebookId,
+      term: row.term,
+      definition: row.definition,
+      tags: Array.isArray(row.tags) ? row.tags : [],
+      createdAt: iso(row.createdAt),
+      updatedAt: iso(row.updatedAt),
+    })),
     studyLogs: rows.studyLogs.map((row) => ({
       id: row.id,
       categoryId: row.categoryId,
@@ -263,9 +314,12 @@ export function buildSnapshot(rows: SnapshotRows, now: Date): BackupSnapshot {
       categoryId: row.categoryId,
       studyLogId: row.studyLogId,
       notebookId: row.notebookId,
+      glossaryTermId: row.glossaryTermId,
       question: row.question,
       answer: row.answer,
       explanation: row.explanation,
+      questionType: row.questionType,
+      choices: Array.isArray(row.choices) ? row.choices : [],
       tags: Array.isArray(row.tags) ? row.tags : [],
       isMastered: row.isMastered,
       correctCount: row.correctCount,
@@ -310,6 +364,7 @@ export function countRows(data: BackupData): Record<string, number> {
   return {
     categories: data.categories.length,
     notebooks: data.notebooks.length,
+    glossaryTerms: data.glossaryTerms.length,
     studyLogs: data.studyLogs.length,
     timerSessions: data.timerSessions.length,
     quizQuestions: data.quizQuestions.length,
@@ -396,9 +451,9 @@ function readArray(container: Record<string, unknown>, key: string): unknown[] |
 export function parseSnapshot(raw: unknown): ParseResult {
   if (!isObject(raw)) return fail('バックアップファイルの形式が正しくありません。');
   if (raw.app !== BACKUP_APP) return fail('StudyRecall のバックアップファイルではありません。');
-  if (raw.version !== BACKUP_VERSION) {
+  if (!num(raw.version) || !READABLE_VERSIONS.includes(raw.version)) {
     return fail(
-      `このバックアップは対応していない形式です（version ${String(raw.version)}／対応は ${BACKUP_VERSION}）。`,
+      `このバックアップは対応していない形式です（version ${String(raw.version)}／対応は ${READABLE_VERSIONS.join(', ')}）。`,
     );
   }
   if (!isoStr(raw.exportedAt)) return fail('バックアップの作成日時が読めません。');
@@ -407,6 +462,7 @@ export function parseSnapshot(raw: unknown): ParseResult {
   const source = raw.data;
   const categories: BackupCategory[] = [];
   const notebooks: BackupNotebook[] = [];
+  const glossaryTerms: BackupGlossaryTerm[] = [];
   const studyLogs: BackupStudyLog[] = [];
   const timerSessions: BackupTimerSession[] = [];
   const quizQuestions: BackupQuiz[] = [];
@@ -414,6 +470,8 @@ export function parseSnapshot(raw: unknown): ParseResult {
 
   const rawCategories = readArray(source, 'categories');
   const rawNotebooks = readArray(source, 'notebooks');
+  // v1 のファイルには無い。無いことは壊れていることではない
+  const rawGlossary = source.glossaryTerms === undefined ? [] : readArray(source, 'glossaryTerms');
   const rawStudyLogs = readArray(source, 'studyLogs');
   const rawTimerSessions = readArray(source, 'timerSessions');
   const rawQuizzes = readArray(source, 'quizQuestions');
@@ -421,6 +479,7 @@ export function parseSnapshot(raw: unknown): ParseResult {
   if (
     !rawCategories ||
     !rawNotebooks ||
+    !rawGlossary ||
     !rawStudyLogs ||
     !rawTimerSessions ||
     !rawQuizzes ||
@@ -432,6 +491,7 @@ export function parseSnapshot(raw: unknown): ParseResult {
   const total =
     rawCategories.length +
     rawNotebooks.length +
+    rawGlossary.length +
     rawStudyLogs.length +
     rawTimerSessions.length +
     rawQuizzes.length +
@@ -492,6 +552,40 @@ export function parseSnapshot(raw: unknown): ParseResult {
   }
   const orderedNotebooks = sortNotebooksByDepth(notebooks);
   if (!orderedNotebooks) return fail('ノートの親子関係が循環しています。');
+
+  for (const row of rawGlossary) {
+    if (
+      !isObject(row) ||
+      !str(row.id) ||
+      !str(row.categoryId) ||
+      !nullableStr(row.notebookId) ||
+      !str(row.term) ||
+      !str(row.definition) ||
+      !Array.isArray(row.tags) ||
+      !row.tags.every(str) ||
+      !isoStr(row.createdAt) ||
+      !isoStr(row.updatedAt)
+    ) {
+      return fail('用語の形式が正しくありません。');
+    }
+    if (!categoryIds.has(row.categoryId)) {
+      return fail('用語が、存在しないカテゴリを指しています。');
+    }
+    if (row.notebookId !== null && !notebookIds.has(row.notebookId)) {
+      return fail('用語が、存在しないノートを指しています。');
+    }
+    glossaryTerms.push({
+      id: row.id,
+      categoryId: row.categoryId,
+      notebookId: row.notebookId,
+      term: row.term,
+      definition: row.definition,
+      tags: row.tags,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    });
+  }
+  const glossaryIds = new Set(glossaryTerms.map((t) => t.id));
 
   for (const row of rawStudyLogs) {
     if (
@@ -579,14 +673,39 @@ export function parseSnapshot(raw: unknown): ParseResult {
     if (row.notebookId !== null && !notebookIds.has(row.notebookId)) {
       return fail('問題が、存在しないノートを指しています。');
     }
+
+    /*
+     * ここから 3 項目は **v1 のファイルには無い**。
+     * 無ければ既定値（従来と同じ一問一答）として読む。
+     * 「無い」は許すが「あるのに形が違う」は断る。
+     */
+    const glossaryTermId = row.glossaryTermId === undefined ? null : row.glossaryTermId;
+    if (!nullableStr(glossaryTermId)) return fail('問題の形式が正しくありません。');
+    if (glossaryTermId !== null && !glossaryIds.has(glossaryTermId)) {
+      return fail('問題が、存在しない用語を指しています。');
+    }
+
+    const questionType = row.questionType === undefined ? 'qa' : row.questionType;
+    if (questionType !== 'qa' && questionType !== 'cloze' && questionType !== 'quiz') {
+      return fail('問題の形式が正しくありません。');
+    }
+
+    const choices = row.choices === undefined ? [] : row.choices;
+    if (!Array.isArray(choices) || !choices.every(str)) {
+      return fail('問題の形式が正しくありません。');
+    }
+
     quizQuestions.push({
       id: row.id,
       categoryId: row.categoryId,
       studyLogId: row.studyLogId,
       notebookId: row.notebookId,
+      glossaryTermId,
       question: row.question,
       answer: row.answer,
       explanation: row.explanation,
+      questionType,
+      choices,
       tags: row.tags,
       isMastered: row.isMastered,
       correctCount: row.correctCount,
@@ -658,6 +777,7 @@ export function parseSnapshot(raw: unknown): ParseResult {
   const data: BackupData = {
     categories,
     notebooks: orderedNotebooks,
+    glossaryTerms,
     studyLogs,
     timerSessions,
     quizQuestions,
@@ -668,6 +788,7 @@ export function parseSnapshot(raw: unknown): ParseResult {
   return {
     ok: true,
     value: {
+      // 読めた時点で中身は最新の形に揃っている（v1 は既定値で埋めた）
       version: BACKUP_VERSION,
       app: BACKUP_APP,
       exportedAt: raw.exportedAt,

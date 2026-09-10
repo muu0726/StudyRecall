@@ -21,6 +21,12 @@ export interface Settings {
   driveBackupAt: Date | null;
   /** ノートを .md としてもミラーするか */
   driveNotesEnabled: boolean;
+  /** 用語辞書を Drive に書き出すか */
+  driveGlossaryEnabled: boolean;
+  /** 書き出した glossary.json の id。**覚えないと同名ファイルが積み上がる** */
+  glossaryJsonFileId: string | null;
+  glossaryMdFileId: string | null;
+  glossarySyncedAt: Date | null;
 }
 
 const DEFAULTS: Settings = {
@@ -33,6 +39,10 @@ const DEFAULTS: Settings = {
   driveFolderId: null,
   driveBackupAt: null,
   driveNotesEnabled: false,
+  driveGlossaryEnabled: false,
+  glossaryJsonFileId: null,
+  glossaryMdFileId: null,
+  glossarySyncedAt: null,
 };
 
 export async function getSettings(db: Db, userId: string): Promise<Settings> {
@@ -50,6 +60,10 @@ export async function getSettings(db: Db, userId: string): Promise<Settings> {
     driveFolderId: row.driveFolderId,
     driveBackupAt: row.driveBackupAt,
     driveNotesEnabled: row.driveNotesEnabled,
+    driveGlossaryEnabled: row.driveGlossaryEnabled,
+    glossaryJsonFileId: row.glossaryJsonFileId,
+    glossaryMdFileId: row.glossaryMdFileId,
+    glossarySyncedAt: row.glossarySyncedAt,
   };
 }
 

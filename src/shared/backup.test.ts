@@ -52,6 +52,18 @@ function rows(overrides: Partial<SnapshotRows> = {}): SnapshotRows {
         updatedAt: at('2026-01-03T00:00:00.000Z'),
       },
     ],
+    glossaryTerms: [
+      {
+        id: 'gt_1',
+        categoryId: 'cat_1',
+        notebookId: 'nb_root',
+        term: 'TCP',
+        definition: '信頼性のある通信を提供するプロトコル。',
+        tags: ['ネットワーク'],
+        createdAt: at('2026-01-03T00:00:00.000Z'),
+        updatedAt: at('2026-01-03T00:00:00.000Z'),
+      },
+    ],
     studyLogs: [
       {
         id: 'log_1',
@@ -80,9 +92,12 @@ function rows(overrides: Partial<SnapshotRows> = {}): SnapshotRows {
         categoryId: 'cat_1',
         studyLogId: 'log_1',
         notebookId: 'nb_root',
+        glossaryTermId: 'gt_1',
         question: '問題',
         answer: '答え',
         explanation: null,
+        questionType: 'quiz',
+        choices: ['TCP', 'UDP', 'DNS', 'ARP'],
         tags: ['ネットワーク'],
         isMastered: false,
         correctCount: 2,
@@ -130,6 +145,7 @@ describe('buildSnapshot', () => {
     expect(snapshot.counts).toEqual({
       categories: 1,
       notebooks: 2,
+      glossaryTerms: 1,
       studyLogs: 1,
       timerSessions: 1,
       quizQuestions: 1,
@@ -339,6 +355,120 @@ describe('parseSnapshot が断るもの', () => {
     expect(result.ok).toBe(true);
     if (result.ok)
       expect(result.value.data.notebooks.map((n) => n.id)).toEqual(['nb_root', 'nb_child']);
+  });
+});
+
+/**
+ * 版を上げるときの落とし穴。
+ *
+ * `parseSnapshot` が版を完全一致で見ていると、**バージョンを上げた瞬間に
+ * 既存ユーザーの Drive にあるバックアップが全部読めなくなる**。
+ * 復元できないバックアップは、バックアップではない。
+ */
+describe('古い版のバックアップ', () => {
+  /** v2 のファイルから、v1 に無かった項目を落として v1 相当にする */
+  const asV1 = () => {
+    const file = JSON.parse(JSON.stringify(buildSnapshot(rows(), NOW)));
+    file.version = 1;
+    delete file.data.glossaryTerms;
+    for (const quiz of file.data.quizQuestions) {
+      delete quiz.glossaryTermId;
+      delete quiz.questionType;
+      delete quiz.choices;
+    }
+    return file;
+  };
+
+  it('v1 のバックアップが今も読める', () => {
+    const result = parseSnapshot(asV1());
+    expect(result.ok).toBe(true);
+  });
+
+  it('v1 に無かった項目は既定値で埋まる', () => {
+    const result = parseSnapshot(asV1());
+    if (!result.ok) throw new Error(result.error);
+    expect(result.value.data.glossaryTerms).toEqual([]);
+    const quiz = result.value.data.quizQuestions[0];
+    expect(quiz.questionType).toBe('qa');
+    expect(quiz.choices).toEqual([]);
+    expect(quiz.glossaryTermId).toBeNull();
+  });
+
+  it('読めたら最新の版として扱う', () => {
+    const result = parseSnapshot(asV1());
+    if (!result.ok) throw new Error(result.error);
+    expect(result.value.version).toBe(BACKUP_VERSION);
+  });
+
+  it('知らない版は断る', () => {
+    const future = JSON.parse(JSON.stringify(buildSnapshot(rows(), NOW)));
+    future.version = 99;
+    const result = parseSnapshot(future);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain('対応していない形式');
+  });
+
+  /* 「無い」は許すが「あるのに形が違う」は断る */
+  it('項目があるのに形が違えば断る', () => {
+    const broken = JSON.parse(JSON.stringify(buildSnapshot(rows(), NOW)));
+    broken.data.quizQuestions[0].questionType = 'unknown';
+    expect(parseSnapshot(broken).ok).toBe(false);
+  });
+});
+
+describe('用語辞書の往復', () => {
+  const valid = () => JSON.parse(JSON.stringify(buildSnapshot(rows(), NOW)));
+
+  it('用語がそのまま戻る', () => {
+    const result = parseSnapshot(valid());
+    if (!result.ok) throw new Error(result.error);
+    expect(result.value.data.glossaryTerms).toEqual([
+      {
+        id: 'gt_1',
+        categoryId: 'cat_1',
+        notebookId: 'nb_root',
+        term: 'TCP',
+        definition: '信頼性のある通信を提供するプロトコル。',
+        tags: ['ネットワーク'],
+        createdAt: '2026-01-03T00:00:00.000Z',
+        updatedAt: '2026-01-03T00:00:00.000Z',
+      },
+    ]);
+  });
+
+  /** termKey はファイルに載せず、復元時に用語名から作り直す */
+  it('termKey はファイルに載せない', () => {
+    expect(JSON.stringify(buildSnapshot(rows(), NOW))).not.toContain('termKey');
+  });
+
+  it('4択の選択肢も戻る', () => {
+    const result = parseSnapshot(valid());
+    if (!result.ok) throw new Error(result.error);
+    expect(result.value.data.quizQuestions[0].choices).toEqual(['TCP', 'UDP', 'DNS', 'ARP']);
+    expect(result.value.data.quizQuestions[0].questionType).toBe('quiz');
+  });
+
+  it('用語が存在しないカテゴリを指していたら断る', () => {
+    const broken = valid();
+    broken.data.glossaryTerms[0].categoryId = 'cat_zzz';
+    const result = parseSnapshot(broken);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain('用語');
+  });
+
+  it('用語が存在しないノートを指していたら断る', () => {
+    const broken = valid();
+    broken.data.glossaryTerms[0].notebookId = 'nb_zzz';
+    expect(parseSnapshot(broken).ok).toBe(false);
+  });
+
+  /* 用語を消したのに問題が指したままだと、復元で FK に当たる */
+  it('問題が存在しない用語を指していたら断る', () => {
+    const broken = valid();
+    broken.data.glossaryTerms = [];
+    const result = parseSnapshot(broken);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain('用語');
   });
 });
 

@@ -19,6 +19,7 @@ import { useNotebooks } from './hooks/useNotebooks';
 import { useElementWidth } from './hooks/useElementWidth';
 import { useNoteTabs } from './hooks/useNoteTabs';
 import { useGlossary } from './hooks/useGlossary';
+import { useGlossaryDriveSync } from './hooks/useGlossaryDriveSync';
 import { useNoteSaver } from './hooks/useNoteSaver';
 import { useTasks } from './hooks/useTasks';
 import { usePwaUpdate } from './hooks/usePwaUpdate';
@@ -109,6 +110,30 @@ export default function App() {
   const tasks = useTasks({ active: view === 'tasks' });
   /** 用語辞書。絞り込みは画面側で畳むので、ここは取得と CRUD だけ */
   const glossary = useGlossary();
+  /**
+   * 用語辞書の Drive 書き出しの状態。連携設定と同じ DTO から取る。
+   * **辞書の画面を開いたときだけ引く**（全ユーザーが毎回叩く理由が無い）。
+   */
+  const [glossaryDrive, setGlossaryDrive] = useState<{
+    enabled: boolean;
+    syncedAt: string | null;
+  }>({ enabled: false, syncedAt: null });
+
+  const loadGlossaryDrive = useCallback(async () => {
+    try {
+      const dto = await api.getIntegrations();
+      setGlossaryDrive({ enabled: dto.driveGlossaryEnabled, syncedAt: dto.glossarySyncedAt });
+    } catch {
+      // 連携が無くても辞書そのものは使える。ここで画面を止めない
+    }
+  }, []);
+
+  useEffect(() => {
+    if (view === 'glossary') void loadGlossaryDrive();
+  }, [view, loadGlossaryDrive]);
+
+  /** 編集が止まってから Drive へ書きに行く。理由はフックの冒頭に書いてある */
+  const glossarySync = useGlossaryDriveSync(glossaryDrive.enabled);
 
   /**
    * 保存の予約・楽観ロックのトークン・競合を、エディタより長生きさせる。
@@ -562,6 +587,11 @@ export default function App() {
                         setQuizReloadToken((previous) => previous + 1);
                       }}
                       openAddToken={addTermToken}
+                      driveGlossaryEnabled={glossaryDrive.enabled}
+                      glossarySyncedAt={glossaryDrive.syncedAt}
+                      onOpenIntegrations={() => setIsIntegrationsOpen(true)}
+                      onSynced={() => void loadGlossaryDrive()}
+                      onDriveTouch={glossarySync.touch}
                     />
                   )}
                   {view === 'review' && (

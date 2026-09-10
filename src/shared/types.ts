@@ -314,6 +314,17 @@ export interface GenerateGlossaryCardsResponse {
   warning?: string;
 }
 
+/** 自動同期の最短間隔。クライアントのタイマーが壊れても Drive を叩き続けないための床 */
+export const GLOSSARY_SYNC_MIN_INTERVAL_MS = 5 * 60 * 1000;
+
+export interface GlossarySyncResponse {
+  /** 条件に合わず何もしなかった。**auto のときはエラーにせずこれを返す** */
+  skipped?: true;
+  reason?: string;
+  terms?: number;
+  syncedAt?: string;
+}
+
 export interface DeleteGlossaryTermResponse {
   ok: true;
   /** cards=delete を指定したときに消したカードの枚数 */
@@ -580,14 +591,19 @@ export interface IntegrationsDTO {
   driveBackupEnabled: boolean;
   /** ノートを .md としてもミラーするか */
   driveNotesEnabled: boolean;
+  /** 用語辞書を glossary.json / glossary.md として書き出すか */
+  driveGlossaryEnabled: boolean;
   /** 最後にバックアップした時刻。**裏の失敗に気付く唯一の手掛かり** */
   driveBackupAt: string | null;
+  /** 最後に用語辞書を書き出した時刻。同じく裏の失敗に気付く手掛かり */
+  glossarySyncedAt: string | null;
 }
 
 export interface UpdateIntegrationsRequest {
   calendarSyncEnabled?: boolean;
   driveBackupEnabled?: boolean;
   driveNotesEnabled?: boolean;
+  driveGlossaryEnabled?: boolean;
 }
 
 // --- バックアップ -----------------------------------------------------------

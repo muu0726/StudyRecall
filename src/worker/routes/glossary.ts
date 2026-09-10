@@ -9,11 +9,21 @@ import { MAX_PROMPT_TAGS, defineTermWithAI, generateQuestionsFromGlossary } from
 import { insertQuizQuestions } from '../lib/quiz-insert';
 import { toQuizQuestionDto } from '../lib/dto';
 import { getMonthlyQuota, quotaWarning } from '../lib/quota';
+import { mirrorGlossary } from '../lib/glossary-mirror';
+import { ensureBackupFolder } from '../lib/google-drive';
+import { describeGoogleError } from '../lib/google-error';
+import {
+  GOOGLE_DRIVE_SCOPE,
+  describeAccessFailure,
+  getGoogleAccessToken,
+} from '../lib/google-auth';
+import { getSettings, saveSettings } from '../lib/user-settings';
 import { normalizeForSearch } from '../../shared/glossary-search';
 import {
   GLOSSARY_LIMIT,
   MAX_DEFINITION_LENGTH,
   MAX_TAGS_PER_TERM,
+  GLOSSARY_SYNC_MIN_INTERVAL_MS,
   MAX_GLOSSARY_GENERATE_TERMS,
   MAX_TERM_LENGTH,
   type CreateGlossaryTermRequest,
@@ -24,6 +34,7 @@ import {
   type DeleteGlossaryTermResponse,
   type GlossaryDuplicateResponse,
   type GlossaryTermResponse,
+  type GlossarySyncResponse,
   type GlossaryTermsResponse,
   type UpdateGlossaryTermRequest,
 } from '../../shared/types';
@@ -407,6 +418,57 @@ export const glossaryRoute = new Hono<AppEnv>()
       ...(warnings.length > 0 ? { warning: warnings.join(' ') } : {}),
     };
     return c.json(response, 201);
+  })
+
+  /**
+   * 用語辞書を Drive に書き出す。**一方通行。**
+   *
+   * `auto: true` は裏で走る同期。**条件に合わなければ 200 + skipped で返す**
+   * （頼んでいない処理でエラーのトーストを出さない。backup/run と同じ契約）。
+   * 手動の ☁️ は間隔の床を素通りする。
+   */
+  .post('/sync-drive', async (c) => {
+    const userId = c.get('userId');
+    const body = await c.req.json<{ auto?: unknown }>().catch(() => null);
+    const auto = body?.auto === true;
+    const db = getDb(c.env);
+
+    const settings = await getSettings(db, userId);
+
+    if (auto) {
+      if (!settings.driveGlossaryEnabled) {
+        return c.json<GlossarySyncResponse>({ skipped: true, reason: 'disabled' });
+      }
+      /*
+       * サーバー側の床。クライアントのデバウンスが壊れても Drive を叩き続けない。
+       * **これが本体の防御**で、待つこと自体はクライアントの仕事。
+       */
+      const since = settings.glossarySyncedAt
+        ? Date.now() - settings.glossarySyncedAt.getTime()
+        : Infinity;
+      if (since < GLOSSARY_SYNC_MIN_INTERVAL_MS) {
+        return c.json<GlossarySyncResponse>({ skipped: true, reason: 'recent' });
+      }
+    }
+
+    const access = await getGoogleAccessToken(c.env, c.req.url, userId, [GOOGLE_DRIVE_SCOPE]);
+    if (!access.ok) {
+      if (auto) return c.json<GlossarySyncResponse>({ skipped: true, reason: access.reason });
+      return c.json({ error: describeAccessFailure(access.reason) }, 403);
+    }
+
+    try {
+      const folder = await ensureBackupFolder(access.accessToken, settings.driveFolderId);
+      if (folder.id !== settings.driveFolderId) {
+        await saveSettings(db, userId, { driveFolderId: folder.id });
+      }
+      const result = await mirrorGlossary(db, userId, access.accessToken, folder.id);
+      return c.json<GlossarySyncResponse>({ terms: result.terms, syncedAt: result.syncedAt });
+    } catch (error) {
+      console.error('[glossary] drive sync failed:', error);
+      if (auto) return c.json<GlossarySyncResponse>({ skipped: true, reason: 'failed' });
+      return c.json({ error: describeGoogleError(error) }, 502);
+    }
   })
 
   .put('/:id', async (c) => {

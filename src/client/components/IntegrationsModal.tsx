@@ -130,6 +130,20 @@ export default function IntegrationsModal({ open, onClose, onOpenRestore }: Prop
     }
   };
 
+  const toggleDriveGlossary = async (next: boolean) => {
+    setIsSaving(true);
+    try {
+      setState(await api.updateIntegrations({ driveGlossaryEnabled: next }));
+      showToast(next ? '用語辞書の書き出しを有効にしました' : '用語辞書の書き出しを止めました', {
+        kind: 'success',
+      });
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : String(saveError));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const mirrorNotes = async () => {
     setIsMirroring(true);
     setError(null);
@@ -314,6 +328,28 @@ export default function IntegrationsModal({ open, onClose, onOpenRestore }: Prop
               </span>
             </label>
 
+            <label className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                checked={state.driveGlossaryEnabled}
+                disabled={!state.hasDriveScope || isSaving}
+                onChange={(event) => void toggleDriveGlossary(event.target.checked)}
+                className="mt-0.5 h-4 w-4 shrink-0 accent-accent disabled:opacity-45"
+              />
+              <span className="min-w-0">
+                <span className="block text-body font-medium text-fg">
+                  用語辞書を glossary.json / glossary.md として保存する
+                </span>
+                <span className="block text-caption text-fg-muted">
+                  「用語辞書」フォルダに 2 つのファイルを置きます（JSON は正確に戻すため、 Markdown
+                  は人が読むため）。
+                  <strong className="font-medium">
+                    ドライブ側で編集しても、次の書き出しで上書きされます。
+                  </strong>
+                </span>
+              </span>
+            </label>
+
             <div className="flex flex-wrap gap-2">
               <Button
                 variant="secondary"
@@ -361,6 +397,14 @@ export default function IntegrationsModal({ open, onClose, onOpenRestore }: Prop
                 ? new Date(state.driveBackupAt).toLocaleString('ja-JP')
                 : 'まだありません'}
             </p>
+            {state.driveGlossaryEnabled && (
+              <p className="text-caption text-fg-subtle">
+                最後の用語辞書の書き出し:{' '}
+                {state.glossarySyncedAt
+                  ? new Date(state.glossarySyncedAt).toLocaleString('ja-JP')
+                  : 'まだありません'}
+              </p>
+            )}
           </section>
 
           {state.tasksSyncedAt && (

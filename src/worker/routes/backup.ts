@@ -16,6 +16,7 @@ import {
 } from '../lib/google-drive';
 import { describeGoogleError, statusOf } from '../lib/google-error';
 import { discardNoteMirror, mirrorNotes } from '../lib/note-mirror';
+import { discardGlossaryMirror, mirrorGlossary } from '../lib/glossary-mirror';
 import { getSettings, saveSettings } from '../lib/user-settings';
 import type {
   BackupFilesResponse,
@@ -143,6 +144,15 @@ export const backupRoute = new Hono<AppEnv>()
           await mirrorNotes(db, userId, access.accessToken, result.response.folder.id);
         } catch (mirrorError) {
           console.error('[backup] note mirror failed:', mirrorError);
+        }
+      }
+
+      // 用語辞書も同じ扱い。ここに相乗りすることで 1 日 1 回の自動実行に乗る
+      if (settings.driveGlossaryEnabled && result.response.folder) {
+        try {
+          await mirrorGlossary(db, userId, access.accessToken, result.response.folder.id);
+        } catch (mirrorError) {
+          console.error('[backup] glossary mirror failed:', mirrorError);
         }
       }
 
@@ -286,6 +296,11 @@ export const backupRoute = new Hono<AppEnv>()
        */
       if (settings.driveFolderId) {
         await discardNoteMirror(access.accessToken, settings.driveFolderId);
+        /*
+         * 用語辞書も同じ。覚えているファイル id は**復元前の中身**を指したままなので、
+         * 消して作り直させる（消せなくても id は捨てる）。
+         */
+        await discardGlossaryMirror(db, userId, access.accessToken, settings.driveFolderId);
       }
 
       const response: RestoreBackupResponse = {
