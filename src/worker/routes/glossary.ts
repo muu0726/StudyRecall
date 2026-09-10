@@ -323,9 +323,6 @@ export const glossaryRoute = new Hono<AppEnv>()
     const termIds = Array.isArray(body?.termIds)
       ? body.termIds.filter((id): id is string => typeof id === 'string')
       : [];
-    const questionType =
-      body?.questionType === 'cloze' || body?.questionType === 'quiz' ? body.questionType : 'qa';
-
     if (termIds.length === 0) return c.json({ error: '用語を選んでください' }, 400);
     if (termIds.length > MAX_GLOSSARY_GENERATE_TERMS) {
       return c.json(
@@ -343,6 +340,7 @@ export const glossaryRoute = new Hono<AppEnv>()
         categoryId: glossaryTerms.categoryId,
         categoryName: categories.name,
         categoryColor: categories.color,
+        examName: categories.examName,
         term: glossaryTerms.term,
         definition: glossaryTerms.definition,
         tags: glossaryTerms.tags,
@@ -362,7 +360,7 @@ export const glossaryRoute = new Hono<AppEnv>()
       return c.json(exceeded);
     }
 
-    // カテゴリごとにまとめる（4択の誤答も同じカテゴリの用語から作りたい）
+    // カテゴリごとにまとめる（誤答も同じカテゴリの用語から作りたい）
     const byCategory = new Map<string, typeof rows>();
     for (const row of rows) {
       const group = byCategory.get(row.categoryId);
@@ -385,8 +383,7 @@ export const glossaryRoute = new Hono<AppEnv>()
           definition: row.definition,
           tags: Array.isArray(row.tags) ? row.tags : [],
         })),
-        questionType,
-        first.categoryName,
+        { categoryName: first.categoryName, examName: first.examName },
       );
       if (warning) warnings.push(warning);
 
@@ -408,7 +405,8 @@ export const glossaryRoute = new Hono<AppEnv>()
           question: generated.question,
           answer: generated.answer,
           explanation: generated.explanation || null,
-          questionType,
+          // **全経路 4択に統一**。一問一答・穴埋めは既存のカードにだけ残る
+          questionType: 'quiz',
           choices: generated.choices,
           tags: generated.tags,
         });

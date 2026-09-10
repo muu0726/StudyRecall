@@ -132,6 +132,7 @@ export async function applySnapshot(
       userId,
       name: row.name,
       color: row.color,
+      examName: row.examName,
       createdAt: date(row.createdAt),
     })),
     (chunk) => db.insert(categories).values(chunk),

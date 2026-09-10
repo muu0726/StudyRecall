@@ -1,7 +1,6 @@
 import { GoogleGenAI, ThinkingLevel, Type } from '@google/genai';
-import { MAX_GENERATED_QUESTIONS, type QuestionType } from '../../shared/types';
-import { CLOZE_BLANK, ensureCloze } from '../../shared/cloze';
-import { normalizeChoices } from '../../shared/choices';
+import { MAX_GENERATED_QUESTIONS } from '../../shared/types';
+import { buildChoices, coerceChoiceStyle } from '../../shared/choices';
 import { describeGeminiError, isRetryable, retryDelayMs } from './gemini-error';
 
 /**
@@ -18,8 +17,21 @@ export interface GeneratedQuestion {
   question: string;
   answer: string;
   explanation: string;
+  /** 4択の選択肢。**ちょうど 4 個**で、正解をひとつ含む */
+  choices: string[];
   /** ジャンルタグ。1〜3 個。 */
   tags: string[];
+}
+
+/**
+ * 出題の主題。
+ *
+ * `examName` は**プロンプトに載る唯一の外部からの指定**で、出題の粒度をその試験に寄せる。
+ * 未設定（null）なら、汎用の資格試験風に作る。
+ */
+export interface QuizSubject {
+  categoryName: string;
+  examName: string | null;
 }
 
 export interface GenerateQuizResult {
@@ -59,78 +71,131 @@ function nextDelayMs(error: unknown, attempt: number, remainingMs: number): numb
   return wait + MIN_ATTEMPT_BUDGET_MS <= remainingMs ? wait : null;
 }
 
-const RESPONSE_SCHEMA = {
-  type: Type.OBJECT,
-  properties: {
-    questions: {
+/**
+ * 応答の形。**用語辞書からの生成だけ `sourceTerm` が要る**（どの用語から作ったかの対応付け）。
+ * 残りは全経路で同じなので、1 か所から作る。
+ */
+function quizSchema(withSourceTerm: boolean) {
+  const properties = {
+    ...(withSourceTerm
+      ? { sourceTerm: { type: Type.STRING, description: '入力した用語名をそのまま書き写す。' } }
+      : {}),
+    question: {
+      type: Type.STRING,
+      description: '問題文。資格試験の出題文と同じ体裁で書く。',
+    },
+    choiceStyle: {
+      type: Type.STRING,
+      description: "選択肢の型。'term'（用語を選ばせる）か 'statement'（記述を選ばせる）。",
+    },
+    answer: {
+      type: Type.STRING,
+      description: '正解。choices のどれか1つと1文字も違わないように書き写す。',
+    },
+    choices: {
       type: Type.ARRAY,
-      items: {
-        type: Type.OBJECT,
-        properties: {
-          question: {
-            type: Type.STRING,
-            description: '用語の定義や役割を説明した問題文。答えの用語そのものは含めない。',
-          },
-          answer: { type: Type.STRING, description: '正解となる用語名のみ。短く。' },
-          explanation: { type: Type.STRING, description: '100文字前後の簡潔な解説。' },
-          tags: {
-            type: Type.ARRAY,
-            items: { type: Type.STRING },
-            description:
-              'この問題が属する分野・ジャンルのタグを1〜3個。例: ネットワーク, セキュリティ, データベース',
-          },
-        },
-        required: ['question', 'answer', 'explanation', 'tags'],
-        propertyOrdering: ['question', 'answer', 'explanation', 'tags'],
+      items: { type: Type.STRING },
+      description: '選択肢をちょうど4個。正解1個と誤答3個。',
+    },
+    explanation: {
+      type: Type.STRING,
+      description: '150文字以内の解説。誤答がなぜ違うのかにも触れる。',
+    },
+    tags: {
+      type: Type.ARRAY,
+      items: { type: Type.STRING },
+      description:
+        'この問題が属する分野・ジャンルのタグを1〜3個。例: ネットワーク, セキュリティ, データベース',
+    },
+  };
+  const keys = Object.keys(properties);
+
+  return {
+    type: Type.OBJECT,
+    properties: {
+      questions: {
+        type: Type.ARRAY,
+        items: { type: Type.OBJECT, properties, required: keys, propertyOrdering: keys },
       },
     },
-  },
-  required: ['questions'],
-};
+    required: ['questions'],
+  };
+}
 
-/** 全プロンプト共通の作問ルール */
-function commonRules(maxQuestions: number): string {
-  return `制約:
-- question: その用語の定義・役割・特徴を説明する文にする。答えの用語そのものを問題文に含めてはいけない。
-- answer: 正解となる用語名のみを**30文字以内**で短く書く。文章にしない。
-- explanation: **100文字以内**で簡潔に解説する。冗長な言い換えや前置きを書かない。
+const RESPONSE_SCHEMA = quizSchema(false);
+
+/**
+ * 全経路で共通の作問ルール。**資格試験の本試験と同じ体裁で作らせる。**
+ *
+ * `choiceStyle` を宣言させているのは、**誤答の埋め方が型で変わる**から。
+ * `buildChoices`（`shared/choices.ts`）は記述型では誤答を補わず、
+ * 4 個そろわない問題を捨てる。用語名を 1 個だけ混ぜた 4 択は、読まなくても答えが分かる。
+ */
+const QUIZ_RULES = `形式: 4択。**資格試験の本試験と同じ体裁**で作る。
+
+制約:
+- choiceStyle: この問題の選択肢の型を宣言する。
+  - 'term': 定義・役割を説明した文を読ませ、**あてはまる用語を選ばせる**。選択肢は用語名。
+  - 'statement': 「〜に関する記述のうち、適切なものはどれか。」のように**記述文を選ばせる**。
+  用語と意味の対応を問うなら 'term'、仕組み・手順・特徴の理解を問えるなら 'statement' を選ぶ。
+- question: 問いを1〜2文で完結させる。'term' では答えの用語そのものを問題文に含めてはいけない。
+- answer: **choices のどれか1つと1文字も違わない**ように書き写す。
+  'term' なら30文字以内、'statement' なら60文字以内。
+- choices: **ちょうど4個**。正解1個と誤答3個。
+  - 誤答は**同じ分野・同じ粒度**にする。明らかに分野違いのものを混ぜない。
+  - **長さで正解が分かる並びにしない。** 4個の文字数をそろえる。
+  - 'statement' の誤答は「正しそうだが1点だけ誤っている」文にする。否定するだけの文にしない。
+  - 同じ語・同じ文を2回入れない。
+- explanation: **150文字以内**。正解の理由に加えて、**誤答がなぜ違うのかに必ず1文触れる**。
 - tags: その問題が属する分野・ジャンルのタグを1〜3個付与する（例: 'ネットワーク', 'セキュリティ', 'データベース'）。
   タグは一般的な分野名にし、問題文をそのまま繰り返さないこと。
 - 入力に含まれない知識を持ち出さない。入力の内容に忠実に作る。
-- 重要用語が${maxQuestions}個未満なら、無理に水増しせず少ない問数で構わない。
 - 出力はすべて日本語で書く。`;
+
+/** 資格試験名の 1 行。未設定なら何も足さない */
+function examLine(examName: string | null): string {
+  if (!examName) return '';
+  return `この問題は「${examName}」の対策に使う。その試験で実際に問われる範囲・粒度・言い回しに寄せること。
+`;
 }
 
-function buildStudyLogPrompt(notes: string, categoryName: string, maxQuestions: number): string {
-  return `あなたは学習者の復習を支援する出題者です。
-以下は学習者が「${categoryName}」の学習後に書いた学びのメモです。
+/** 「無理に水増ししない」の 1 行。素材から取れる問数は素材が決める */
+function countLine(maxQuestions: number): string {
+  return `重要な点が${maxQuestions}個に満たなければ、無理に水増しせず少ない問数で構いません。`;
+}
 
+function buildStudyLogPrompt(notes: string, subject: QuizSubject, maxQuestions: number): string {
+  return `あなたは資格試験の作問者です。
+以下は学習者が「${subject.categoryName}」の学習後に書いた学びのメモです。
+${examLine(subject.examName)}
 --- 学習メモ ここから ---
 ${notes}
 --- 学習メモ ここまで ---
 
-このメモから、核となる重要用語を【最大${maxQuestions}問】選定して一問一答形式の問題を作成してください。
+このメモから、核となる重要事項を【最大${maxQuestions}問】選定して問題を作成してください。
+${countLine(maxQuestions)}
 
-${commonRules(maxQuestions)}`;
+${QUIZ_RULES}`;
 }
 
 function buildNotebookPrompt(
   title: string,
   content: string,
-  categoryName: string,
+  subject: QuizSubject,
   maxQuestions: number,
 ): string {
-  return `あなたは学習者の復習を支援する出題者です。
-以下は学習者が「${categoryName}」について書いた Markdown 形式の学習ノートです。
-
+  return `あなたは資格試験の作問者です。
+以下は学習者が「${subject.categoryName}」について書いた Markdown 形式の学習ノートです。
+${examLine(subject.examName)}
 --- ノート「${title}」ここから ---
 ${content}
 --- ノート ここまで ---
 
-このノートから、核となる重要用語を【最大${maxQuestions}問】選定して一問一答形式の問題を作成してください。
+このノートから、核となる重要事項を【最大${maxQuestions}問】選定して問題を作成してください。
 見出しや箇条書きの記法そのものは問題にせず、内容から出題すること。
+${countLine(maxQuestions)}
 
-${commonRules(maxQuestions)}`;
+${QUIZ_RULES}`;
 }
 
 /**
@@ -180,11 +245,29 @@ function coerceTags(raw: unknown): string[] {
   return [...seen];
 }
 
-/** パース結果を実行時に検証し、不正な要素は捨てる */
+/** 応答から `answer` だけを拾う。用語型の誤答を埋める材料になる */
+function answersOf(rawList: readonly unknown[]): string[] {
+  const answers: string[] = [];
+  for (const raw of rawList) {
+    if (typeof raw !== 'object' || raw === null) continue;
+    const answer = (raw as Record<string, unknown>).answer;
+    if (typeof answer === 'string' && answer.trim()) answers.push(answer.trim());
+  }
+  return answers;
+}
+
+/**
+ * パース結果を実行時に検証し、不正な要素は捨てる。
+ *
+ * **2 周する。** 1 周目で答えを集めて誤答の材料（pool）にし、2 周目で選択肢を組む。
+ * 用語を選ばせる問題は、同じ生成に含まれる他の問題の答えがそのまま良い誤答になる。
+ */
 function coerceQuestions(parsed: unknown, maxQuestions: number): GeneratedQuestion[] {
   if (typeof parsed !== 'object' || parsed === null) return [];
   const rawList = (parsed as { questions?: unknown }).questions;
   if (!Array.isArray(rawList)) return [];
+
+  const pool = answersOf(rawList);
 
   const result: GeneratedQuestion[] = [];
   for (const raw of rawList) {
@@ -194,7 +277,12 @@ function coerceQuestions(parsed: unknown, maxQuestions: number): GeneratedQuesti
     const answer = typeof item.answer === 'string' ? item.answer.trim() : '';
     const explanation = typeof item.explanation === 'string' ? item.explanation.trim() : '';
     if (!question || !answer) continue;
-    result.push({ question, answer, explanation, tags: coerceTags(item.tags) });
+
+    // 4 個そろわない 4 択は問題として成立しない（記述型は補充もできない）
+    const choices = buildChoices(item.choices, answer, coerceChoiceStyle(item.choiceStyle), pool);
+    if (choices.length === 0) continue;
+
+    result.push({ question, answer, explanation, choices, tags: coerceTags(item.tags) });
   }
   return result.slice(0, maxQuestions);
 }
@@ -275,7 +363,7 @@ async function callGeminiJson<T>(
   }
 }
 
-/** 一問一答の生成。文言は切り出す前と 1 文字も変えていない。 */
+/** 4択の生成。学習メモとノートが通る道 */
 async function callGemini(
   apiKey: string | undefined,
   prompt: string,
@@ -291,7 +379,8 @@ async function callGemini(
     },
     {
       missingKey: 'GEMINI_API_KEY が未設定のため問題を生成できませんでした。',
-      unusable: 'AI の応答から問題を抽出できませんでした。入力に用語が少ない可能性があります。',
+      unusable:
+        'AI の応答から問題を抽出できませんでした。入力に用語が少ないか、4択の選択肢がそろわなかった可能性があります。',
     },
   );
 
@@ -302,10 +391,10 @@ async function callGemini(
 export function generateQuizFromStudyLog(
   apiKey: string | undefined,
   notes: string,
-  categoryName: string,
+  subject: QuizSubject,
   maxQuestions: number,
 ): Promise<GenerateQuizResult> {
-  return callGemini(apiKey, buildStudyLogPrompt(notes, categoryName, maxQuestions), maxQuestions);
+  return callGemini(apiKey, buildStudyLogPrompt(notes, subject, maxQuestions), maxQuestions);
 }
 
 /** ノート本文から生成する */
@@ -313,12 +402,12 @@ export function generateQuizFromNotebook(
   apiKey: string | undefined,
   title: string,
   content: string,
-  categoryName: string,
+  subject: QuizSubject,
   maxQuestions: number,
 ): Promise<GenerateQuizResult> {
   return callGemini(
     apiKey,
-    buildNotebookPrompt(title, content, categoryName, maxQuestions),
+    buildNotebookPrompt(title, content, subject, maxQuestions),
     maxQuestions,
   );
 }
@@ -441,7 +530,7 @@ export function defineTermWithAI(
 }
 
 // ---------------------------------------------------------------------------
-// 用語辞書からの出題（一問一答 / 穴埋め / 4択）
+// 用語辞書からの出題
 // ---------------------------------------------------------------------------
 
 export interface GlossarySourceTerm {
@@ -451,8 +540,6 @@ export interface GlossarySourceTerm {
 }
 
 export interface GeneratedGlossaryQuestion extends GeneratedQuestion {
-  /** 4択のときだけ 4 要素。正解を必ず 1 つ含む。それ以外は空配列 */
-  choices: string[];
   /**
    * どの用語から作ったか。**入力の term と完全一致しなければ捨てる。**
    *
@@ -470,79 +557,9 @@ export interface GenerateGlossaryResult {
 /** 1 回の生成で渡せる用語の数。1 用語 = 1 問 */
 export const MAX_GLOSSARY_TERMS_PER_REQUEST = 10;
 
-const GLOSSARY_RESPONSE_SCHEMA = {
-  type: Type.OBJECT,
-  properties: {
-    questions: {
-      type: Type.ARRAY,
-      items: {
-        type: Type.OBJECT,
-        properties: {
-          sourceTerm: { type: Type.STRING, description: '入力した用語名をそのまま書き写す。' },
-          question: { type: Type.STRING, description: '問題文。形式ごとの指示に従う。' },
-          answer: { type: Type.STRING, description: '正解となる用語名のみ。短く。' },
-          explanation: { type: Type.STRING, description: '100文字前後の簡潔な解説。' },
-          choices: {
-            type: Type.ARRAY,
-            items: { type: Type.STRING },
-            description: '4択のときだけ、正解1個＋誤答3個のちょうど4個。他の形式では空配列。',
-          },
-          tags: {
-            type: Type.ARRAY,
-            items: { type: Type.STRING },
-            description: '分野・ジャンルのタグを1〜3個。元の用語のタグをそのまま使ってよい。',
-          },
-        },
-        required: ['sourceTerm', 'question', 'answer', 'explanation', 'choices', 'tags'],
-        propertyOrdering: ['sourceTerm', 'question', 'answer', 'explanation', 'choices', 'tags'],
-      },
-    },
-  },
-  required: ['questions'],
-};
+const GLOSSARY_RESPONSE_SCHEMA = quizSchema(true);
 
-const FORMAT_RULES: Record<QuestionType, string> = {
-  qa: `形式: 一問一答。
-
-制約:
-- question: その用語の定義・役割・特徴を説明する文にする。答えの用語そのものを問題文に含めてはいけない。
-- answer: 正解となる用語名のみを**30文字以内**で短く書く。文章にしない。
-- explanation: **100文字以内**で簡潔に解説する。
-- tags: 元の用語のタグをそのまま使う。無い場合だけ1〜3個付ける。
-- choices: 空配列にする。
-- 出力はすべて日本語で書く。`,
-
-  cloze: `形式: 穴埋め。
-
-制約:
-- question: その用語の意味・役割を説明する1〜2文を書き、**用語そのものを ${CLOZE_BLANK}（半角アンダースコア4個）に置き換える**。
-  ${CLOZE_BLANK} は1問につきちょうど1か所だけ置く。
-- answer: ${CLOZE_BLANK} に入る用語名のみを**30文字以内**で書く。
-- 「${CLOZE_BLANK}とは何か」のような、穴が問いになっていない文を書かない。空欄の前後から答えが推測できる文にする。
-- explanation: **100文字以内**で簡潔に解説する。
-- tags: 元の用語のタグをそのまま使う。無い場合だけ1〜3個付ける。
-- choices: 空配列にする。
-- 出力はすべて日本語で書く。`,
-
-  quiz: `形式: 4択。
-
-制約:
-- question: その用語の定義・役割を説明した文にし、「次の説明にあてはまる用語はどれか。」で始める。
-  答えの用語そのものを問題文に含めてはいけない。
-- answer: 正解の用語名のみを**30文字以内**で書く。
-- choices: **ちょうど4個**。正解を1つ含め、残り3個は**上の用語リストにある他の用語から選ぶ**。
-  リストに使える用語が足りないときだけ、同じ分野のもっともらしい用語を作ってよい。
-  紛らわしさが大事なので、明らかに分野違いのものを混ぜない。同じ語を2回入れない。
-- explanation: **100文字以内**。なぜ他の選択肢では違うのかに1文触れる。
-- tags: 元の用語のタグをそのまま使う。無い場合だけ1〜3個付ける。
-- 出力はすべて日本語で書く。`,
-};
-
-function buildGlossaryPrompt(
-  terms: readonly GlossarySourceTerm[],
-  questionType: QuestionType,
-  categoryName: string,
-): string {
+function buildGlossaryPrompt(terms: readonly GlossarySourceTerm[], subject: QuizSubject): string {
   const list = terms
     .map((term, index) => {
       const lines = [`${index + 1}. ${term.term}`, `   意味: ${term.definition || '（未記入）'}`];
@@ -551,9 +568,9 @@ function buildGlossaryPrompt(
     })
     .join('\n');
 
-  return `あなたは学習者の復習を支援する出題者です。
-「${categoryName}」を学んでいる人の用語辞書から、${terms.length}問を作成してください。
-
+  return `あなたは資格試験の作問者です。
+「${subject.categoryName}」を学んでいる人の用語辞書から、${terms.length}問を作成してください。
+${examLine(subject.examName)}
 --- 用語リスト ここから ---
 ${list}
 --- 用語リスト ここまで ---
@@ -563,17 +580,13 @@ sourceTerm には、その問題の元になった用語名をリストからそ
 （1文字でも変えると対応付けられません）。
 入力に含まれない知識を持ち出さず、意味の内容に忠実に作ってください。
 
-${FORMAT_RULES[questionType]}`;
+${QUIZ_RULES}`;
 }
 
-/**
- * 応答を検証する。**入力に無い用語や、形式を満たせない問題はここで捨てる。**
- * 直せるものだけ直す（穴埋めの空欄・4択の選択肢）。
- */
+/** 応答を検証する。**入力に無い用語や、形式を満たせない問題はここで捨てる。** */
 function coerceGlossaryQuestions(
   parsed: unknown,
   terms: readonly GlossarySourceTerm[],
-  questionType: QuestionType,
 ): GeneratedGlossaryQuestion[] {
   if (typeof parsed !== 'object' || parsed === null) return [];
   const rawList = (parsed as { questions?: unknown }).questions;
@@ -596,19 +609,13 @@ function coerceGlossaryQuestions(
     if (!source || used.has(sourceTerm)) continue;
 
     const answer = typeof item.answer === 'string' ? item.answer.trim() : '';
-    let question = typeof item.question === 'string' ? item.question.trim() : '';
+    const question = typeof item.question === 'string' ? item.question.trim() : '';
     const explanation = typeof item.explanation === 'string' ? item.explanation.trim() : '';
     if (!question || !answer) continue;
 
-    let choices: string[] = [];
-    if (questionType === 'cloze') {
-      const repaired = ensureCloze(question, answer);
-      if (repaired === null) continue;
-      question = repaired;
-    } else if (questionType === 'quiz') {
-      choices = normalizeChoices(item.choices, answer, pool);
-      if (choices.length === 0) continue;
-    }
+    // 4 個そろわない 4 択は問題として成立しない（記述型は補充もできない）
+    const choices = buildChoices(item.choices, answer, coerceChoiceStyle(item.choiceStyle), pool);
+    if (choices.length === 0) continue;
 
     used.add(sourceTerm);
     result.push({
@@ -628,26 +635,26 @@ function coerceGlossaryQuestions(
   return result.slice(0, terms.length);
 }
 
-/** 用語辞書から、指定した形式で 1 用語 1 問ずつ作る */
+/** 用語辞書から 1 用語 1 問ずつ作る */
 export async function generateQuestionsFromGlossary(
   apiKey: string | undefined,
   terms: readonly GlossarySourceTerm[],
-  questionType: QuestionType,
-  categoryName: string,
+  subject: QuizSubject,
 ): Promise<GenerateGlossaryResult> {
   if (terms.length === 0) return { questions: [] };
 
   const { value, warning } = await callGeminiJson(
     apiKey,
-    buildGlossaryPrompt(terms, questionType, categoryName),
+    buildGlossaryPrompt(terms, subject),
     GLOSSARY_RESPONSE_SCHEMA,
     (parsed) => {
-      const questions = coerceGlossaryQuestions(parsed, terms, questionType);
+      const questions = coerceGlossaryQuestions(parsed, terms);
       return questions.length > 0 ? questions : null;
     },
     {
       missingKey: 'GEMINI_API_KEY が未設定のため問題を生成できませんでした。',
-      unusable: 'AI の応答から問題を抽出できませんでした。用語の意味を書くと作りやすくなります。',
+      unusable:
+        'AI の応答から問題を抽出できませんでした。用語の意味を書くと作りやすくなります（4択の選択肢がそろわなかった可能性もあります）。',
     },
   );
 

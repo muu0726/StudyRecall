@@ -78,7 +78,7 @@ export default function RecordModal({
         <Field
           label="本日の学び・用語メモ"
           htmlFor="notes"
-          hint="このメモから AI が最大5問の一問一答を作成します。"
+          hint="このメモから AI が最大5問の4択問題を作成します。"
         >
           <Textarea
             id="notes"

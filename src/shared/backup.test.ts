@@ -24,6 +24,7 @@ function rows(overrides: Partial<SnapshotRows> = {}): SnapshotRows {
         id: 'cat_1',
         name: 'ネットワーク',
         color: '#3b82f6',
+        examName: '基本情報技術者試験',
         createdAt: at('2026-01-01T00:00:00.000Z'),
       },
     ],
@@ -366,9 +367,17 @@ describe('parseSnapshot が断るもの', () => {
  * 復元できないバックアップは、バックアップではない。
  */
 describe('古い版のバックアップ', () => {
-  /** v2 のファイルから、v1 に無かった項目を落として v1 相当にする */
-  const asV1 = () => {
+  /** いまのファイルから、v2 に無かった項目を落として v2 相当にする */
+  const asV2 = () => {
     const file = JSON.parse(JSON.stringify(buildSnapshot(rows(), NOW)));
+    file.version = 2;
+    for (const category of file.data.categories) delete category.examName;
+    return file;
+  };
+
+  /** さらに v1 に無かった項目まで落とす */
+  const asV1 = () => {
+    const file = asV2();
     file.version = 1;
     delete file.data.glossaryTerms;
     for (const quiz of file.data.quizQuestions) {
@@ -378,6 +387,18 @@ describe('古い版のバックアップ', () => {
     }
     return file;
   };
+
+  it('v2 のバックアップが今も読める', () => {
+    const result = parseSnapshot(asV2());
+    expect(result.ok).toBe(true);
+  });
+
+  /* 試験名はあとから入れた項目。無いファイルを弾いてはいけない */
+  it('v2 に無かった試験名は null で埋まる', () => {
+    const result = parseSnapshot(asV2());
+    if (!result.ok) throw new Error(result.error);
+    expect(result.value.data.categories[0].examName).toBeNull();
+  });
 
   it('v1 のバックアップが今も読める', () => {
     const result = parseSnapshot(asV1());

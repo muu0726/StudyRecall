@@ -28,34 +28,26 @@ export function splitCloze(question: string): { before: string; after: string } 
 }
 
 /**
- * 空欄の無い応答を直す。question の中に answer がそのまま出ていれば、
- * **最初の 1 回だけ**を空欄に置き換える。できなければ null（その問題は捨てる）。
- *
- * 構造化出力を指定しても「____ を置く」という指示は破られることがある。
- * 空欄の無い穴埋めは、答えが問題文に書いてある問題になってしまうので、
- * 直せないなら出さないほうがよい。
- */
-export function ensureCloze(question: string, answer: string): string | null {
-  const trimmed = question.trim();
-  if (!trimmed) return null;
-  if (trimmed.includes(CLOZE_BLANK)) return trimmed;
-
-  const target = answer.trim();
-  if (!target) return null;
-
-  const index = trimmed.indexOf(target);
-  if (index === -1) return null;
-
-  return trimmed.slice(0, index) + CLOZE_BLANK + trimmed.slice(index + target.length);
-}
-
-/**
  * 読み上げ用の文。
  *
  * **これが無いと `SpeechPlayer` が「アンダーバー」を 4 回読む。**
- * 穴埋め以外は何も変えない（恒等）ので、呼び出し側で形式を分岐しなくてよい。
+ * 一問一答は何も変えない（恒等）ので、呼び出し側で形式を分岐しなくてよい。
+ *
+ * 4択は**選択肢まで読む**。読まないと「次のうち適切なものはどれか」で文が終わり、
+ * 耳だけでは何も選べない問題になる。`choices` の既定が空配列なので、
+ * 渡さない呼び出し（選択肢の無いカード）はこれまで通り問題文だけを返す。
  */
-export function speechTextOf(question: string, questionType: QuestionType): string {
-  if (questionType !== 'cloze') return question;
-  return question.split(CLOZE_BLANK).join('、何でしょう、');
+export function speechTextOf(
+  question: string,
+  questionType: QuestionType,
+  choices: readonly string[] = [],
+): string {
+  if (questionType === 'cloze') return question.split(CLOZE_BLANK).join('、何でしょう、');
+  if (questionType === 'quiz' && choices.length > 0) {
+    // 「。」で区切る。読み上げがここで一拍置くので、選択肢の切れ目が耳で分かる。
+    // 問題文の末尾の句点は落とす（付けたままだと「。。」になって間が空きすぎる）
+    const stem = question.replace(/[。．.]\s*$/, '');
+    return [stem, ...choices.map((choice, index) => `${index + 1}、${choice}`)].join('。');
+  }
+  return question;
 }

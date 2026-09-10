@@ -118,6 +118,11 @@ export const categories = sqliteTable(
       .references(() => users.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
     color: text('color').notNull().default('#3b82f6'),
+    /**
+     * 対象の資格試験名。**問題生成のプロンプトに載る唯一の外部からの指定。**
+     * null なら汎用の資格試験風に作る（既存のカテゴリはすべて null で始まる）。
+     */
+    examName: text('exam_name'),
     createdAt: integer('created_at', { mode: 'timestamp' })
       .notNull()
       .$defaultFn(() => new Date()),
@@ -338,7 +343,8 @@ export const quizQuestions = sqliteTable(
     explanation: text('explanation'),
     /**
      * 出題形式。'qa' = 一問一答 / 'cloze' = 穴埋め / 'quiz' = 4択。
-     * **既存の行はすべて 'qa'** として扱われ、見た目も動きも変わらない。
+     * **新しく作られる行はすべて 'quiz'。** 既定値の 'qa' は、4択に統一する前の
+     * 行と、形式を指定せずに書かれた行のためだけに残っている。
      */
     questionType: text('question_type', { enum: ['qa', 'cloze', 'quiz'] })
       .notNull()

@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Sparkles } from 'lucide-react';
-import type { GlossaryTermDTO, QuestionType } from '../../shared/types';
+import type { GlossaryTermDTO } from '../../shared/types';
 import { MAX_GLOSSARY_GENERATE_TERMS } from '../../shared/types';
-import { Banner, Button, Modal, Segmented } from '../ui';
+import { Banner, Button, Modal } from '../ui';
 
 /**
  * 辞書から問題を作る。
@@ -23,18 +23,8 @@ interface Props {
   selectedIds: ReadonlySet<string>;
   isGenerating: boolean;
   onClose: () => void;
-  onGenerate: (termIds: string[], questionType: QuestionType) => void;
+  onGenerate: (termIds: string[]) => void;
 }
-
-const TYPE_LABELS: { value: QuestionType; label: string; hint: string }[] = [
-  { value: 'qa', label: '一問一答', hint: '説明を読んで用語を答える。いちばん基本の形。' },
-  { value: 'cloze', label: '穴埋め', hint: '説明文の中の用語が空欄になる。文脈ごと覚えたいとき。' },
-  {
-    value: 'quiz',
-    label: '4択',
-    hint: '誤答は辞書の他の用語から作る。紛らわしい語を見分けたいとき。',
-  },
-];
 
 export default function GenerateFromGlossaryModal({
   open,
@@ -46,7 +36,6 @@ export default function GenerateFromGlossaryModal({
   onGenerate,
 }: Props) {
   const [scope, setScope] = useState<GenerateScope>('selected');
-  const [questionType, setQuestionType] = useState<QuestionType>('qa');
 
   const pools: Record<GenerateScope, GlossaryTermDTO[]> = {
     selected: all.filter((term) => selectedIds.has(term.id)),
@@ -65,8 +54,6 @@ export default function GenerateFromGlossaryModal({
   // 上限を超えるぶんは切る。**どこから切ったかが分かるよう、件数を必ず出す**
   const targets = pool.slice(0, MAX_GLOSSARY_GENERATE_TERMS);
   const trimmed = pool.length - targets.length;
-
-  const typeHint = TYPE_LABELS.find((item) => item.value === questionType)?.hint;
 
   return (
     <Modal
@@ -108,20 +95,15 @@ export default function GenerateFromGlossaryModal({
 
         <div>
           <p className="text-body font-medium text-fg">形式</p>
-          <Segmented
-            label="出題形式"
-            className="mt-2"
-            fullWidth
-            value={questionType}
-            onChange={(value) => setQuestionType(value as QuestionType)}
-            options={TYPE_LABELS.map(({ value, label }) => ({ value, label }))}
-          />
-          {typeHint && <p className="mt-2 text-caption text-fg-muted">{typeHint}</p>}
+          <p className="mt-1 text-caption text-fg-muted">
+            資格試験と同じ4択で作ります。用語を選ばせる問題と、記述を選ばせる問題を
+            用語の内容に合わせて使い分けます。
+          </p>
         </div>
 
-        {questionType === 'quiz' && targets.length < 4 && targets.length > 0 && (
+        {targets.length < 4 && targets.length > 0 && (
           <Banner tone="warning" size="sm">
-            4択の誤答は辞書の他の用語から作ります。対象が 4 件未満だと、AI が作った
+            誤答は辞書の他の用語から作ります。対象が 4 件未満だと、AI が作った
             もっともらしい用語で埋まります。
           </Banner>
         )}
@@ -140,12 +122,7 @@ export default function GenerateFromGlossaryModal({
           disabled={targets.length === 0 || isGenerating}
           loading={isGenerating}
           icon={<Sparkles className="h-4 w-4" aria-hidden />}
-          onClick={() =>
-            onGenerate(
-              targets.map((term) => term.id),
-              questionType,
-            )
-          }
+          onClick={() => onGenerate(targets.map((term) => term.id))}
         >
           {targets.length === 0 ? '対象の用語がありません' : `${targets.length} 問を作る`}
         </Button>

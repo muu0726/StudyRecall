@@ -17,7 +17,7 @@
  */
 
 /** いま書き出す版 */
-export const BACKUP_VERSION = 2;
+export const BACKUP_VERSION = 3;
 
 /**
  * まだ読める版。
@@ -26,8 +26,9 @@ export const BACKUP_VERSION = 2;
  * 復元できないバックアップにはバックアップの意味が無いので、
  * 版を上げても古いものは読み続ける（足りない項目は既定値で埋める）。
  * v1 との差: glossaryTerms が無く、問題に questionType / choices / glossaryTermId が無い。
+ * v2 との差: カテゴリに examName が無い。
  */
-const READABLE_VERSIONS: readonly number[] = [1, 2];
+const READABLE_VERSIONS: readonly number[] = [1, 2, 3];
 export const BACKUP_APP = 'study-recall';
 
 /** 全テーブル合計の行数の上限。これを超えるものは扱わない */
@@ -49,6 +50,8 @@ export interface BackupCategory {
   id: string;
   name: string;
   color: string;
+  /** 対象の資格試験名。v2 までのファイルには無いので、読むときは null で埋める */
+  examName: string | null;
   createdAt: string;
 }
 
@@ -178,7 +181,13 @@ const isoOrNull = (value: Date | null | undefined): string | null =>
  * **要る項目だけを構造的に書く**（userId を型に含めないので、渡しても載らない）。
  */
 export interface SnapshotRows {
-  categories: { id: string; name: string; color: string; createdAt: Date }[];
+  categories: {
+    id: string;
+    name: string;
+    color: string;
+    examName: string | null;
+    createdAt: Date;
+  }[];
   notebooks: {
     id: string;
     categoryId: string;
@@ -266,6 +275,7 @@ export function buildSnapshot(rows: SnapshotRows, now: Date): BackupSnapshot {
       id: row.id,
       name: row.name,
       color: row.color,
+      examName: row.examName,
       createdAt: iso(row.createdAt),
     })),
     // 親が先に来る順で書き出す。壊れたファイルを渡された場合に備えて、
@@ -510,7 +520,17 @@ export function parseSnapshot(raw: unknown): ParseResult {
     ) {
       return fail('カテゴリの形式が正しくありません。');
     }
-    categories.push({ id: row.id, name: row.name, color: row.color, createdAt: row.createdAt });
+    // v2 までのファイルには無い。**無いことは壊れていることではない**
+    if (row.examName !== undefined && !nullableStr(row.examName)) {
+      return fail('カテゴリの形式が正しくありません。');
+    }
+    categories.push({
+      id: row.id,
+      name: row.name,
+      color: row.color,
+      examName: row.examName === undefined ? null : row.examName,
+      createdAt: row.createdAt,
+    });
   }
   const categoryIds = new Set(categories.map((c) => c.id));
 

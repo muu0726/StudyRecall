@@ -39,6 +39,7 @@ const notebookSelectWithCategory = {
   updatedAt: notebooks.updatedAt,
   categoryName: categories.name,
   categoryColor: categories.color,
+  examName: categories.examName,
 };
 
 /**
@@ -476,7 +477,7 @@ export const notebooksRoute = new Hono<AppEnv>()
     return c.json({ ok: true, purged: purged.length });
   })
 
-  /** ノート本文から一問一答を生成して notebookId 付きで保存する */
+  /** ノート本文から4択を生成して notebookId 付きで保存する */
   .post('/:id/generate-quiz', async (c) => {
     const id = c.req.param('id');
     const body = await c.req.json<Partial<GenerateNotebookQuizRequest>>().catch(() => null);
@@ -518,7 +519,7 @@ export const notebooksRoute = new Hono<AppEnv>()
       c.env.GEMINI_API_KEY,
       notebook.title,
       source.text,
-      notebook.categoryName,
+      { categoryName: notebook.categoryName, examName: notebook.examName },
       count,
     );
 
@@ -533,6 +534,8 @@ export const notebooksRoute = new Hono<AppEnv>()
         question: q.question,
         answer: q.answer,
         explanation: q.explanation || null,
+        questionType: 'quiz',
+        choices: q.choices,
         tags: q.tags,
       })),
     );

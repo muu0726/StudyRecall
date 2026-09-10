@@ -112,8 +112,15 @@ export function useSpeechQueue(questions: QuizQuestionDTO[]): SpeechQueueState {
         if (!question) break;
 
         setPhase('question');
-        // 穴埋めの ____ をそのまま渡すと「アンダーバー」を4回読む
-        if (!(await speak(speechTextOf(question.question, question.questionType), runId))) return;
+        // 穴埋めの ____ をそのまま渡すと「アンダーバー」を4回読む。
+        // 4択は選択肢まで読ませる（読まないと耳だけでは選べない）
+        if (
+          !(await speak(
+            speechTextOf(question.question, question.questionType, question.choices),
+            runId,
+          ))
+        )
+          return;
 
         setPhase('thinking');
         if (!(await wait(thinkingRef.current * 1000, runId))) return;

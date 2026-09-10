@@ -9,6 +9,49 @@ import { normalizeForSearch } from './glossary-search';
 
 export const CHOICE_COUNT = 4;
 
+/**
+ * 選択肢の型。
+ *
+ * - `'term'` … 説明文を読ませて**用語を選ばせる**。選択肢は用語名
+ * - `'statement'` … 「〜に関する記述のうち、適切なものはどれか」で**記述文を選ばせる**
+ *
+ * 何のためにあるかというと、**誤答の埋め方がこの型で変わる**から。
+ * 記述の中に用語名を 1 つ混ぜると、その 1 個だけ形が違って一目で分かってしまう。
+ */
+export type ChoiceStyle = 'term' | 'statement';
+
+/**
+ * 正解として許す長さ。
+ * これを超える「答え」は、選択肢に並べられる形をしていない（問題ごと捨てる）。
+ */
+export const MAX_QUIZ_ANSWER_LENGTH = 120;
+
+/** 不明な値は 'term' に倒す。誤答を pool から補える側なので、間違えたときの損が小さい */
+export function coerceChoiceStyle(raw: unknown): ChoiceStyle {
+  return raw === 'statement' ? 'statement' : 'term';
+}
+
+/**
+ * 4択の選択肢を作る。**4 個そろわなければ空配列**（呼び出し側はその問題を捨てる）。
+ *
+ * `normalizeChoices` との違いは 2 つだけ:
+ * 1. 長すぎる `answer` を弾く
+ * 2. **`'statement'` では pool から補わない**
+ *
+ * 2 は「4 個に足りないなら捨てる」ということでもある。
+ * 形の違う選択肢を 1 個混ぜて 4 個にするより、その問題を出さないほうがよい。
+ */
+export function buildChoices(
+  raw: unknown,
+  answer: string,
+  style: ChoiceStyle,
+  pool: readonly string[],
+  rand: () => number = Math.random,
+): string[] {
+  if (answer.trim().length > MAX_QUIZ_ANSWER_LENGTH) return [];
+  return normalizeChoices(raw, answer, style === 'term' ? pool : [], rand);
+}
+
 /** 正規化して見たときに同じものを 1 つに畳む（'TCP' と 'ｔｃｐ' を並べない） */
 function pushUnique(into: string[], seen: Set<string>, raw: unknown): void {
   if (typeof raw !== 'string') return;

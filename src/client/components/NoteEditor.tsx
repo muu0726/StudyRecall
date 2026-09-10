@@ -531,7 +531,7 @@ export default function NoteEditor({
               ) : (
                 <>
                   <Sparkles className="h-4 w-4" aria-hidden />
-                  このノートから問題を生成
+                  このノートから4択を生成
                 </>
               )}
             </button>

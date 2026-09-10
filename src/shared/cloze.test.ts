@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CLOZE_BLANK, ensureCloze, speechTextOf, splitCloze } from './cloze';
+import { CLOZE_BLANK, speechTextOf, splitCloze } from './cloze';
 
 describe('splitCloze', () => {
   it('空欄の前後で割る', () => {
@@ -31,38 +31,6 @@ describe('splitCloze', () => {
   });
 });
 
-describe('ensureCloze', () => {
-  it('既に空欄があればそのまま通す', () => {
-    const question = `TCPは${CLOZE_BLANK}で接続する。`;
-    expect(ensureCloze(question, '3ウェイハンドシェイク')).toBe(question);
-  });
-
-  /* 「____ を置く」という指示は構造化出力でも破られる。直せるなら直す */
-  it('答えが問題文に出ていれば空欄に置き換える', () => {
-    expect(ensureCloze('TCPは3ウェイハンドシェイクで接続する。', '3ウェイハンドシェイク')).toBe(
-      `TCPは${CLOZE_BLANK}で接続する。`,
-    );
-  });
-
-  it('置き換えるのは最初の1回だけ', () => {
-    expect(ensureCloze('DNSとDNS', 'DNS')).toBe(`${CLOZE_BLANK}とDNS`);
-  });
-
-  /* 直せないものを出すと「答えが問題文に書いてある問題」になる。捨てる */
-  it('答えが問題文に無ければ null', () => {
-    expect(ensureCloze('通信の手順を説明した文。', 'DNS')).toBeNull();
-  });
-
-  it('空の入力は null', () => {
-    expect(ensureCloze('   ', 'DNS')).toBeNull();
-    expect(ensureCloze('DNSの説明', '  ')).toBeNull();
-  });
-
-  it('前後の空白は落とす', () => {
-    expect(ensureCloze(`  TCPは${CLOZE_BLANK}。  `, 'x')).toBe(`TCPは${CLOZE_BLANK}。`);
-  });
-});
-
 describe('speechTextOf', () => {
   /* これが無いと読み上げが「アンダーバー」を4回読む */
   it('穴埋めの空欄を読める言葉に替える', () => {
@@ -75,6 +43,25 @@ describe('speechTextOf', () => {
     const text = `記号 ${CLOZE_BLANK} を含む問題文`;
     expect(speechTextOf(text, 'qa')).toBe(text);
     expect(speechTextOf(text, 'quiz')).toBe(text);
+  });
+
+  /* 選択肢を読まないと、耳だけでは何も選べない問題になる */
+  it('4択は選択肢に番号を付けて読む', () => {
+    expect(speechTextOf('適切なものはどれか。', 'quiz', ['TCP', 'UDP', 'DNS', 'ARP'])).toBe(
+      '適切なものはどれか。1、TCP。2、UDP。3、DNS。4、ARP',
+    );
+  });
+
+  /* 句点が無い問題文でも切れ目は入る */
+  it('末尾の句点は重ねない', () => {
+    expect(speechTextOf('適切なものはどれか', 'quiz', ['TCP', 'UDP'])).toBe(
+      '適切なものはどれか。1、TCP。2、UDP',
+    );
+  });
+
+  it('選択肢があっても4択でなければ読まない', () => {
+    expect(speechTextOf('問題文', 'qa', ['TCP', 'UDP'])).toBe('問題文');
+    expect(speechTextOf(`${CLOZE_BLANK}は？`, 'cloze', ['TCP', 'UDP'])).toBe('、何でしょう、は？');
   });
 
   it('空欄の無い穴埋めでも落ちない', () => {

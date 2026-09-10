@@ -36,10 +36,15 @@ export interface CategoryUsage {
   quizzes: number;
 }
 
+/** カテゴリに設定する資格試験名の上限 */
+export const MAX_EXAM_NAME_LENGTH = 60;
+
 export interface CategoryDTO {
   id: string;
   name: string;
   color: string;
+  /** 対象の資格試験名。問題生成のプロンプトに載る。未設定は null */
+  examName: string | null;
   createdAt: string;
   /** このカテゴリを参照している件数。削除可否の判断に使う。 */
   usage: CategoryUsage;
@@ -76,6 +81,9 @@ export const MAX_NOTE_DEPTH = 5;
 /**
  * 出題形式。
  * 'qa' = 一問一答 / 'cloze' = 穴埋め（question の中の `____`）/ 'quiz' = 4択。
+ *
+ * **いま作られるのは 'quiz' だけ。** 'qa' と 'cloze' は 4択に統一する前の
+ * カードが持っている値で、表示・回答・書き出しはこれまで通り動く。
  */
 export type QuestionType = 'qa' | 'cloze' | 'quiz';
 
@@ -93,7 +101,7 @@ export interface QuizQuestionDTO {
   question: string;
   answer: string;
   explanation: string | null;
-  /** 出題形式。既存の問題はすべて 'qa'。 */
+  /** 出題形式。新しく作られるものはすべて 'quiz'。 */
   questionType: QuestionType;
   /** 'quiz'（4択）のときだけ 4 要素。正解は answer と文字列一致で判定する。 */
   choices: string[];
@@ -161,11 +169,14 @@ export interface SessionUser {
 export interface CreateCategoryRequest {
   name: string;
   color?: string;
+  examName?: string;
 }
 
 export interface UpdateCategoryRequest {
   name?: string;
   color?: string;
+  /** **空文字は「設定を消す」。** 省略（undefined）は「触らない」 */
+  examName?: string;
 }
 
 /** DELETE /api/categories/:id が 409 を返したときのボディ */
@@ -335,7 +346,6 @@ export const MAX_GLOSSARY_GENERATE_TERMS = 10;
 export interface GenerateGlossaryCardsRequest {
   /** 対象の用語。**画面で選ばれたものをそのまま送る**（サーバー側で選び直さない） */
   termIds: string[];
-  questionType: QuestionType;
 }
 
 export interface GenerateGlossaryCardsResponse {

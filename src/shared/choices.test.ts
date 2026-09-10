@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { CHOICE_COUNT, normalizeChoices } from './choices';
+import {
+  CHOICE_COUNT,
+  MAX_QUIZ_ANSWER_LENGTH,
+  buildChoices,
+  coerceChoiceStyle,
+  normalizeChoices,
+} from './choices';
 
 /** 並びを固定して確かめるための擬似乱数（テスト内だけ） */
 const seeded = (seed: number) => {
@@ -86,5 +92,76 @@ describe('normalizeChoices', () => {
   it('混ぜても中身は変わらない', () => {
     const result = normalizeChoices(['DNS', 'ARP', 'DHCP'], 'TCP', [], seeded(7));
     expect([...result].sort()).toEqual(['ARP', 'DHCP', 'DNS', 'TCP']);
+  });
+});
+
+describe('coerceChoiceStyle', () => {
+  it("'statement' だけを記述型として受ける", () => {
+    expect(coerceChoiceStyle('statement')).toBe('statement');
+  });
+
+  /* 綴り違い・型違い・未指定は、誤答を補える 'term' に倒す */
+  it('それ以外はすべて term', () => {
+    expect(coerceChoiceStyle('term')).toBe('term');
+    expect(coerceChoiceStyle(undefined)).toBe('term');
+    expect(coerceChoiceStyle(null)).toBe('term');
+    expect(coerceChoiceStyle(4)).toBe('term');
+    expect(coerceChoiceStyle('Statement')).toBe('term');
+    expect(coerceChoiceStyle(['statement'])).toBe('term');
+  });
+});
+
+describe('buildChoices', () => {
+  const statements = [
+    'TCPは3ウェイハンドシェイクで接続を確立する。',
+    'TCPはコネクションレス型で再送を行わない。',
+    'TCPはIPアドレスを名前に変換する。',
+    'TCPはMACアドレスを解決する。',
+  ];
+
+  it('term は今まで通り pool から埋める', () => {
+    const result = buildChoices(['DNS'], 'TCP', 'term', ['ARP', 'DHCP', 'ICMP'], zero);
+    expect(result).toHaveLength(CHOICE_COUNT);
+    expect(result).toEqual(expect.arrayContaining(['TCP', 'DNS']));
+  });
+
+  /**
+   * ここが本題。記述の中に用語名を 1 個混ぜると、その 1 個だけ形が違って
+   * 読まなくても分かる 4 択になる。**足りないなら捨てる。**
+   */
+  it('statement は pool を渡しても補わない', () => {
+    const result = buildChoices(statements.slice(0, 3), statements[0], 'statement', [
+      'ARP',
+      'DHCP',
+      'ICMP',
+    ]);
+    expect(result).toEqual([]);
+  });
+
+  it('statement でも4個そろっていればそのまま使う', () => {
+    const result = buildChoices(statements, statements[0], 'statement', [], zero);
+    expect(result).toHaveLength(CHOICE_COUNT);
+    expect(result).toContain(statements[0]);
+  });
+
+  it('長すぎる答えは問題ごと捨てる', () => {
+    const tooLong = 'あ'.repeat(MAX_QUIZ_ANSWER_LENGTH + 1);
+    expect(buildChoices([tooLong, 'a', 'b', 'c'], tooLong, 'statement', [], zero)).toEqual([]);
+    expect(buildChoices(['a', 'b', 'c'], tooLong, 'term', ['d', 'e', 'f'], zero)).toEqual([]);
+  });
+
+  it('上限ちょうどは通す', () => {
+    const limit = 'あ'.repeat(MAX_QUIZ_ANSWER_LENGTH);
+    expect(buildChoices([limit, 'a', 'b', 'c'], limit, 'statement', [], zero)).toHaveLength(
+      CHOICE_COUNT,
+    );
+  });
+
+  /* 前後の空白だけで上限を超えたことにしない */
+  it('長さは trim してから見る', () => {
+    const limit = `  ${'あ'.repeat(MAX_QUIZ_ANSWER_LENGTH)}  `;
+    expect(buildChoices([limit, 'a', 'b', 'c'], limit, 'statement', [], zero)).toHaveLength(
+      CHOICE_COUNT,
+    );
   });
 });

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Check, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
 import type { CategoryDTO } from '../../shared/types';
+import { MAX_EXAM_NAME_LENGTH } from '../../shared/types';
 import { api, asCategoryInUse } from '../lib/api';
 import { useToast } from './Toast';
 import ConfirmDialog from './ConfirmDialog';
@@ -20,8 +21,10 @@ export default function CategoryManagerModal({ open, categories, onClose, onChan
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editColor, setEditColor] = useState(PALETTE[0]);
+  const [editExamName, setEditExamName] = useState('');
   const [newName, setNewName] = useState('');
   const [newColor, setNewColor] = useState(PALETTE[0]);
+  const [newExamName, setNewExamName] = useState('');
   /** 処理中のカテゴリ ID。連打と多重リクエストを防ぐ。 */
   const [busyId, setBusyId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
@@ -33,6 +36,7 @@ export default function CategoryManagerModal({ open, categories, onClose, onChan
     if (!open) return;
     setEditingId(null);
     setNewName('');
+    setNewExamName('');
     setError(null);
   }, [open]);
 
@@ -42,6 +46,7 @@ export default function CategoryManagerModal({ open, categories, onClose, onChan
     setEditingId(category.id);
     setEditName(category.name);
     setEditColor(category.color);
+    setEditExamName(category.examName ?? '');
     setError(null);
   };
 
@@ -51,7 +56,8 @@ export default function CategoryManagerModal({ open, categories, onClose, onChan
     setBusyId(id);
     setError(null);
     try {
-      await api.updateCategory(id, { name, color: editColor });
+      // 空文字を送るのが「試験名を消す」。undefined（省略）は「触らない」
+      await api.updateCategory(id, { name, color: editColor, examName: editExamName.trim() });
       setEditingId(null);
       onChanged();
     } catch (updateError) {
@@ -67,8 +73,9 @@ export default function CategoryManagerModal({ open, categories, onClose, onChan
     setIsCreating(true);
     setError(null);
     try {
-      await api.createCategory({ name, color: newColor });
+      await api.createCategory({ name, color: newColor, examName: newExamName.trim() });
       setNewName('');
+      setNewExamName('');
       onChanged();
       showToast(`「${name}」を追加しました`, { kind: 'success' });
     } catch (createError) {
@@ -130,6 +137,18 @@ export default function CategoryManagerModal({ open, categories, onClose, onChan
                       aria-label="カテゴリ名"
                     />
                     <ColorPicker value={editColor} onChange={setEditColor} />
+                    <div>
+                      <Input
+                        value={editExamName}
+                        onChange={(event) => setEditExamName(event.target.value)}
+                        maxLength={MAX_EXAM_NAME_LENGTH}
+                        placeholder="例: 基本情報技術者試験"
+                        aria-label="対象の資格試験（任意）"
+                      />
+                      <p className="mt-1 text-caption text-fg-subtle">
+                        対象の資格試験（任意）。問題を作るときの出題の粒度がこの試験に寄ります。
+                      </p>
+                    </div>
                     <div className="flex gap-2">
                       <Button
                         variant="primary"
@@ -154,7 +173,14 @@ export default function CategoryManagerModal({ open, categories, onClose, onChan
                       aria-hidden
                     />
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-body font-medium text-fg">{category.name}</p>
+                      <p className="truncate text-body font-medium text-fg">
+                        {category.name}
+                        {category.examName && (
+                          <span className="ml-2 text-caption font-normal text-fg-muted">
+                            {category.examName}
+                          </span>
+                        )}
+                      </p>
                       <p className="text-caption text-fg-subtle">
                         {inUse === 0
                           ? '未使用'
@@ -204,6 +230,13 @@ export default function CategoryManagerModal({ open, categories, onClose, onChan
             aria-label="新しいカテゴリ名"
           />
           <ColorPicker value={newColor} onChange={setNewColor} />
+          <Input
+            value={newExamName}
+            onChange={(event) => setNewExamName(event.target.value)}
+            maxLength={MAX_EXAM_NAME_LENGTH}
+            placeholder="対象の資格試験（任意）例: 基本情報技術者試験"
+            aria-label="対象の資格試験（任意）"
+          />
           <Button
             variant="primary"
             fullWidth

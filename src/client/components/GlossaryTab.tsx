@@ -9,7 +9,7 @@ import {
   Plus,
   Sparkles,
 } from 'lucide-react';
-import type { CategoryDTO, GlossaryTermDTO, QuestionType } from '../../shared/types';
+import type { CategoryDTO, GlossaryTermDTO } from '../../shared/types';
 import { api } from '../lib/api';
 import {
   collectTags,
@@ -195,10 +195,10 @@ export default function GlossaryTab({
     showToast('辞書に登録しました', { kind: 'success' });
   };
 
-  const generate = async (termIds: string[], questionType: QuestionType) => {
+  const generate = async (termIds: string[]) => {
     setIsGenerating(true);
     try {
-      const result = await api.generateGlossaryCards({ termIds, questionType });
+      const result = await api.generateGlossaryCards({ termIds });
       setIsGenerateOpen(false);
       setSelectedIds(new Set());
       // カードが増えると習得ステータスの母数が変わるので、辞書も取り直す
@@ -507,7 +507,7 @@ export default function GlossaryTab({
         selectedIds={selectedIds}
         isGenerating={isGenerating}
         onClose={() => setIsGenerateOpen(false)}
-        onGenerate={(termIds, questionType) => void generate(termIds, questionType)}
+        onGenerate={(termIds) => void generate(termIds)}
       />
 
       <GlossaryTermModal

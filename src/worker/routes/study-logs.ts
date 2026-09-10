@@ -200,7 +200,7 @@ export const studyLogsRoute = new Hono<AppEnv>()
         await generateQuizFromStudyLog(
           c.env.GEMINI_API_KEY,
           notes,
-          category.name,
+          { categoryName: category.name, examName: category.examName },
           QUESTIONS_PER_LOG,
         );
 
@@ -214,6 +214,8 @@ export const studyLogsRoute = new Hono<AppEnv>()
         question: q.question,
         answer: q.answer,
         explanation: q.explanation || null,
+        questionType: 'quiz',
+        choices: q.choices,
         tags: q.tags,
       })),
     );

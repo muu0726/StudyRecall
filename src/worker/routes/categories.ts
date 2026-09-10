@@ -4,6 +4,7 @@ import { categories, notebooks, quizQuestions, studyLogs, tasks } from '../../db
 import { getDb, type AppEnv, type Db } from '../lib/db';
 import { toCategoryDto } from '../lib/dto';
 import { newId } from '../lib/ids';
+import { MAX_EXAM_NAME_LENGTH } from '../../shared/types';
 import type {
   CategoryInUseResponse,
   CategoryUsage,
@@ -13,6 +14,20 @@ import type {
 
 const DEFAULT_COLOR = '#3b82f6';
 const COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
+
+/**
+ * 資格試験名を読む。
+ *
+ * - 文字列でなければ `undefined`（＝触らない）
+ * - **空文字は `null`**（＝設定を消す）。消せない設定にすると、一度入れた試験名から降りられない
+ * - 長すぎるものは `'tooLong'`。呼び出し側が 400 にする
+ */
+function readExamName(raw: unknown): string | null | undefined | 'tooLong' {
+  if (typeof raw !== 'string') return undefined;
+  const trimmed = raw.trim();
+  if (trimmed.length > MAX_EXAM_NAME_LENGTH) return 'tooLong';
+  return trimmed === '' ? null : trimmed;
+}
 
 /**
  * カテゴリごとの参照件数を相関サブクエリでまとめて取る。
@@ -64,6 +79,7 @@ async function findUsage(db: Db, categoryId: string, userId: string) {
       id: categories.id,
       name: categories.name,
       color: categories.color,
+      examName: categories.examName,
       createdAt: categories.createdAt,
       userId: categories.userId,
       ...usageSelect(),
@@ -82,6 +98,7 @@ export const categoriesRoute = new Hono<AppEnv>()
         id: categories.id,
         name: categories.name,
         color: categories.color,
+        examName: categories.examName,
         createdAt: categories.createdAt,
         userId: categories.userId,
         ...usageSelect(),
@@ -104,10 +121,21 @@ export const categoriesRoute = new Hono<AppEnv>()
         ? body.color
         : DEFAULT_COLOR;
 
+    const examName = readExamName(body?.examName);
+    if (examName === 'tooLong') {
+      return c.json({ error: `試験名は ${MAX_EXAM_NAME_LENGTH} 文字以内で入力してください` }, 400);
+    }
+
     const db = getDb(c.env);
     const [row] = await db
       .insert(categories)
-      .values({ id: newId('cat'), userId: c.get('userId'), name, color })
+      .values({
+        id: newId('cat'),
+        userId: c.get('userId'),
+        name,
+        color,
+        examName: examName ?? null,
+      })
       .returning();
 
     return c.json({ category: toCategoryDto(row) }, 201);
@@ -126,7 +154,12 @@ export const categoriesRoute = new Hono<AppEnv>()
       return c.json({ error: 'color は #rrggbb 形式で指定してください' }, 400);
     }
 
-    if (name === undefined && color === undefined) {
+    const examName = readExamName(body.examName);
+    if (examName === 'tooLong') {
+      return c.json({ error: `試験名は ${MAX_EXAM_NAME_LENGTH} 文字以内で入力してください` }, 400);
+    }
+
+    if (name === undefined && color === undefined && examName === undefined) {
       return c.json({ error: '更新する項目がありません' }, 400);
     }
 
@@ -135,7 +168,11 @@ export const categoriesRoute = new Hono<AppEnv>()
 
     const updated = await db
       .update(categories)
-      .set({ ...(name !== undefined ? { name } : {}), ...(color !== undefined ? { color } : {}) })
+      .set({
+        ...(name !== undefined ? { name } : {}),
+        ...(color !== undefined ? { color } : {}),
+        ...(examName !== undefined ? { examName } : {}),
+      })
       .where(and(eq(categories.id, id), eq(categories.userId, userId)))
       .returning();
 

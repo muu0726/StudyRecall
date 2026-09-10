@@ -34,6 +34,7 @@ export function toCategoryDto(row: Category, usage: CategoryUsage = NO_USAGE): C
     id: row.id,
     name: row.name,
     color: row.color,
+    examName: row.examName,
     createdAt: isoOrEpoch(row.createdAt),
     usage,
   };
