@@ -1,7 +1,11 @@
 # StudyRecall
 
 学習時間を記録すると、その日の「学びメモ」から Gemini が自動で一問一答（フラッシュカード）を生成し、そのまま復習できる Web アプリ。
-Markdown ノートや用語のクイック追加からも問題を作れて、AI が付けたジャンルタグで絞り込み出題できる。
+Markdown ノートや**用語辞書**からも問題を作れて、AI が付けたジャンルタグで絞り込み出題できる。
+辞書からは一問一答・穴埋め・4択の 3 形式を作り分けられる。
+
+Google と連携すると、タスクとカレンダーを同期し、D1 の中身・ノート・用語辞書を
+Google ドライブへ書き出せる。
 
 ## 技術スタック
 
@@ -141,8 +145,9 @@ Google AI Studio 側で使用量アラートを設定しておくとよい。
 
 上部タブは廃し、**左サイドバーに集約**している（Notion / Linear 風）。
 
-- **ヘッダー** — ロゴと「＋ 用語を追加」。用語追加はどの画面からでも開ける
-- **ナビゲーション** — タイマー & ポモドーロ / ノートブック / フラッシュカード復習 / ダッシュボード
+- **ヘッダー** — ロゴと「＋ 用語を追加」。押すと用語辞書へ移動して登録ダイアログが開く
+- **ナビゲーション** — タイマー & ポモドーロ / ノートブック / タスク / 用語辞書 /
+  フラッシュカード復習 / ダッシュボード
 - **ノートのファイルツリー** — カテゴリをフォルダとした VS Code 風のエクスプローラー。
   ここから直接ノートを開き、作り、動かし、消す（**メイン画面に一覧ペインは無い**）
 - **ジャンル** — AI が付けたタグの一覧。押すと**そのタグで絞り込んだ復習画面へ直行**する
@@ -173,19 +178,32 @@ localStorage に保存し、次回も復元する。スクロールするのは�
 ```
 src/
 ├─ db/schema.ts       Drizzle スキーマ（スキーマの唯一の真実）
-├─ shared/types.ts    API の入出力型。client / worker 双方から import
+├─ shared/            client / worker 双方から import する純粋な層。**判断はここに寄せる**
+│                     types（API の入出力型）/ srs / note-tree / note-sanitize / note-export
+│                     note-sync / backup / calendar-event / calendar-view
+│                     glossary-search / glossary-mastery / glossary-export / cloze / choices
 ├─ worker/            Hono API（Cloudflare Workers 上で動く）
-│  ├─ routes/         categories / study-logs / quizzes / notebooks / tags / timer
-│  └─ lib/            auth, gemini（生成）, time（JST 日境界）, db, dto, queries, ids
+│  ├─ routes/         categories / study-logs / quizzes / notebooks / tags / timer / stats
+│  │                  tasks / calendar / integrations / backup / glossary
+│  └─ lib/            auth, google-auth（トークンとスコープ）, google-drive, google-tasks
+│                     gemini（生成・補完）, note-mirror, glossary-mirror, backup-data
+│                     quota, quiz-insert（D1 のバインド上限）, time（JST 日境界）
+│                     db, dto, queries, ids, user-settings
 └─ client/            React SPA
    ├─ components/     AuthGate / Sidebar（ナビ・ノートツリー・ジャンル・ツール・アカウント）
-   │                  NoteTree / MoveNoteDialog
-   │                  StudyTab / NotesTab / ReviewTab / StatsTab
-   │                  RecordModal / AddTermModal / FlashCard / MarkdownView
-   │                  CategoryManagerModal / ConfirmDialog / ConflictDialog / Toast
-   ├─ hooks/          useTimer（サーバー同期）/ useRevalidateOnFocus / useNotebooks
+   │                  NoteTree / MoveNoteDialog / NoteTabs / NotesTab / NoteEditor / SplitDivider
+   │                  StudyTab / TasksTab / GlossaryTab / ReviewTab / StatsTab
+   │                  GlossaryTermCard / GlossaryTermModal / GenerateFromGlossaryModal
+   │                  GlossaryQuickAddPopover / IntegrationsModal / RestoreBackupDialog
+   │                  FlashCard / MarkdownView / SpeechPlayer / Toast ほかダイアログ群
+   ├─ hooks/          useTimer / useRevalidateOnFocus / useNotebooks / useNoteTabs
+   │                  useNoteSaver / useTasks / useGlossary / useGlossaryDriveSync
+   │                  useSpeechQueue / useElementWidth
+   ├─ ui/             プリミティブ（Button / Modal / Popover / Segmented / Field /
+   │                  SearchInput / TagInput / FilterMenu / Banner / Card / EmptyState）
    └─ lib/            api（fetch ラッパ・ApiError/NetworkError）, offline-queue,
-                      auth-client, format, cn
+                      markdown-edit, note-selection, remark-mark, remark-glossary,
+                      tag-input, note-draft, note-tabs, auth-client, format, cn
 scripts/
 └─ generate-icons.mjs PWA アイコンの生成（依存なし。public/ の PNG を作り直す）
 ```
@@ -202,7 +220,6 @@ scripts/
 | GET        | `/api/study-logs`                        | 必要 | 学習履歴＋統計（今日/今週/科目別/習得率）                                            |
 | POST       | `/api/study-logs`                        | 必要 | 記録保存＋問題生成 `{ categoryId, durationMinutes, notes, timerSessionId? }`         |
 | GET        | `/api/quizzes`                           | 必要 | `?categoryId=&tag=&notebookId=&unmasteredOnly=` で絞り込み（すべて AND）             |
-| POST       | `/api/quizzes/manual-add`                | 必要 | 用語から1問生成 `{ categoryId, term, description }`                                  |
 | POST       | `/api/quizzes/:id/result`                | 必要 | 判定を記録 `{ correct: boolean }`                                                    |
 | GET        | `/api/tags`                              | 必要 | 使用中のジャンルタグと問題数                                                         |
 | PUT/DELETE | `/api/categories/:id`                    | 必要 | カテゴリの改名・色変更 / 削除（使用中は 409）                                        |
@@ -213,6 +230,154 @@ scripts/
 | PUT/DELETE | `/api/notebooks/:id`                     | 必要 | ノート更新（`expectedUpdatedAt` 必須、競合は 409）/ 削除（子孫ごと。件数を返す）     |
 | POST       | `/api/notebooks/:id/generate-quiz`       | 必要 | ノート本文から生成 `{ count?: 1〜10 }`                                               |
 | GET        | `/api/stats/heatmap`                     | 必要 | 過去365日の日別集計（JST）＋ストリーク                                               |
+| GET/POST   | `/api/tasks`                             | 必要 | タスク一覧 / 作成。Google Tasks と双方向同期                                         |
+| PUT/DELETE | `/api/tasks/:id`                         | 必要 | タスク更新 / 削除（墓標を残してから Google 側を消す）                                |
+| POST       | `/api/tasks/sync`                        | 必要 | Google Tasks と突き合わせる                                                          |
+| GET        | `/api/calendar/events`                   | 必要 | 予定一覧 `?from=&to=`（`singleEvents=true` で繰り返しも展開）                        |
+| POST       | `/api/calendar/events`                   | 必要 | 予定を作る                                                                           |
+| PUT/DELETE | `/api/calendar/events/:id`               | 必要 | 予定の更新（PATCH で送る）/ 削除                                                     |
+| GET/PUT    | `/api/integrations`                      | 必要 | 連携の状態と設定（付与済みスコープ、各同期の ON/OFF）                                |
+| POST       | `/api/backup/run`                        | 必要 | D1 の中身を JSON でドライブへ。`{ auto: true }` は 1 日 1 回                         |
+| GET        | `/api/backup/snapshot`                   | 必要 | いまの中身を JSON で返す（ドライブを使わない）                                       |
+| GET        | `/api/backup/files`                      | 必要 | ドライブ上のバックアップ一覧                                                         |
+| POST       | `/api/backup/restore`                    | 必要 | **中身を置き換える**。先に安全用バックアップを取り、取れなければ中止する             |
+| POST       | `/api/backup/notes`                      | 必要 | ノートを `.md` としてドライブへミラー（一方通行）                                    |
+| GET        | `/api/glossary`                          | 必要 | 用語一覧 `?categoryId=&tag=`（検索と習得ステータスは**クライアント側**）             |
+| POST       | `/api/glossary`                          | 必要 | 用語登録。同カテゴリの重複は 409 で既存を返す                                        |
+| PUT/DELETE | `/api/glossary/:id`                      | 必要 | 用語更新 / 削除（`?cards=keep\|delete`。既定はカードを残す）                         |
+| POST       | `/api/glossary/ai-assist`                | 必要 | 意味とタグを補完 `{ categoryId, term, definition? }`。**保存しない**                 |
+| POST       | `/api/glossary/generate-cards`           | 必要 | 用語から出題を作る `{ termIds, questionType }`（qa / cloze / quiz）                  |
+| POST       | `/api/glossary/sync-drive`               | 必要 | 用語辞書をドライブへ書き出す（`{ auto: true }` は 5 分の床つき）                     |
+
+## 用語辞書
+
+「用語を追加」はもともと辞書ではなかった。用語と説明を Gemini に渡して問題を 1 問作り、
+**元の用語と説明を捨てていた**。作り直す材料が残らないし、生成が失敗すれば入力ごと消えた。
+`glossary_terms` に用語そのものを残し、そこから何度でも出題を作れるようにしてある。
+
+### 習得ステータスは列に持たない
+
+`未習得 / 復習中 / マスター` は、その用語から作ったカードの状態から**読み取りのたびに導く**
+（`src/shared/glossary-mastery.ts`）。
+
+|                                    | 導出                                        | 列に保存                           |
+| ---------------------------------- | ------------------------------------------- | ---------------------------------- |
+| 同じ用語の 2 枚を続けて答える      | 何も起きない                                | 読んで書くので取りこぼす余地がある |
+| オフラインで溜めた判定が後から届く | 次の取得で正しくなる                        | 列だけ古いまま残り、修復が要る     |
+| 判定を書く経路                     | `POST /api/quizzes/:id/result` は**無改造** | あそこに書き戻しが増える           |
+
+規則は「カードが 0 枚 or 未解答なら未習得 / **全部**マスターならマスター / それ以外は復習中」。
+「全部」にしているのは、穴埋めだけ通って 4 択で落ちる状態を習得と呼ばないため。
+
+### 検索はクライアント側で畳む
+
+SQLite（D1）は ICU を持たないので、`LIKE` も `COLLATE NOCASE` も ASCII しか畳めない。
+`ＴＣＰ` で `TCP` が引けず、`ﾈｯﾄﾜｰｸ`／`ネットワーク`／`ねっとわーく` が別物になる。
+FTS5 なら畳めるが、仮想テーブルは Drizzle のスキーマに書けない。
+
+そこでサーバーは**カテゴリとタグで粗く絞るだけ**にして、用語名・意味・タグの検索と
+習得ステータスの絞り込みは `src/shared/glossary-search.ts` で行う。
+正規化は NFKC →小文字化→カタカナをひらがなへ、の順（NFKC が先でないと半角カナが残る）。
+
+副産物として **`%` `_` `\` のエスケープ漏れというバグが原理的に存在しない**（テストで固定）。
+代わりに上限（500 件）で切れたら `truncated` を返し、画面で知らせる。
+黙って切ると、手元の検索がコーパスの先頭しか見ていない状態になる。
+
+### 出題の 3 形式
+
+| 形式    | `question`                                   | `answer`         | `choices` |
+| ------- | -------------------------------------------- | ---------------- | --------- |
+| `qa`    | 定義を説明する文                             | 用語名           | `[]`      |
+| `cloze` | 説明文に `____` が 1 か所                    | 空欄に入る用語名 | `[]`      |
+| `quiz`  | 「次の説明にあてはまる用語はどれか。」＋説明 | 正解の用語名     | 4 個      |
+
+- **穴埋めの空欄は `question` の中に埋める。** 位置を別の列に持つと、問題文を手で直したときに
+  ずれて、ずれたことに気付けない
+- **4 択の正解番号も持たない。** `answer` と文字列一致で見る
+- 選択肢は**必ず混ぜる**（`src/shared/choices.ts`）。モデルは正解を先頭に置きがちで、
+  そのままだと「1 番を選べば当たる」カードが量産される。乱数は引数にしてテストで固定した
+- 誤答は**同じ生成に含まれる他の用語**から埋める
+- 各問に `sourceTerm` を書かせ、**入力の用語名と完全一致しなければ捨てる**。
+  無いと N 問を用語に対応付ける手段が順番しかなく、モデルは平気で 1 問落とす
+- 4 択でも**選んだ瞬間には判定を送らない**（キーと click の二重発火、`correctCount` の意味が
+  形式ごとに変わる、当たったが分かっていない場合の逃げ道）
+
+### AI 補完
+
+用語名だけで意味とタグが埋まる。**既存タグの一覧をプロンプトの最後に置く**のが要点で、
+指示は末尾ほど守られるうえ、ここが効かないと同じ分野が
+「通信 / 通信技術 / ネットワーク」に割れて絞り込みが役に立たなくなる。
+候補は用語と問題の**両方**のタグから集める（分けると使い始めた直後に候補が空になる）。
+
+補完は**保存しない**。欄に入れるだけなので打ち直せる。失敗しても 200 で返して入力を巻き戻さない。
+
+### ノートからの登録
+
+本文で語を選んで 📖 を押すと、裏で補完が走る小窓が開き、1 クリックで辞書に入る。
+
+- **ノート本文は 1 文字も変えない。** `setDraftContent` も `schedule` も呼ばない
+  （呼ぶと書いてもいないのに自動保存が走る）
+- ボタンの `onMouseDown` の `preventDefault` は**マーカーと同じ理由で必須**。
+  止めないと textarea からフォーカスが外れ、`selectionStart/End` が潰れる
+- 改行を含む選択（＝文や段落）と長すぎる選択は弾き、`==` `**` `` ` `` などの記号は剥がす
+- 登録済みの語はプレビューで点線の下線が付く（`src/client/lib/remark-glossary.ts`）。
+  背景を付けないのは `==マーカー==` と見分けが付かなくなるため
+
+## ノートの左右分割
+
+タブはあったが、切り替えると前のノートは見えなくなる。2 枚を左右に並べられるようにした。
+
+- 分割の規則は `src/client/lib/note-tabs.ts` の純粋関数に置いてテストする。
+  **`activeId` は state として持たず、アクティブなペインから導出する**（真実の源を 2 つ作らない）
+- **同じノートを両ペインに出さない。** 出すと片方の保存で `notebooks` が差し替わり、
+  非保存側が「他端末で更新された」と誤検知する。反対側にあるノートを選んだときは
+  フォーカスを移すだけ、ペイン指定なら左右を入れ替える
+- **マウントするのは最大 2 枚。** effect と将来のリッチテキストのインスタンスが枚数に比例する
+- 分割の可否は**ウィンドウ幅ではなく `main` の実測幅**で決める（`useElementWidth`）。
+  サイドバーが 260px を占めるので、768px のウィンドウでも本文は 500px しかない
+- 区切りはドラッグと矢印キーで動かせる（20〜80%）。比率は localStorage に残す
+- 分割していないときのクラスは 1 文字も変えていない
+
+## Google 連携
+
+連携設定（サイドバー下部）から ON にする。**権限が無いまま ON を保存させない**
+（保存できると「ON なのに毎回失敗する」状態が作れてしまう）。
+
+| 機能                             | スコープ          | 向き                                                         |
+| -------------------------------- | ----------------- | ------------------------------------------------------------ |
+| タスク                           | `tasks`           | 双方向（Google Tasks の `@default` リスト）                  |
+| カレンダー                       | `calendar.events` | 書き込み（タイマー確定時の記録と、タスク画面の月カレンダー） |
+| バックアップ / ノート / 用語辞書 | `drive.file`      | 一方通行（アプリが作ったファイルだけ見える）                 |
+
+### バックアップと復元
+
+- `StudyRecall バックアップ` フォルダに `studyrecall-backup-YYYY-MM-DD-HHMM.json` を置く（最新 10 件）
+- **`accounts` / `users` / `sessions` / `verifications` は絶対に入れない。**
+  あのテーブルにはトークンとパスワードが入っている。混入していないことはテストで固定している
+- 復元は「**落として検証 → 安全用バックアップを取る（取れなければ中止）→ 置き換える**」の順。
+  D1 に対話的トランザクションが無く atomic にできないので、戻れる場所を先に作る
+- ノートは `カテゴリ名/親ノート/子ノート.md` の形でミラーできる。1 回で叩く Drive の回数に
+  上限（30）があるので、多いときは `remaining` を返して次の実行に続ける
+
+### 用語辞書の書き出し
+
+`用語辞書` フォルダに `glossary.json` と `glossary.md` を置く。
+JSON は正確に戻すため、Markdown は Drive 上で読むため。
+
+**ファイル id を覚えて上書きする。** 毎回 upload すると Drive は同一フォルダ内の同名を許すので、
+同じファイルが積み上がっていく。404/410 なら id を捨てて作り直す。
+
+### 「自動同期」がサーバー側でできない理由
+
+このリポジトリは `ctx.waitUntil` をどこでも使っておらず、cron トリガーも持っていない。
+
+- **`waitUntil` は応答を先に返せるだけで、まとめてはくれない。** 10 回編集すれば 10 回叩く。
+  失敗を出す場所も無い
+- **cron は全ユーザーを 1 回の起動で回すことになる。** 誰か 1 人の 403 で後ろが詰まり、
+  ユーザー単位の再試行状態も持てない。機能ではなく新しいサブシステム
+
+代わりに**クライアントで 30 秒待ち、サーバーは 5 分の床を持つ**。
+タブを閉じて飛んだぶんは、毎回 D1 から丸ごと作り直すので**遅れるだけで壊れない**。
 
 ## マルチデバイス同期
 
@@ -610,6 +775,16 @@ SW のプリキャッシュは 20 件 731 KiB（うち Inter latin が 48 KB）�
   削除も子孫 ID を自分で集めてから一括 DELETE する。
 - **子ノートのカテゴリは直接変更できない**（`PUT` は 400 を返す）。親に従うため、移動で変える。
 - **習得判定**: 「わかった」累計 3 回で習得済み。「まだ不安」で取り消す。カウントは SQL 側でインクリメントする。
+- **用語の習得ステータスは列に持たず、カードから導く**。持つと書き戻しの競合と、
+  オフラインで溜めた判定の取りこぼしが同時に付いてくる（→ 用語辞書の節）。
+- **日本語の検索は D1 に投げない**。ICU が無いので大小・全半角・カナを畳めない。
+  正規化と絞り込みは `src/shared/glossary-search.ts` で行い、サーバーは粗く絞るだけにする。
+- **バックアップの版を上げるときは `READABLE_VERSIONS` に古い版を残す**。
+  `parseSnapshot` が完全一致で弾く作りだったので、素直に上げると
+  **既存ユーザーのドライブにあるバックアップが全部読めなくなる**。
+- **remark プラグインは「アタッチャ」を返す**。unified は配列の関数をアタッチャとして呼び、
+  その戻り値を変換関数として使う。変換関数を直接返すと `tree` が undefined のまま走って落ちる
+  （プレビューが真っ白になった）。内部の変換関数を直に叩くテストだけでは通り抜ける。
 - **ノートを削除しても生成済みの問題は残る**（`notebook_id` が `ON DELETE SET NULL`）。復習資産を巻き込んで消さないため。
 - **PWA アイコンはプレースホルダ**。`node scripts/generate-icons.mjs` で作り直せる。ブランドアイコンが用意できたら `public/` の PNG を差し替える。
 
@@ -627,10 +802,18 @@ SQLite は列の NOT NULL 変更ができないため、drizzle-kit は「テー
   `"run_worker_first": ["/api/*"]` が必須。fetch/XHR は影響を受けないので、**OAuth だけが壊れて気付きにくい**。
 - **`PRAGMA foreign_keys=OFF/ON` は D1 が受け付けない**。参照されていないテーブルの再作成なら、そもそも不要なので削除する。
 - **`ADD COLUMN ... NOT NULL` は DEFAULT が必須**。既定値を与えてから `UPDATE` で埋める。
+- **D1 は 1 クエリのバインド変数を 100 個までに制限している。**
+  `D1_ERROR: too many SQL variables at offset 672: SQLITE_ERROR` が出る。
+  複数行 INSERT は列数から 1 文あたりの行数を決めて分割する
+  （`src/worker/lib/quiz-insert.ts` の `maxRowsPerInsert` / `chunkRows`）。
+  **列数はテーブル定義から数える**ので、あとで列が増えても黙って上限を越えない
+  （`quiz_questions` は 18 → 21 列になり、1 文 5 行 → 4 行に自動で下がった）。
 - 再作成の `INSERT ... SELECT` は、旧テーブルにまだ無い新規カラムまで SELECT してくるため、リテラルに書き換える。
 
 ## スコープ外
 
-リモート D1・本番デプロイ / リアルタイム同期（WebSocket・SSE でのプッシュ）/ ノートのバージョン履歴・
-3-way マージ（競合時は「破棄 or 強制上書き」の二択）/ オフライン時のノート編集キュー
-（判定のみ対象）/ タグの表記ゆれ正規化（trim と重複除去のみ）
+リアルタイム同期（WebSocket・SSE でのプッシュ）/ ノートのバージョン履歴・3-way マージ
+（競合時は「破棄 or 強制上書き」の二択）/ オフライン時のノート編集キュー（判定のみ対象）/
+ドライブからの**読み戻し**（書き出しは一方通行）/ 用語の一括インポート /
+サーバー側の本物のレート制限（AI 補完は行を作らないので月次の数に乗らない）/
+用語同士のリンク
