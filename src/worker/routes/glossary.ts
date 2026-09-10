@@ -7,6 +7,8 @@ import { newId } from '../lib/ids';
 import { glossaryCardsJoin, glossarySelectWithStats } from '../lib/queries';
 import { MAX_PROMPT_TAGS, defineTermWithAI, generateQuestionsFromGlossary } from '../lib/gemini';
 import { insertQuizQuestions } from '../lib/quiz-insert';
+import { insertGlossaryTerms } from '../lib/glossary-insert';
+import { MAX_BULK_TERMS, prepareBulkTerms, type BulkTermInput } from '../../shared/glossary-bulk';
 import { toQuizQuestionDto } from '../lib/dto';
 import { getMonthlyQuota, quotaWarning } from '../lib/quota';
 import { mirrorGlossary } from '../lib/glossary-mirror';
@@ -26,6 +28,8 @@ import {
   GLOSSARY_SYNC_MIN_INTERVAL_MS,
   MAX_GLOSSARY_GENERATE_TERMS,
   MAX_TERM_LENGTH,
+  type CreateGlossaryTermsRequest,
+  type CreateGlossaryTermsResponse,
   type CreateGlossaryTermRequest,
   type GenerateGlossaryCardsRequest,
   type GenerateGlossaryCardsResponse,
@@ -469,6 +473,92 @@ export const glossaryRoute = new Hono<AppEnv>()
       if (auto) return c.json<GlossarySyncResponse>({ skipped: true, reason: 'failed' });
       return c.json({ error: describeGoogleError(error) }, 502);
     }
+  })
+
+  /**
+   * まとめて登録する。**`POST /` とは別の入口。**
+   *
+   * あちらを配列でも受けるようにすると、409 で既存を返す契約・`useGlossary.create`・
+   * ノートからのクイック登録が全部巻き込まれる。分けておけば波及がゼロで済む。
+   *
+   * **部分成功で返す。** D1 に対話的トランザクションが無いのもあるが、
+   * そもそも 40 行のうち 3 行が登録済みだからといって残り 37 行を捨てるのは損。
+   * 保存しなかった行は理由付きで返し、画面がそのまま出す。
+   */
+  .post('/bulk', async (c) => {
+    const body = await c.req.json<Partial<CreateGlossaryTermsRequest>>().catch(() => null);
+
+    const categoryId = typeof body?.categoryId === 'string' ? body.categoryId : '';
+    const terms: BulkTermInput[] = Array.isArray(body?.terms)
+      ? (body.terms as BulkTermInput[])
+      : [];
+
+    if (!categoryId) return c.json({ error: 'categoryId は必須です' }, 400);
+    if (terms.length === 0) return c.json({ error: '用語を入力してください' }, 400);
+    if (terms.length > MAX_BULK_TERMS) {
+      return c.json({ error: `一度に登録できるのは ${MAX_BULK_TERMS} 件までです` }, 400);
+    }
+
+    const db = getDb(c.env);
+    const userId = c.get('userId');
+
+    const [category] = await db
+      .select({ id: categories.id })
+      .from(categories)
+      .where(and(eq(categories.id, categoryId), eq(categories.userId, userId)))
+      .limit(1);
+    if (!category) return c.json({ error: '指定されたカテゴリが見つかりません' }, 404);
+
+    /*
+     * このカテゴリの termKey を 1 クエリで全部取る。
+     *
+     * **`inArray(termKey, 送られてきたキー)` にしない。** 100 件だと
+     * userId と categoryId を足して 102 個になり、D1 のバインド上限 100 を超える。
+     * こちらは短い 1 列だけの読み取りで、件数も GLOSSARY_LIMIT で実質頭打ち。
+     *
+     * **limit を付けない。** 付けると判定が黙って不完全になり、
+     * 取りこぼしが一意インデックスまで流れてしまう。
+     */
+    const existing = await db
+      .select({ termKey: glossaryTerms.termKey })
+      .from(glossaryTerms)
+      .where(and(eq(glossaryTerms.userId, userId), eq(glossaryTerms.categoryId, categoryId)));
+    const existingKeys = new Set(existing.map((row) => row.termKey));
+
+    // 画面と同じ関数を通す（→ src/shared/glossary-bulk.ts）
+    const prepared = prepareBulkTerms(terms, existingKeys);
+
+    const rows = prepared.accepted.map((term) => ({
+      id: newId('gt'),
+      userId,
+      categoryId,
+      // 貼り付けにノートの出所は無い。notebookId を持つのはノートからの登録だけ
+      notebookId: null,
+      term: term.term,
+      termKey: term.termKey,
+      definition: term.definition,
+      tags: coerceTags(term.tags),
+    }));
+
+    const { insertedIds } = await insertGlossaryTerms(db, rows);
+
+    /*
+     * 入れようとした id と入った id の差が、一意インデックスに弾かれた行。
+     * 事前の重複チェックをすり抜けたぶん（別タブ・切り詰められた一覧）がここに出る。
+     */
+    const inserted = new Set(insertedIds);
+    const skipped = [...prepared.skipped];
+    rows.forEach((row, position) => {
+      if (inserted.has(row.id)) return;
+      const source = prepared.accepted[position];
+      if (source) skipped.push({ index: source.index, term: source.term, reason: 'duplicate' });
+    });
+
+    const response: CreateGlossaryTermsResponse = {
+      created: insertedIds.length,
+      skipped: skipped.sort((a, b) => a.index - b.index),
+    };
+    return c.json(response, 201);
   })
 
   .put('/:id', async (c) => {

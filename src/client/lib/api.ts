@@ -14,6 +14,8 @@ import type {
   CreateStudyLogRequest,
   CreateStudyLogResponse,
   CreateGlossaryTermRequest,
+  CreateGlossaryTermsRequest,
+  CreateGlossaryTermsResponse,
   DeleteGlossaryTermResponse,
   GenerateGlossaryCardsRequest,
   GenerateGlossaryCardsResponse,
@@ -297,6 +299,16 @@ export const api = {
   /** 選んだ用語からカードを作る。**対象は id で送る**（サーバー側で選び直さない） */
   generateGlossaryCards: (body: GenerateGlossaryCardsRequest) =>
     request<GenerateGlossaryCardsResponse>('/api/glossary/generate-cards', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  /**
+   * まとめて登録する。**部分成功で返る**（登録できなかった行は理由付きで `skipped` に）。
+   * `createGlossaryTerm` のループにしないこと — POST も一覧の取り直しも件数ぶん増える。
+   */
+  createGlossaryTerms: (body: CreateGlossaryTermsRequest) =>
+    request<CreateGlossaryTermsResponse>('/api/glossary/bulk', {
       method: 'POST',
       body: JSON.stringify(body),
     }),

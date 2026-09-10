@@ -5,6 +5,7 @@
  */
 
 import type { MasteryStatus } from './glossary-mastery';
+import type { BulkTermInput, PreparedBulkSkip } from './glossary-bulk';
 
 export type { MasteryStatus };
 
@@ -296,6 +297,35 @@ export interface GlossaryAiAssistResponse {
   definition: string;
   tags: string[];
   /** 補完できなかった理由。**入力は消さずにそのまま残す** */
+  warning?: string;
+}
+
+/** 1 回の補完で意味を埋められる用語の数 */
+export const MAX_DEFINE_TERMS_PER_REQUEST = 20;
+
+/** まとめて登録するときの入力 */
+export interface CreateGlossaryTermsRequest {
+  /** バッチ全体で 1 カテゴリ。**行ごとには選べない** */
+  categoryId: string;
+  terms: BulkTermInput[];
+}
+
+export interface CreateGlossaryTermsResponse {
+  created: number;
+  /** 保存しなかった行。**空でも配列で返す**（0 と「報告なし」を混ぜない） */
+  skipped: PreparedBulkSkip[];
+}
+
+export interface GlossaryBulkAssistRequest {
+  categoryId: string;
+  /** 意味を埋めたい用語。**空の行だけ送る** */
+  terms: string[];
+}
+
+export interface GlossaryBulkAssistResponse {
+  /** 入力に無い用語は返らない。返らなかった行は空のまま */
+  terms: { term: string; definition: string; tags: string[] }[];
+  /** 埋められなかった理由。**入力は消さずにそのまま残す** */
   warning?: string;
 }
 
