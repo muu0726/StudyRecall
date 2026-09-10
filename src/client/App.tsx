@@ -109,11 +109,6 @@ export default function App() {
   const tasks = useTasks({ active: view === 'tasks' });
   /** 用語辞書。絞り込みは画面側で畳むので、ここは取得と CRUD だけ */
   const glossary = useGlossary();
-  /**
-   * 辞書を取り直す合図。**復習で「わかった」を押すと習得ステータスが動く**が、
-   * ステータスはカードから導いているので、辞書側は取り直さないと古い値のままになる。
-   */
-  const [glossaryReloadToken, setGlossaryReloadToken] = useState(0);
 
   /**
    * 保存の予約・楽観ロックのトークン・競合を、エディタより長生きさせる。
@@ -561,7 +556,6 @@ export default function App() {
                     <GlossaryTab
                       glossary={glossary}
                       categories={categories}
-                      reloadToken={glossaryReloadToken}
                       onTermsChanged={() => {
                         void refresh();
                         // 生成したカードは復習画面にも出る
@@ -580,11 +574,7 @@ export default function App() {
                       onTagChange={setReviewTag}
                       reloadToken={quizReloadToken}
                       nextDueAt={logsData?.stats.quiz.nextDueAt ?? null}
-                      onAnswered={() => {
-                        void refresh();
-                        // 習得ステータスはカードから導くので、辞書側も古くなる
-                        setGlossaryReloadToken((token) => token + 1);
-                      }}
+                      onAnswered={() => void refresh()}
                     />
                   )}
                   {view === 'dashboard' && logsData && <StatsTab data={logsData} />}

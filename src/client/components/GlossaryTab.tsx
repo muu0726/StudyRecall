@@ -32,8 +32,6 @@ import { useToast } from './Toast';
 interface Props {
   glossary: GlossaryApi;
   categories: CategoryDTO[];
-  /** 一覧を開いたときに取り直す合図。復習で習得ステータスが動いたときに増える */
-  reloadToken: number;
   /**
    * 用語の**件数が変わった**ときに呼ぶ。
    * ダッシュボードの「今月の AI 利用」は用語の登録も数えるので、
@@ -47,13 +45,7 @@ interface Props {
   openAddToken: number;
 }
 
-export default function GlossaryTab({
-  glossary,
-  categories,
-  reloadToken,
-  onTermsChanged,
-  openAddToken,
-}: Props) {
+export default function GlossaryTab({ glossary, categories, onTermsChanged, openAddToken }: Props) {
   const { showToast } = useToast();
 
   const [query, setQuery] = useState('');
@@ -69,9 +61,17 @@ export default function GlossaryTab({
   const [isGenerateOpen, setIsGenerateOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
 
+  /*
+   * 開くたびに取り直す。
+   *
+   * **復習で判定を送ると習得ステータスが動く**が、ステータスはカードから導いていて
+   * 用語の行には無いので、取り直さないと古い値が出る。
+   * 画面を切り替えるとこのコンポーネントは毎回アンマウントされるので、
+   * ここが復習からの追随も兼ねている（別の合図は要らない）。
+   */
   useEffect(() => {
     void glossary.reload();
-  }, [glossary.reload, reloadToken]);
+  }, [glossary.reload]);
 
   useEffect(() => {
     // 初回（0）では開かない。押されたときだけ増える
