@@ -556,6 +556,7 @@ export default function App() {
                       glossary={glossary}
                       categories={categories}
                       reloadToken={glossaryReloadToken}
+                      onTermsChanged={() => void refresh()}
                     />
                   )}
                   {view === 'review' && (

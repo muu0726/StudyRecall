@@ -216,18 +216,28 @@ export function clampQuestionCount(value: unknown, fallback: number): number {
   return Math.min(MAX_GENERATED_QUESTIONS, Math.max(1, Math.trunc(parsed)));
 }
 
-/** Gemini 呼び出しの共通部分。ここだけが例外を握りつぶす。 */
-async function callGemini(
+interface JsonCallLabels {
+  /** API キーが無いとき */
+  missingKey: string;
+  /** 応答は返ったが、使える中身を取り出せなかったとき */
+  unusable: string;
+}
+
+/**
+ * Gemini を JSON で 1 回叩く。**ここだけが例外を握りつぶす。**
+ *
+ * 再試行・締め切り・コードフェンス剥がしを 1 か所に集めてある。
+ * スキーマと検証だけ差し替えれば、問題以外のもの（用語の意味など）も同じ堅さで取れる。
+ */
+async function callGeminiJson<T>(
   apiKey: string | undefined,
   prompt: string,
-  maxQuestions: number,
-): Promise<GenerateQuizResult> {
-  if (!apiKey) {
-    return {
-      questions: [],
-      warning: 'GEMINI_API_KEY が未設定のため問題を生成できませんでした。',
-    };
-  }
+  responseSchema: unknown,
+  /** 応答を検証して値にする。信用できなければ null を返す。 */
+  coerce: (parsed: unknown) => T | null,
+  labels: JsonCallLabels,
+): Promise<{ value: T | null; warning?: string }> {
+  if (!apiKey) return { value: null, warning: labels.missingKey };
 
   try {
     const ai = new GoogleGenAI({ apiKey });
@@ -240,7 +250,7 @@ async function callGemini(
         contents: prompt,
         config: {
           responseMimeType: 'application/json',
-          responseSchema: RESPONSE_SCHEMA,
+          responseSchema,
           // MVP では応答速度を優先し、思考を最小限にする
           thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
           temperature: 0.4,
@@ -264,23 +274,39 @@ async function callGemini(
     }
 
     const text = response.text;
-    if (!text) {
-      return { questions: [], warning: 'AI からの応答が空でした。' };
-    }
+    if (!text) return { value: null, warning: 'AI からの応答が空でした。' };
 
-    const questions = coerceQuestions(parseJsonSafely(text), maxQuestions);
-    if (questions.length === 0) {
-      return {
-        questions: [],
-        warning: 'AI の応答から問題を抽出できませんでした。入力に用語が少ない可能性があります。',
-      };
-    }
-    return { questions };
+    const value = coerce(parseJsonSafely(text));
+    if (value === null) return { value: null, warning: labels.unusable };
+    return { value };
   } catch (error) {
     // 生の中身はここに残す。画面には出さないが、調べるときに要る。
     console.error('[gemini] generation failed:', error);
-    return { questions: [], warning: describeGeminiError(error) };
+    return { value: null, warning: describeGeminiError(error) };
   }
+}
+
+/** 一問一答の生成。文言は切り出す前と 1 文字も変えていない。 */
+async function callGemini(
+  apiKey: string | undefined,
+  prompt: string,
+  maxQuestions: number,
+): Promise<GenerateQuizResult> {
+  const { value, warning } = await callGeminiJson(
+    apiKey,
+    prompt,
+    RESPONSE_SCHEMA,
+    (parsed) => {
+      const questions = coerceQuestions(parsed, maxQuestions);
+      return questions.length > 0 ? questions : null;
+    },
+    {
+      missingKey: 'GEMINI_API_KEY が未設定のため問題を生成できませんでした。',
+      unusable: 'AI の応答から問題を抽出できませんでした。入力に用語が少ない可能性があります。',
+    },
+  );
+
+  return value ? { questions: value } : { questions: [], warning };
 }
 
 /** 学習メモから生成する */
@@ -316,4 +342,121 @@ export function generateQuizFromTerm(
   categoryName: string,
 ): Promise<GenerateQuizResult> {
   return callGemini(apiKey, buildSingleTermPrompt(term, description, categoryName), 1);
+}
+
+// ---------------------------------------------------------------------------
+// 用語辞書の補完
+// ---------------------------------------------------------------------------
+
+export interface DefinedTerm {
+  definition: string;
+  tags: string[];
+}
+
+export interface DefineTermResult {
+  term: DefinedTerm | null;
+  warning?: string;
+}
+
+/**
+ * プロンプトに載せる既存タグの上限。
+ * 全部載せると、タグが増えたユーザーほど本文が押し出されて指示が薄まる。
+ */
+export const MAX_PROMPT_TAGS = 40;
+
+/** 意味の上限。ここを超える応答は切り詰めず、長すぎるものとして扱う */
+const MAX_AI_DEFINITION_LENGTH = 400;
+
+const DEFINITION_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    definition: {
+      type: Type.STRING,
+      description: '用語の意味。日本語で2〜3文、200文字以内。',
+    },
+    tags: {
+      type: Type.ARRAY,
+      items: { type: Type.STRING },
+      description: '分野・ジャンルのタグを1〜3個。既存のタグを優先して選ぶ。',
+    },
+  },
+  required: ['definition', 'tags'],
+  propertyOrdering: ['definition', 'tags'],
+};
+
+/** 応答を検証する。意味が空なら補完になっていないので捨てる。 */
+function coerceDefinition(parsed: unknown): DefinedTerm | null {
+  if (typeof parsed !== 'object' || parsed === null) return null;
+  const item = parsed as Record<string, unknown>;
+
+  const definition = typeof item.definition === 'string' ? item.definition.trim() : '';
+  if (!definition) return null;
+
+  return {
+    definition: definition.slice(0, MAX_AI_DEFINITION_LENGTH),
+    // 問題生成と同じ関数を通す（1〜3 個・重複除去）
+    tags: coerceTags(item.tags),
+  };
+}
+
+function buildDefineTermPrompt(
+  term: string,
+  currentDefinition: string,
+  existingTags: readonly string[],
+  categoryName: string,
+): string {
+  const definitionRule = currentDefinition
+    ? '学習者が書いた説明を土台にする。言葉を整え、足りない要点だけを補う。書かれていない主張を足さない。'
+    : '2〜3文で説明する。1文目で「何であるか」を言い切り、残りで役割・使いどころを補う。';
+
+  /*
+   * **既存タグの一覧はいちばん最後に置く。**
+   * 指示は末尾ほど守られるうえ、ここが効かないとタグが
+   * 「通信 / 通信技術 / ネットワーク」に分裂して、絞り込みが機能しなくなる。
+   */
+  return `あなたは学習者の用語辞書を整える編集者です。
+「${categoryName}」を学んでいる人が、次の用語を辞書に登録しようとしています。
+
+用語: ${term}
+学習者が書いた説明: ${currentDefinition || '（未記入）'}
+
+この用語の「意味」と「分野タグ」を作ってください。
+
+制約:
+- definition: ${definitionRule}
+- definition は**200文字以内**。「〜とは、」のような前置きや、同じ内容の言い換えを書かない。
+- tags: 1〜3個。**まず下の「既存のタグ」から合うものを選ぶ**。
+  合うものが一つも無いときだけ、新しいタグを1個だけ作ってよい。
+  タグは分野名にする（例: 'ネットワーク', 'セキュリティ', 'データベース'）。
+  用語名そのものをタグにしない。
+- 出力はすべて日本語で書く。
+
+既存のタグ: ${existingTags.length > 0 ? existingTags.slice(0, MAX_PROMPT_TAGS).join(' / ') : '（まだありません）'}`;
+}
+
+/**
+ * 用語の「意味」と「タグ」を補う。
+ *
+ * **既存タグを渡すのが本体。** 渡さないと毎回新しい言い回しのタグが増え、
+ * 同じ分野が別のタグに割れて、辞書の絞り込みが役に立たなくなる。
+ */
+export function defineTermWithAI(
+  apiKey: string | undefined,
+  term: string,
+  /** 学習者が書きかけた説明。空文字なら「まだ何も書いていない」 */
+  currentDefinition: string,
+  /** そのユーザーが既に使っているタグ（利用数の多い順） */
+  existingTags: readonly string[],
+  categoryName: string,
+): Promise<DefineTermResult> {
+  return callGeminiJson(
+    apiKey,
+    buildDefineTermPrompt(term, currentDefinition, existingTags, categoryName),
+    DEFINITION_SCHEMA,
+    coerceDefinition,
+    {
+      missingKey: 'GEMINI_API_KEY が未設定のため補完できませんでした。',
+      unusable: 'AI の応答から意味を取り出せませんでした。もう一度試してください。',
+    },
+  ).then(({ value, warning }) => ({ term: value, warning }));
 }

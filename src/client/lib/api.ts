@@ -16,6 +16,8 @@ import type {
   CreateGlossaryTermRequest,
   DeleteGlossaryTermResponse,
   GenerateNotebookQuizResponse,
+  GlossaryAiAssistRequest,
+  GlossaryAiAssistResponse,
   GlossaryDuplicateResponse,
   GlossaryTermResponse,
   GlossaryTermsResponse,
@@ -283,6 +285,16 @@ export const api = {
   updateGlossaryTerm: (id: string, body: UpdateGlossaryTermRequest) =>
     request<GlossaryTermResponse>(`/api/glossary/${id}`, {
       method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+
+  /**
+   * 意味とタグを AI に補ってもらう。**保存はしない。**
+   * 失敗しても 200 + warning で返るので、入力が巻き戻ることはない。
+   */
+  glossaryAiAssist: (body: GlossaryAiAssistRequest) =>
+    request<GlossaryAiAssistResponse>('/api/glossary/ai-assist', {
+      method: 'POST',
       body: JSON.stringify(body),
     }),
 

@@ -32,9 +32,15 @@ interface Props {
   categories: CategoryDTO[];
   /** 一覧を開いたときに取り直す合図。復習で習得ステータスが動いたときに増える */
   reloadToken: number;
+  /**
+   * 用語の**件数が変わった**ときに呼ぶ。
+   * ダッシュボードの「今月の AI 利用」は用語の登録も数えるので、
+   * ここで知らせないと数字が古いまま残る（意味の手直しでは動かないので呼ばない）。
+   */
+  onTermsChanged: () => void;
 }
 
-export default function GlossaryTab({ glossary, categories, reloadToken }: Props) {
+export default function GlossaryTab({ glossary, categories, reloadToken, onTermsChanged }: Props) {
   const { showToast } = useToast();
 
   const [query, setQuery] = useState('');
@@ -117,6 +123,7 @@ export default function GlossaryTab({ glossary, categories, reloadToken }: Props
     }
 
     setIsModalOpen(false);
+    onTermsChanged();
     showToast('辞書に登録しました', { kind: 'success' });
   };
 
@@ -298,7 +305,9 @@ export default function GlossaryTab({ glossary, categories, reloadToken }: Props
         onConfirm={() => {
           const target = deleting;
           setDeleting(null);
-          if (target) void glossary.remove(target.id, deleteCards ? 'delete' : 'keep');
+          if (target) {
+            void glossary.remove(target.id, deleteCards ? 'delete' : 'keep').then(onTermsChanged);
+          }
         }}
       >
         {deleting && deleting.cardCount > 0 && (

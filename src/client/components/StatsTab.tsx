@@ -72,7 +72,11 @@ export default function StatsTab({ data }: Props) {
         />
       </section>
 
-      {/* 今月の生成量。上限に近づいたときだけ色を付ける。 */}
+      {/*
+        今月の AI 利用量。上限に近づいたときだけ色を付ける。
+        **問題だけでなく用語の登録も同じ枠を食う**ので「問題生成」とは呼べない
+        （→ src/worker/lib/quota.ts）。
+      */}
       <p
         className={cn(
           'text-caption',
@@ -81,9 +85,9 @@ export default function StatsTab({ data }: Props) {
             : 'text-fg-muted',
         )}
       >
-        今月の問題生成 {stats.quiz.generatedThisMonth} / {stats.quiz.monthlyLimit} 問
+        今月の AI 利用 {stats.quiz.generatedThisMonth} / {stats.quiz.monthlyLimit} 件
         {stats.quiz.generatedThisMonth >= stats.quiz.monthlyLimit &&
-          '（上限に達しました。来月まで新しい問題は作れません）'}
+          '（上限に達しました。来月まで新しく生成できません）'}
       </p>
 
       {stats.quiz.dueNow === 0 && stats.quiz.nextDueAt && (

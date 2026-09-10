@@ -5,6 +5,8 @@ import { getDb, type AppEnv, type Db } from '../lib/db';
 import { toGlossaryTermDto } from '../lib/dto';
 import { newId } from '../lib/ids';
 import { glossaryCardsJoin, glossarySelectWithStats } from '../lib/queries';
+import { MAX_PROMPT_TAGS, defineTermWithAI } from '../lib/gemini';
+import { getMonthlyQuota, quotaWarning } from '../lib/quota';
 import { normalizeForSearch } from '../../shared/glossary-search';
 import {
   GLOSSARY_LIMIT,
@@ -12,6 +14,8 @@ import {
   MAX_TAGS_PER_TERM,
   MAX_TERM_LENGTH,
   type CreateGlossaryTermRequest,
+  type GlossaryAiAssistRequest,
+  type GlossaryAiAssistResponse,
   type DeleteGlossaryTermResponse,
   type GlossaryDuplicateResponse,
   type GlossaryTermResponse,
@@ -48,6 +52,35 @@ function coerceTags(value: unknown): string[] {
     if (tags.length >= MAX_TAGS_PER_TERM) break;
   }
   return tags;
+}
+
+/** AI に渡す下書きの長さの上限。長すぎると指示より下書きが場を取る */
+const MAX_ASSIST_DEFINITION_LENGTH = 500;
+
+/**
+ * そのユーザーが使っているタグを、よく使う順に集める。
+ *
+ * **用語だけでなく問題のタグも混ぜる。** 分けると、辞書を使い始めた直後は
+ * 候補が空になり、AI が既存の言い回しを知らないまま新しいタグを作り始める。
+ */
+async function listUserTags(db: Db, userId: string): Promise<string[]> {
+  const rows = await db.all<{ tag: string; count: number }>(sql`
+    select tag, sum(count) as count from (
+      select je.value as tag, count(*) as count
+      from glossary_terms, json_each(glossary_terms.tags) as je
+      where glossary_terms.user_id = ${userId}
+      group by je.value
+      union all
+      select je.value as tag, count(*) as count
+      from quiz_questions, json_each(quiz_questions.tags) as je
+      where quiz_questions.user_id = ${userId}
+      group by je.value
+    )
+    group by tag
+    order by count desc, tag asc
+    limit ${MAX_PROMPT_TAGS}
+  `);
+  return rows.map((row) => row.tag);
 }
 
 /** 1 件だけ DTO の形で読み直す。作成・更新の応答は必ずここを通す（集計を含めるため）。 */
@@ -187,6 +220,64 @@ export const glossaryRoute = new Hono<AppEnv>()
 
     const response: GlossaryTermResponse = { term: saved };
     return c.json(response, 201);
+  })
+
+  /**
+   * 意味とタグを AI に補ってもらう。**保存はしない。**
+   *
+   * 既存タグを一緒に渡すのが要点で、渡さないと同じ分野が
+   * 「通信 / 通信技術 / ネットワーク」に割れていく（→ lib/gemini.ts）。
+   *
+   * ここは補完そのものが目的なので、上限に当たったら 429 で断る
+   * （生成が失敗しても保存だけは通す、というノートの経路とは立場が違う）。
+   */
+  .post('/ai-assist', async (c) => {
+    const body = await c.req.json<Partial<GlossaryAiAssistRequest>>().catch(() => null);
+
+    const categoryId = typeof body?.categoryId === 'string' ? body.categoryId : '';
+    const term = typeof body?.term === 'string' ? body.term.trim() : '';
+    const definition = typeof body?.definition === 'string' ? body.definition.trim() : '';
+
+    if (!categoryId) return c.json({ error: 'categoryId は必須です' }, 400);
+    if (!term) return c.json({ error: '用語を入力してください' }, 400);
+    if (term.length > MAX_TERM_LENGTH) {
+      return c.json({ error: `用語は ${MAX_TERM_LENGTH} 文字以内で入力してください` }, 400);
+    }
+
+    const db = getDb(c.env);
+    const userId = c.get('userId');
+
+    const [category] = await db
+      .select({ name: categories.name })
+      .from(categories)
+      .where(and(eq(categories.id, categoryId), eq(categories.userId, userId)))
+      .limit(1);
+    if (!category) return c.json({ error: '指定されたカテゴリが見つかりません' }, 404);
+
+    const quota = await getMonthlyQuota(db, userId);
+    if (quota.exceeded) return c.json({ error: quotaWarning(quota) }, 429);
+
+    const existingTags = await listUserTags(db, userId);
+
+    const result = await defineTermWithAI(
+      c.env.GEMINI_API_KEY,
+      term,
+      // 長い下書きをそのまま渡すと本文が押し出されるので、ここで切る
+      definition.slice(0, MAX_ASSIST_DEFINITION_LENGTH),
+      existingTags,
+      category.name,
+    );
+
+    /*
+     * 失敗しても 200 で返す。**手で書けば済む補助**なので、
+     * エラーにして入力を巻き戻すほうが損（defineTermWithAI は例外を投げない）。
+     */
+    const response: GlossaryAiAssistResponse = {
+      definition: result.term?.definition ?? '',
+      tags: result.term?.tags ?? [],
+      warning: result.warning,
+    };
+    return c.json(response);
   })
 
   .put('/:id', async (c) => {

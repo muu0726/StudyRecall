@@ -136,7 +136,10 @@ export interface StudyStats {
     dueNow: number;
     /** まだ期限が来ていないもののうち、最も早い出題日。無ければ null */
     nextDueAt: string | null;
-    /** 今月これまでに生成した問題数（JST の月） */
+    /**
+     * 今月これまでの AI 利用件数（JST の月）。
+     * 生成した問題と登録した用語の合計 → src/worker/lib/quota.ts
+     */
     generatedThisMonth: number;
     /** 月次の上限 */
     monthlyLimit: number;
@@ -291,6 +294,21 @@ export interface GlossaryDuplicateResponse {
   error: string;
   /** 既にある用語。「開いて編集する」へ誘導するために返す。 */
   term: GlossaryTermDTO;
+}
+
+/** AI 補完への入力。`definition` が空なら意味も作らせる。 */
+export interface GlossaryAiAssistRequest {
+  categoryId: string;
+  term: string;
+  /** 書きかけの意味。渡すと「これを土台に整える」動きになる */
+  definition?: string;
+}
+
+export interface GlossaryAiAssistResponse {
+  definition: string;
+  tags: string[];
+  /** 補完できなかった理由。**入力は消さずにそのまま残す** */
+  warning?: string;
 }
 
 export interface DeleteGlossaryTermResponse {
