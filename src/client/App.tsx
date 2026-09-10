@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Columns2,
   FileDown,
   FolderTree,
   FolderX,
@@ -15,6 +16,7 @@ import { api } from './lib/api';
 import { flushQuizResults, pendingCount } from './lib/offline-queue';
 import { useRevalidateOnFocus } from './hooks/useRevalidateOnFocus';
 import { useNotebooks } from './hooks/useNotebooks';
+import { useElementWidth } from './hooks/useElementWidth';
 import { useNoteTabs } from './hooks/useNoteTabs';
 import { useNoteSaver } from './hooks/useNoteSaver';
 import { useTasks } from './hooks/useTasks';
@@ -45,6 +47,12 @@ import { LAYER } from './ui';
 
 const VIEW_KEY = 'studyrecall:view';
 const COLLAPSED_KEY = 'studyrecall:sidebar-collapsed';
+
+/**
+ * 左右に分割してよい本文域の幅。
+ * これを下回ると 1 ペインが 340px を切り、Markdown の編集には狭すぎる。
+ */
+const MIN_SPLIT_WIDTH = 700;
 
 function readStored<T extends string>(key: string, allowed: readonly T[], fallback: T): T {
   try {
@@ -307,6 +315,27 @@ export default function App() {
     tabs.activate(id);
   };
 
+  /**
+   * 実際に分割して描くか。
+   *
+   * **狭いときは分割しない。** 320px で左右に割ると 1 ペイン 150px で
+   * Markdown の編集には使えない。状態（`tabs.isSplit`）は保持したままにするので、
+   * 広げれば分割が戻る。
+   *
+   * 判定にウィンドウ幅を使わないのは、**サイドバーが 260px を取る**から。
+   * ウィンドウが 768px でも本文に置けるのは 500px ほどしかない。
+   * `main` は分割の有無で幅が変わらないので、ここを測れば振動もしない。
+   */
+  const mainRef = useRef<HTMLElement>(null);
+  const mainWidth = useElementWidth(mainRef);
+  const isNotesSplit = view === 'notes' && tabs.isSplit && mainWidth >= MIN_SPLIT_WIDTH;
+  /** 反対側のペインで開いているノート。タブの帯で「並んでいる」印を付ける */
+  const pairedNoteId = isNotesSplit
+    ? tabs.activePane === 'left'
+      ? tabs.rightNoteId
+      : tabs.leftNoteId
+    : null;
+
   const { syncWithExisting } = tabs;
   const openNoteIdSet = useMemo(() => new Set(tabs.openIds), [tabs.openIds]);
 
@@ -433,8 +462,22 @@ export default function App() {
             </div>
           </header>
 
-          <main className="min-h-0 flex-1 overflow-y-auto">
-            <div className="mx-auto max-w-6xl px-4 py-6">
+          {/*
+            分割しているあいだだけ、スクロールの持ち主をペインへ移す。
+            main が 1 つのスクロール容器のままだと**片方を読むともう片方も動く**ので、
+            分割の意味が無くなる。分割していないときのクラスは 1 文字も変えない。
+          */}
+          <main
+            ref={mainRef}
+            className={cn('min-h-0 flex-1', isNotesSplit ? 'overflow-hidden' : 'overflow-y-auto')}
+          >
+            <div
+              className={cn(
+                'px-4 py-6',
+                // 1152px からサイドバー 260px を引くと 1 ペイン約 550px しか残らない
+                isNotesSplit ? 'flex h-full min-h-0 flex-col' : 'mx-auto max-w-6xl',
+              )}
+            >
               {(error ?? notes.error) && (
                 <p
                   className="mb-6 rounded-card bg-danger-soft px-5 py-4 text-body text-danger"
@@ -460,25 +503,36 @@ export default function App() {
                         notebooks={notes.notebooks}
                         openIds={tabs.openIds}
                         activeId={tabs.activeId}
+                        pairedId={pairedNoteId}
+                        isSplit={tabs.isSplit}
                         dirtyIds={saver.dirtyIds}
                         onActivate={handleActivateTab}
                         onClose={handleCloseTab}
+                        onToggleSplit={tabs.toggleSplit}
                       />
-                      <NotesTab
-                        categories={categories}
-                        notebooks={notes.notebooks}
-                        activeId={tabs.activeId}
-                        saver={saver}
-                        renameTargetId={renameTargetId}
-                        onTitleFocused={handleTitleFocused}
-                        onCreate={() => {
-                          const first = categories[0];
-                          if (first) void handleCreateNote(first.id);
-                        }}
-                        onRequestDelete={setDeleteTarget}
-                        onOpenExplorer={() => setDrawerOpen(true)}
-                        onQuizChanged={() => void refresh()}
-                      />
+                      <div className={cn(isNotesSplit && 'min-h-0 flex-1 pt-4')}>
+                        <NotesTab
+                          categories={categories}
+                          notebooks={notes.notebooks}
+                          leftNoteId={tabs.leftNoteId}
+                          rightNoteId={tabs.rightNoteId}
+                          isSplit={isNotesSplit}
+                          activePane={tabs.activePane}
+                          ratio={tabs.ratio}
+                          saver={saver}
+                          renameTargetId={renameTargetId}
+                          onTitleFocused={handleTitleFocused}
+                          onCreate={() => {
+                            const first = categories[0];
+                            if (first) void handleCreateNote(first.id);
+                          }}
+                          onRequestDelete={setDeleteTarget}
+                          onOpenExplorer={() => setDrawerOpen(true)}
+                          onQuizChanged={() => void refresh()}
+                          onFocusPane={tabs.focusPane}
+                          onChangeRatio={tabs.setRatio}
+                        />
+                      </div>
                     </>
                   )}
                   {view === 'tasks' && (
@@ -538,6 +592,21 @@ export default function App() {
               >
                 <Pencil className="h-4 w-4" aria-hidden />
                 名前を変更
+              </button>
+              {/* 分割は md 以上でしか出さないので、この項目も揃える */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (tabs.activeId && tabs.activeId !== menuFor.id)
+                    void saver.flush(tabs.activeId);
+                  tabs.openInPane(menuFor.id, 'right');
+                  goTo('notes');
+                  setMenuFor(null);
+                }}
+                className="hidden w-full items-center gap-2 px-4 py-3 text-left text-body text-fg transition hover:bg-row-hover md:flex"
+              >
+                <Columns2 className="h-4 w-4" aria-hidden />
+                右のペインで開く
               </button>
               <button
                 type="button"

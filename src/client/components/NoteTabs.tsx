@@ -1,4 +1,4 @@
-import { X } from 'lucide-react';
+import { Columns2, X } from 'lucide-react';
 import type { NotebookDTO } from '../../shared/types';
 import { cn } from '../lib/cn';
 
@@ -10,25 +10,36 @@ import { cn } from '../lib/cn';
  * 色と意味は揃えたまま、向きだけ並びに合わせている。
  *
  * 未保存は文字ではなく点で示す。文字だとタブの幅が伸び縮みして落ち着かない。
+ *
+ * 左右分割のときは**反対側のペインのタブにも弱い下線**を引く。
+ * `NoteTree` の「アクティブ／開いているだけ／閉じている」と同じ 3 状態にして、
+ * どの 2 枚が並んでいるのかを帯だけで読めるようにする。
  */
 
 interface Props {
   notebooks: NotebookDTO[];
   openIds: string[];
   activeId: string | null;
+  /** 反対側のペインで開いているノート。分割していなければ null */
+  pairedId: string | null;
+  isSplit: boolean;
   /** サーバーにまだ載っていないノート */
   dirtyIds: ReadonlySet<string>;
   onActivate: (id: string) => void;
   onClose: (id: string) => void;
+  onToggleSplit: () => void;
 }
 
 export default function NoteTabs({
   notebooks,
   openIds,
   activeId,
+  pairedId,
+  isSplit,
   dirtyIds,
   onActivate,
   onClose,
+  onToggleSplit,
 }: Props) {
   if (openIds.length === 0) return null;
 
@@ -43,6 +54,8 @@ export default function NoteTabs({
       {openIds.map((id) => {
         const notebook = byId.get(id);
         const isActive = id === activeId;
+        // 反対側のペインで開いているタブ。アクティブではないが「並んでいる」
+        const isPaired = id === pairedId;
         const isDirty = dirtyIds.has(id);
 
         return (
@@ -52,7 +65,11 @@ export default function NoteTabs({
               'group relative flex shrink-0 items-center',
               // 下辺のアクセントバー。器は常に置いて色だけ変える（幅も高さも動かさない）
               'after:absolute after:inset-x-1 after:bottom-0 after:h-[2px] after:content-[""]',
-              isActive ? 'after:bg-accent' : 'after:bg-transparent',
+              isActive
+                ? 'after:bg-accent'
+                : isPaired
+                  ? 'after:bg-line-strong'
+                  : 'after:bg-transparent',
             )}
           >
             <button
@@ -70,7 +87,11 @@ export default function NoteTabs({
               title={notebook?.title ?? '（削除されたノート）'}
               className={cn(
                 'max-w-[12rem] truncate py-2 pr-1 pl-2.5 text-body transition',
-                isActive ? 'font-medium text-fg' : 'text-fg-muted hover:text-fg',
+                isActive
+                  ? 'font-medium text-fg'
+                  : isPaired
+                    ? 'text-fg'
+                    : 'text-fg-muted hover:text-fg',
               )}
             >
               {notebook?.title ?? '（削除されたノート）'}
@@ -100,6 +121,26 @@ export default function NoteTabs({
           </div>
         );
       })}
+
+      {/*
+        分割の切り替え。**md 未満では出さない。**
+        320px で左右に割ると 1 ペイン 150px で、Markdown の編集には使えない。
+      */}
+      <button
+        type="button"
+        onClick={onToggleSplit}
+        aria-pressed={isSplit}
+        title={isSplit ? '分割を解除' : '左右に分割'}
+        aria-label={isSplit ? '分割を解除' : '左右に分割'}
+        className={cn(
+          'ml-auto hidden shrink-0 items-center self-center rounded-control p-1.5 transition md:flex',
+          isSplit
+            ? 'bg-accent-soft text-accent-text'
+            : 'text-fg-subtle hover:bg-row-hover hover:text-fg',
+        )}
+      >
+        <Columns2 className="h-4 w-4" aria-hidden />
+      </button>
     </div>
   );
 }
