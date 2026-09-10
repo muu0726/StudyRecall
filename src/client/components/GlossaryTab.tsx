@@ -1,5 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BookMarked, Cloud, CloudOff, Loader2, Plus, Sparkles } from 'lucide-react';
+import {
+  BookMarked,
+  ChevronDown,
+  ClipboardList,
+  Cloud,
+  CloudOff,
+  Loader2,
+  Plus,
+  Sparkles,
+} from 'lucide-react';
 import type { CategoryDTO, GlossaryTermDTO, QuestionType } from '../../shared/types';
 import { api } from '../lib/api';
 import {
@@ -11,10 +20,21 @@ import {
 import { countByMastery } from '../../shared/glossary-mastery';
 import type { GlossaryApi } from '../hooks/useGlossary';
 import { cn } from '../lib/cn';
-import { Banner, Button, EmptyState, FilterMenu, SearchInput, Segmented } from '../ui';
+import type { BulkTermInput } from '../../shared/glossary-bulk';
+import {
+  Banner,
+  Button,
+  EmptyState,
+  FilterMenu,
+  IconButton,
+  Popover,
+  SearchInput,
+  Segmented,
+} from '../ui';
 import ConfirmDialog from './ConfirmDialog';
 import GenerateFromGlossaryModal from './GenerateFromGlossaryModal';
 import GlossaryTermCard from './GlossaryTermCard';
+import GlossaryBulkAddModal from './GlossaryBulkAddModal';
 import GlossaryTermModal from './GlossaryTermModal';
 import { useToast } from './Toast';
 
@@ -83,6 +103,7 @@ export default function GlossaryTab({
   const [isGenerateOpen, setIsGenerateOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isBulkOpen, setIsBulkOpen] = useState(false);
 
   /*
    * 開くたびに取り直す。
@@ -203,6 +224,27 @@ export default function GlossaryTab({
     }
   };
 
+  const handleBulkSubmit = async (bulkCategoryId: string, bulkTerms: BulkTermInput[]) => {
+    const result = await glossary.createMany({ categoryId: bulkCategoryId, terms: bulkTerms });
+    if (!result) return; // トーストは hook 側で出ている
+
+    if (result.created === 0) {
+      // 直せる場所を閉じない
+      showToast('登録できる用語がありませんでした', { kind: 'info' });
+      return;
+    }
+
+    setIsBulkOpen(false);
+    onTermsChanged();
+    onDriveTouch();
+    showToast(
+      result.skipped.length > 0
+        ? `${result.created} 件を登録しました（${result.skipped.length} 件は飛ばしました）`
+        : `${result.created} 件を辞書に登録しました`,
+      { kind: 'success' },
+    );
+  };
+
   const syncDrive = async () => {
     if (!driveGlossaryEnabled) {
       onOpenIntegrations();
@@ -251,17 +293,52 @@ export default function GlossaryTab({
           placeholder="用語・意味・タグを検索"
           className="min-w-56 flex-1"
         />
-        <Button
-          variant="primary"
-          icon={<Plus className="h-4 w-4" aria-hidden />}
-          disabled={categories.length === 0}
-          onClick={() => {
-            setEditing(null);
-            setIsModalOpen(true);
-          }}
-        >
-          用語を追加
-        </Button>
+        {/* 主ボタンと ∨ をくっつける。5 個目を並べるとモバイルで 3 行に折り返す */}
+        <div className="flex items-center">
+          <Button
+            variant="primary"
+            className="rounded-r-none"
+            icon={<Plus className="h-4 w-4" aria-hidden />}
+            disabled={categories.length === 0}
+            onClick={() => {
+              setEditing(null);
+              setIsModalOpen(true);
+            }}
+          >
+            用語を追加
+          </Button>
+          <Popover
+            role="menu"
+            placement="bottom-end"
+            trigger={({ open, toggle }) => (
+              <IconButton
+                size="md"
+                variant="primary"
+                className="w-7 rounded-l-none border-l border-accent-fg/25 px-0"
+                aria-label="ほかの追加方法"
+                aria-expanded={open}
+                disabled={categories.length === 0}
+                onClick={toggle}
+                icon={<ChevronDown className="h-4 w-4" aria-hidden />}
+              />
+            )}
+          >
+            {(close) => (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  close();
+                  setIsBulkOpen(true);
+                }}
+                className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-body text-fg transition hover:bg-row-hover"
+              >
+                <ClipboardList className="h-4 w-4 shrink-0 text-fg-muted" aria-hidden />
+                まとめて追加
+              </button>
+            )}
+          </Popover>
+        </div>
         <Button
           variant="secondary"
           icon={<Sparkles className="h-4 w-4" aria-hidden />}
@@ -373,6 +450,17 @@ export default function GlossaryTab({
               ? '検索語やタグを外すと、ほかの用語が出てきます。'
               : 'ノートを読みながら気になった言葉を登録していくと、そのまま問題にできます。'
           }
+          action={
+            isFiltering || categories.length === 0 ? undefined : (
+              <Button
+                variant="secondary"
+                icon={<ClipboardList className="h-4 w-4" aria-hidden />}
+                onClick={() => setIsBulkOpen(true)}
+              >
+                まとめて追加
+              </Button>
+            )
+          }
         />
       ) : (
         <ul className="space-y-2">
@@ -400,6 +488,17 @@ export default function GlossaryTab({
           ))}
         </ul>
       )}
+
+      <GlossaryBulkAddModal
+        open={isBulkOpen}
+        categories={categories}
+        existingTerms={terms}
+        truncated={glossary.truncated}
+        defaultCategoryId={categoryId || undefined}
+        isSaving={glossary.isSaving}
+        onClose={() => setIsBulkOpen(false)}
+        onSubmit={(bulkCategoryId, bulkTerms) => void handleBulkSubmit(bulkCategoryId, bulkTerms)}
+      />
 
       <GenerateFromGlossaryModal
         open={isGenerateOpen}

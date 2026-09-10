@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   CreateGlossaryTermRequest,
+  CreateGlossaryTermsRequest,
+  CreateGlossaryTermsResponse,
   GlossaryTermDTO,
   UpdateGlossaryTermRequest,
 } from '../../shared/types';
@@ -29,6 +31,11 @@ export interface GlossaryApi {
   create: (
     body: CreateGlossaryTermRequest,
   ) => Promise<{ term: GlossaryTermDTO; duplicate: boolean } | null>;
+  /**
+   * まとめて登録する。**`create` のループにしない**
+   * （あれは中で reload するので、POST も一覧の取り直しも件数ぶん増える）。
+   */
+  createMany: (body: CreateGlossaryTermsRequest) => Promise<CreateGlossaryTermsResponse | null>;
   update: (id: string, body: UpdateGlossaryTermRequest) => Promise<GlossaryTermDTO | null>;
   remove: (id: string, cards: 'keep' | 'delete') => Promise<boolean>;
 }
@@ -88,6 +95,28 @@ export function useGlossary(): GlossaryApi {
     [reload, showToast],
   );
 
+  const createMany = useCallback(
+    async (body: CreateGlossaryTermsRequest) => {
+      setIsSaving(true);
+      try {
+        return await api.createGlossaryTerms(body);
+      } catch (createError) {
+        showToast(createError instanceof Error ? createError.message : String(createError), {
+          kind: 'error',
+        });
+        return null;
+      } finally {
+        /*
+         * **finally で取り直す。** 部分的に入ったあとで失敗することがあり、
+         * そのとき取り直さないと「何も起きていない」画面のまま行だけ増える。
+         */
+        await reload();
+        if (aliveRef.current) setIsSaving(false);
+      }
+    },
+    [reload, showToast],
+  );
+
   const update = useCallback(
     async (id: string, body: UpdateGlossaryTermRequest) => {
       setIsSaving(true);
@@ -136,5 +165,16 @@ export function useGlossary(): GlossaryApi {
     [reload, showToast],
   );
 
-  return { terms, isLoading, error, truncated, isSaving, reload, create, update, remove };
+  return {
+    terms,
+    isLoading,
+    error,
+    truncated,
+    isSaving,
+    reload,
+    create,
+    createMany,
+    update,
+    remove,
+  };
 }
