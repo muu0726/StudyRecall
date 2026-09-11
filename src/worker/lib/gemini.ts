@@ -155,8 +155,7 @@ const QUIZ_RULES = `形式: 4択。**資格試験の本試験と同じ体裁**�
 /** 資格試験名の 1 行。未設定なら何も足さない */
 function examLine(examName: string | null): string {
   if (!examName) return '';
-  return `この問題は「${examName}」の対策に使う。その試験で実際に問われる範囲・粒度・言い回しに寄せること。
-`;
+  return `この問題は「${examName}」の対策に使う。その試験で実際に問われる範囲・粒度・言い回しに寄せること。\n`;
 }
 
 /** 「無理に水増ししない」の 1 行。素材から取れる問数は素材が決める */

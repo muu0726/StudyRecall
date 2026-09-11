@@ -1,8 +1,8 @@
 # StudyRecall
 
-学習時間を記録すると、その日の「学びメモ」から Gemini が自動で一問一答（フラッシュカード）を生成し、そのまま復習できる Web アプリ。
+学習時間を記録すると、その日の「学びメモ」から Gemini が**資格試験と同じ体裁の 4 択問題**を自動で作り、そのまま復習できる Web アプリ。
 Markdown ノートや**用語辞書**からも問題を作れて、AI が付けたジャンルタグで絞り込み出題できる。
-辞書からは一問一答・穴埋め・4択の 3 形式を作り分けられる。
+カテゴリに対象の資格試験名（例: 基本情報技術者試験）を入れておくと、出題の粒度がその試験に寄る。
 
 Google と連携すると、タスクとカレンダーを同期し、D1 の中身・ノート・用語辞書を
 Google ドライブへ書き出せる。
@@ -13,7 +13,7 @@ Google ドライブへ書き出せる。
 - **Hono** — API ルーティング
 - **Cloudflare D1** + **Drizzle ORM** — 分散 SQLite
 - **Better Auth** — Google OAuth によるマルチデバイス認証
-- **Google Gemini API** (`gemini-3.6-flash`) — Structured Outputs で一問一答とタグを生成
+- **Google Gemini API** (`gemini-3.6-flash`) — Structured Outputs で 4 択問題とタグを生成
 - **Tailwind CSS v4** + **lucide-react** + **react-markdown / remark-gfm**
 - **vite-plugin-pwa** — ホーム画面から全画面起動
 - **jszip** / **canvas-confetti** — ノートの ZIP 出力と達成演出
@@ -181,20 +181,22 @@ src/
 ├─ shared/            client / worker 双方から import する純粋な層。**判断はここに寄せる**
 │                     types（API の入出力型）/ srs / note-tree / note-sanitize / note-export
 │                     note-sync / backup / calendar-event / calendar-view
-│                     glossary-search / glossary-mastery / glossary-export / cloze / choices
+│                     glossary-search / glossary-mastery / glossary-export / glossary-bulk
+│                     cloze / choices
 ├─ worker/            Hono API（Cloudflare Workers 上で動く）
 │  ├─ routes/         categories / study-logs / quizzes / notebooks / tags / timer / stats
 │  │                  tasks / calendar / integrations / backup / glossary
 │  └─ lib/            auth, google-auth（トークンとスコープ）, google-drive, google-tasks
 │                     gemini（生成・補完）, note-mirror, glossary-mirror, backup-data
-│                     quota, quiz-insert（D1 のバインド上限）, time（JST 日境界）
+│                     quota, quiz-insert / glossary-insert（D1 のバインド上限）, time（JST 日境界）
 │                     db, dto, queries, ids, user-settings
 └─ client/            React SPA
    ├─ components/     AuthGate / Sidebar（ナビ・ノートツリー・ジャンル・ツール・アカウント）
    │                  NoteTree / MoveNoteDialog / NoteTabs / NotesTab / NoteEditor / SplitDivider
    │                  StudyTab / TasksTab / GlossaryTab / ReviewTab / StatsTab
    │                  GlossaryTermCard / GlossaryTermModal / GenerateFromGlossaryModal
-   │                  GlossaryQuickAddPopover / IntegrationsModal / RestoreBackupDialog
+   │                  GlossaryQuickAddPopover / GlossaryBulkAddModal
+   │                  IntegrationsModal / RestoreBackupDialog
    │                  FlashCard / MarkdownView / SpeechPlayer / Toast ほかダイアログ群
    ├─ hooks/          useTimer / useRevalidateOnFocus / useNotebooks / useNoteTabs
    │                  useNoteSaver / useTasks / useGlossary / useGlossaryDriveSync
@@ -203,51 +205,53 @@ src/
    │                  SearchInput / TagInput / FilterMenu / Banner / Card / EmptyState）
    └─ lib/            api（fetch ラッパ・ApiError/NetworkError）, offline-queue,
                       markdown-edit, note-selection, remark-mark, remark-glossary,
-                      tag-input, note-draft, note-tabs, auth-client, format, cn
+                      tag-input, glossary-bulk-parse, note-draft, note-tabs, auth-client, format, cn
 scripts/
 └─ generate-icons.mjs PWA アイコンの生成（依存なし。public/ の PNG を作り直す）
 ```
 
 ## API
 
-| メソッド   | パス                                     | 認証 | 内容                                                                                 |
-| ---------- | ---------------------------------------- | ---- | ------------------------------------------------------------------------------------ |
-| GET        | `/api/auth-config`                       | 不要 | ログイン画面が出す手段（Google / モック）の可否                                      |
-| POST       | `/api/auth/dev-login`                    | 不要 | 開発用モックログイン（`ALLOW_DEV_LOGIN=true` のときだけ）                            |
-| GET/POST   | `/api/auth/*`                            | 不要 | Better Auth（Google OAuth・セッション・サインアウト）                                |
-| GET        | `/api/categories`                        | 必要 | カテゴリ一覧                                                                         |
-| POST       | `/api/categories`                        | 必要 | カテゴリ作成 `{ name, color? }`                                                      |
-| GET        | `/api/study-logs`                        | 必要 | 学習履歴＋統計（今日/今週/科目別/習得率）                                            |
-| POST       | `/api/study-logs`                        | 必要 | 記録保存＋問題生成 `{ categoryId, durationMinutes, notes, timerSessionId? }`         |
-| GET        | `/api/quizzes`                           | 必要 | `?categoryId=&tag=&notebookId=&unmasteredOnly=` で絞り込み（すべて AND）             |
-| POST       | `/api/quizzes/:id/result`                | 必要 | 判定を記録 `{ correct: boolean }`                                                    |
-| GET        | `/api/tags`                              | 必要 | 使用中のジャンルタグと問題数                                                         |
-| PUT/DELETE | `/api/categories/:id`                    | 必要 | カテゴリの改名・色変更 / 削除（使用中は 409）                                        |
-| GET        | `/api/timer`                             | 必要 | 稼働中タイマー（サーバーが `elapsedMs` を算出）                                      |
-| POST       | `/api/timer/start\|pause\|resume\|reset` | 必要 | タイマー操作。start は `{ mode }`（free / pomodoro）。既存セッションがあれば合流する |
-| GET/POST   | `/api/notebooks`                         | 必要 | ノート一覧（フラット配列。ツリー化は描画側）/ 作成（`parentId` 可）                  |
-| POST       | `/api/notebooks/:id/move`                | 必要 | ツリー内の移動 `{ parentId, index, categoryId? }`                                    |
-| PUT/DELETE | `/api/notebooks/:id`                     | 必要 | ノート更新（`expectedUpdatedAt` 必須、競合は 409）/ 削除（子孫ごと。件数を返す）     |
-| POST       | `/api/notebooks/:id/generate-quiz`       | 必要 | ノート本文から生成 `{ count?: 1〜10 }`                                               |
-| GET        | `/api/stats/heatmap`                     | 必要 | 過去365日の日別集計（JST）＋ストリーク                                               |
-| GET/POST   | `/api/tasks`                             | 必要 | タスク一覧 / 作成。Google Tasks と双方向同期                                         |
-| PUT/DELETE | `/api/tasks/:id`                         | 必要 | タスク更新 / 削除（墓標を残してから Google 側を消す）                                |
-| POST       | `/api/tasks/sync`                        | 必要 | Google Tasks と突き合わせる                                                          |
-| GET        | `/api/calendar/events`                   | 必要 | 予定一覧 `?from=&to=`（`singleEvents=true` で繰り返しも展開）                        |
-| POST       | `/api/calendar/events`                   | 必要 | 予定を作る                                                                           |
-| PUT/DELETE | `/api/calendar/events/:id`               | 必要 | 予定の更新（PATCH で送る）/ 削除                                                     |
-| GET/PUT    | `/api/integrations`                      | 必要 | 連携の状態と設定（付与済みスコープ、各同期の ON/OFF）                                |
-| POST       | `/api/backup/run`                        | 必要 | D1 の中身を JSON でドライブへ。`{ auto: true }` は 1 日 1 回                         |
-| GET        | `/api/backup/snapshot`                   | 必要 | いまの中身を JSON で返す（ドライブを使わない）                                       |
-| GET        | `/api/backup/files`                      | 必要 | ドライブ上のバックアップ一覧                                                         |
-| POST       | `/api/backup/restore`                    | 必要 | **中身を置き換える**。先に安全用バックアップを取り、取れなければ中止する             |
-| POST       | `/api/backup/notes`                      | 必要 | ノートを `.md` としてドライブへミラー（一方通行）                                    |
-| GET        | `/api/glossary`                          | 必要 | 用語一覧 `?categoryId=&tag=`（検索と習得ステータスは**クライアント側**）             |
-| POST       | `/api/glossary`                          | 必要 | 用語登録。同カテゴリの重複は 409 で既存を返す                                        |
-| PUT/DELETE | `/api/glossary/:id`                      | 必要 | 用語更新 / 削除（`?cards=keep\|delete`。既定はカードを残す）                         |
-| POST       | `/api/glossary/ai-assist`                | 必要 | 意味とタグを補完 `{ categoryId, term, definition? }`。**保存しない**                 |
-| POST       | `/api/glossary/generate-cards`           | 必要 | 用語から出題を作る `{ termIds, questionType }`（qa / cloze / quiz）                  |
-| POST       | `/api/glossary/sync-drive`               | 必要 | 用語辞書をドライブへ書き出す（`{ auto: true }` は 5 分の床つき）                     |
+| メソッド   | パス                                     | 認証 | 内容                                                                                     |
+| ---------- | ---------------------------------------- | ---- | ---------------------------------------------------------------------------------------- |
+| GET        | `/api/auth-config`                       | 不要 | ログイン画面が出す手段（Google / モック）の可否                                          |
+| POST       | `/api/auth/dev-login`                    | 不要 | 開発用モックログイン（`ALLOW_DEV_LOGIN=true` のときだけ）                                |
+| GET/POST   | `/api/auth/*`                            | 不要 | Better Auth（Google OAuth・セッション・サインアウト）                                    |
+| GET        | `/api/categories`                        | 必要 | カテゴリ一覧                                                                             |
+| POST       | `/api/categories`                        | 必要 | カテゴリ作成 `{ name, color?, examName? }`                                               |
+| GET        | `/api/study-logs`                        | 必要 | 学習履歴＋統計（今日/今週/科目別/習得率）                                                |
+| POST       | `/api/study-logs`                        | 必要 | 記録保存＋問題生成 `{ categoryId, durationMinutes, notes, timerSessionId? }`             |
+| GET        | `/api/quizzes`                           | 必要 | `?categoryId=&tag=&notebookId=&unmasteredOnly=` で絞り込み（すべて AND）                 |
+| POST       | `/api/quizzes/:id/result`                | 必要 | 判定を記録 `{ correct: boolean }`                                                        |
+| GET        | `/api/tags`                              | 必要 | 使用中のジャンルタグと問題数                                                             |
+| PUT/DELETE | `/api/categories/:id`                    | 必要 | カテゴリの改名・色・試験名の変更（`examName: ''` で消す）/ 削除（使用中は 409）          |
+| GET        | `/api/timer`                             | 必要 | 稼働中タイマー（サーバーが `elapsedMs` を算出）                                          |
+| POST       | `/api/timer/start\|pause\|resume\|reset` | 必要 | タイマー操作。start は `{ mode }`（free / pomodoro）。既存セッションがあれば合流する     |
+| GET/POST   | `/api/notebooks`                         | 必要 | ノート一覧（フラット配列。ツリー化は描画側）/ 作成（`parentId` 可）                      |
+| POST       | `/api/notebooks/:id/move`                | 必要 | ツリー内の移動 `{ parentId, index, categoryId? }`                                        |
+| PUT/DELETE | `/api/notebooks/:id`                     | 必要 | ノート更新（`expectedUpdatedAt` 必須、競合は 409）/ 削除（子孫ごと。件数を返す）         |
+| POST       | `/api/notebooks/:id/generate-quiz`       | 必要 | ノート本文から生成 `{ count?: 1〜10 }`                                                   |
+| GET        | `/api/stats/heatmap`                     | 必要 | 過去365日の日別集計（JST）＋ストリーク                                                   |
+| GET/POST   | `/api/tasks`                             | 必要 | タスク一覧 / 作成。Google Tasks と双方向同期                                             |
+| PUT/DELETE | `/api/tasks/:id`                         | 必要 | タスク更新 / 削除（墓標を残してから Google 側を消す）                                    |
+| POST       | `/api/tasks/sync`                        | 必要 | Google Tasks と突き合わせる                                                              |
+| GET        | `/api/calendar/events`                   | 必要 | 予定一覧 `?from=&to=`（`singleEvents=true` で繰り返しも展開）                            |
+| POST       | `/api/calendar/events`                   | 必要 | 予定を作る                                                                               |
+| PUT/DELETE | `/api/calendar/events/:id`               | 必要 | 予定の更新（PATCH で送る）/ 削除                                                         |
+| GET/PUT    | `/api/integrations`                      | 必要 | 連携の状態と設定（付与済みスコープ、各同期の ON/OFF）                                    |
+| POST       | `/api/backup/run`                        | 必要 | D1 の中身を JSON でドライブへ。`{ auto: true }` は 1 日 1 回                             |
+| GET        | `/api/backup/snapshot`                   | 必要 | いまの中身を JSON で返す（ドライブを使わない）                                           |
+| GET        | `/api/backup/files`                      | 必要 | ドライブ上のバックアップ一覧                                                             |
+| POST       | `/api/backup/restore`                    | 必要 | **中身を置き換える**。先に安全用バックアップを取り、取れなければ中止する                 |
+| POST       | `/api/backup/notes`                      | 必要 | ノートを `.md` としてドライブへミラー（一方通行）                                        |
+| GET        | `/api/glossary`                          | 必要 | 用語一覧 `?categoryId=&tag=`（検索と習得ステータスは**クライアント側**）                 |
+| POST       | `/api/glossary`                          | 必要 | 用語登録。同カテゴリの重複は 409 で既存を返す                                            |
+| PUT/DELETE | `/api/glossary/:id`                      | 必要 | 用語更新 / 削除（`?cards=keep\|delete`。既定はカードを残す）                             |
+| POST       | `/api/glossary/ai-assist`                | 必要 | 意味とタグを補完 `{ categoryId, term, definition? }`。**保存しない**                     |
+| POST       | `/api/glossary/bulk`                     | 必要 | まとめて登録 `{ categoryId, terms }`（最大 100 件）。**常に 201**で登録数と飛ばした理由  |
+| POST       | `/api/glossary/bulk/ai-assist`           | 必要 | 空の意味をまとめて補完 `{ categoryId, terms }`（最大 20 件）。**保存しない**。上限は 429 |
+| POST       | `/api/glossary/generate-cards`           | 必要 | 用語から 4 択を作る `{ termIds }`                                                        |
+| POST       | `/api/glossary/sync-drive`               | 必要 | 用語辞書をドライブへ書き出す（`{ auto: true }` は 5 分の床つき）                         |
 
 ## 用語辞書
 
@@ -283,24 +287,34 @@ FTS5 なら畳めるが、仮想テーブルは Drizzle のスキーマに書け
 代わりに上限（500 件）で切れたら `truncated` を返し、画面で知らせる。
 黙って切ると、手元の検索がコーパスの先頭しか見ていない状態になる。
 
-### 出題の 3 形式
+### 出題は資格試験型の 4 択
 
-| 形式    | `question`                                   | `answer`         | `choices` |
-| ------- | -------------------------------------------- | ---------------- | --------- |
-| `qa`    | 定義を説明する文                             | 用語名           | `[]`      |
-| `cloze` | 説明文に `____` が 1 か所                    | 空欄に入る用語名 | `[]`      |
-| `quiz`  | 「次の説明にあてはまる用語はどれか。」＋説明 | 正解の用語名     | 4 個      |
+学習記録・ノート・用語辞書の**どれから作っても 4 択**になる。
+選択肢の形は AI が素材に合わせて 2 通りを使い分け、各問に `choiceStyle` を宣言させる。
 
-- **穴埋めの空欄は `question` の中に埋める。** 位置を別の列に持つと、問題文を手で直したときに
-  ずれて、ずれたことに気付けない
-- **4 択の正解番号も持たない。** `answer` と文字列一致で見る
-- 選択肢は**必ず混ぜる**（`src/shared/choices.ts`）。モデルは正解を先頭に置きがちで、
+| `choiceStyle` | 問い方                                         | 選択肢 | 足りないとき                   |
+| ------------- | ---------------------------------------------- | ------ | ------------------------------ |
+| `term`        | 説明文を読ませて**用語を選ばせる**             | 用語名 | 同じ生成の他の答え・用語で補う |
+| `statement`   | 「〜に関する記述のうち、適切なものはどれか。」 | 記述文 | **補わずにその問題を捨てる**   |
+
+- **記述型は誤答を補充しない**（`src/shared/choices.ts` の `buildChoices`）。
+  記述 3 つに用語名を 1 個混ぜると、その 1 個だけ形が違って**読まなくても答えが分かる**
+- 解説は**誤答がなぜ違うのか**に必ず 1 文触れさせる。資格試験の対策では解説が本体
+- カテゴリの `examName` があればプロンプトに 1 行載せ、その試験の範囲・粒度・言い回しに寄せる。
+  学習記録の生成は保存と同時に自動で走るので、生成のたびに入力させる形では効かない
+- **4 択の正解番号は持たない。** `answer` と文字列一致で見る
+- 選択肢は**必ず混ぜる**。モデルは正解を先頭に置きがちで、
   そのままだと「1 番を選べば当たる」カードが量産される。乱数は引数にしてテストで固定した
-- 誤答は**同じ生成に含まれる他の用語**から埋める
-- 各問に `sourceTerm` を書かせ、**入力の用語名と完全一致しなければ捨てる**。
+- 辞書からの生成では各問に `sourceTerm` を書かせ、**入力の用語名と完全一致しなければ捨てる**。
   無いと N 問を用語に対応付ける手段が順番しかなく、モデルは平気で 1 問落とす
 - 4 択でも**選んだ瞬間には判定を送らない**（キーと click の二重発火、`correctCount` の意味が
   形式ごとに変わる、当たったが分かっていない場合の逃げ道）
+- 音読モードは選択肢まで読む（「1、TCP。2、UDP…」）。読まないと耳だけでは何も選べない
+
+一問一答（`qa`）と穴埋め（`cloze`）は**もう作られない**が、`QuestionType` の 3 値は残してある。
+4 択に統一する前のカードがその値を持っていて、表示・回答・Anki 書き出しはこれまで通り動く。
+穴埋めの空欄は `question` の中の `____` で表す（位置を別の列に持つと、問題文を手で直したときに
+ずれて、ずれたことに気付けない）。
 
 ### AI 補完
 
@@ -310,6 +324,37 @@ FTS5 なら畳めるが、仮想テーブルは Drizzle のスキーマに書け
 候補は用語と問題の**両方**のタグから集める（分けると使い始めた直後に候補が空になる）。
 
 補完は**保存しない**。欄に入れるだけなので打ち直せる。失敗しても 200 で返して入力を巻き戻さない。
+
+### まとめて登録
+
+「用語を追加」の隣の ∨ →「まとめて追加」。**貼り付け → 表で直す → まとめて登録**の 2 段。
+
+1 行の読み方（`src/client/lib/glossary-bulk-parse.ts`）:
+
+- **タブがあれば最優先**（表計算からの貼り付けは曖昧さがない）
+- 無ければ `:` `：` `,` `，` のうち**最も早く現れたもの**で、**最初の 1 個でだけ**割る。
+  `OSI: 7層: 物理層から` の意味は `7層: 物理層から` になる
+- `:` の直後が `/` なら区切りにしない（URL）。**空白と `、` では割らない**
+  （`3ウェイ ハンドシェイク` と `パケットは、分割して送る` を壊さない）
+- 箇条書きの記号を剥がす。ASCII の `- * +` と `1.` は空白が続くときだけ、`・` は空白の有無を問わない
+- 読めなかった行は**黙って捨てず、行番号と理由を出す**（`rows + skipped = 空行を除いた行数`）
+
+**判定は画面とサーバーが同じ関数を通る**（`src/shared/glossary-bulk.ts` の `prepareBulkTerms`）。
+画面では押す前に「このカテゴリに登録済みです」が見え、問題のある行は**外すだけでボタンは止めない**。
+
+サーバー側で気を付けたこと:
+
+- 重複は **カテゴリ全件の `termKey` を 1 クエリで引く**。`inArray(termKey, 100件)` は
+  バインド変数が 102 個になり D1 の上限 100 を越える
+- INSERT は `glossary_terms` の 10 列から 1 文 10 行（**余白ゼロ**）。
+  `onConflictDoNothing().returning({ id })` で、一意インデックスに当たった行を
+  **例外ではなく数えられる結果**にする（事前チェックだけだと 10 行のチャンクごと落ちる）
+- **常に部分成功＋報告**。D1 に対話的トランザクションが無いうえ、40 行中 3 行の重複で残り 37 を捨てるほうが損
+
+空の意味は 🪄 で AI にまとめて埋めさせられる。**1 押し = Gemini 1 回 = 最大 20 件**
+（応答が途中で切れるとその回は全滅するので件数で切る）。返ってきた値は**まだ空の行にだけ**入れ、
+待っている間に打った内容は上書きしない。プロンプトには「意味の分からない語はでっち上げずに省く」
+「同じ分野には同じタグ」の 2 行を足している。
 
 ### ノートからの登録
 
@@ -356,6 +401,8 @@ FTS5 なら畳めるが、仮想テーブルは Drizzle のスキーマに書け
   あのテーブルにはトークンとパスワードが入っている。混入していないことはテストで固定している
 - 復元は「**落として検証 → 安全用バックアップを取る（取れなければ中止）→ 置き換える**」の順。
   D1 に対話的トランザクションが無く atomic にできないので、戻れる場所を先に作る
+- ファイルの版は **3**（v2 → v3 でカテゴリに `examName` が増えた）。v1・v2 のファイルも読め、
+  足りない項目は既定値で埋める（`READABLE_VERSIONS`）
 - ノートは `カテゴリ名/親ノート/子ノート.md` の形でミラーできる。1 回で叩く Drive の回数に
   上限（30）があるので、多いときは `remaining` を返して次の実行に続ける
 
@@ -687,13 +734,18 @@ UPDATE では発火しない。以前より良くなっている。
 
 上限に当たったときの扱いは入り口ごとに違う。
 
-| 入り口             | 挙動                                       |
-| ------------------ | ------------------------------------------ |
-| 学習記録           | **記録は保存し** warning を返す            |
-| ノートからの生成   | ノートは保存済みなので warning のみ        |
-| 用語のクイック追加 | 生成が本体で保存するものが無いので **429** |
+| 入り口                       | 挙動                                       |
+| ---------------------------- | ------------------------------------------ |
+| 学習記録                     | **記録は保存し** warning を返す            |
+| ノートからの生成             | ノートは保存済みなので warning のみ        |
+| 辞書からの生成               | 保存するものが無いので warning のみ        |
+| 用語の AI 補完（1 件・一括） | 生成が本体で保存するものが無いので **429** |
 
 「生成の失敗が保存を巻き込まない」という既存の方針をそのまま当てている。
+
+> **既知の歪み**: `quota.ts` は用語の**行数**も月次の数に入れている。一括登録で AI を使わずに
+> 100 件貼り付けても 100 消費する。1 回の貼り付けを 100 行までにして歪みを抑えているが、
+> 用語を数えるのをやめるかどうかは未決。
 
 ## エクスポート
 
@@ -785,6 +837,8 @@ SW のプリキャッシュは 20 件 731 KiB（うち Inter latin が 48 KB）�
 - **remark プラグインは「アタッチャ」を返す**。unified は配列の関数をアタッチャとして呼び、
   その戻り値を変換関数として使う。変換関数を直接返すと `tree` が undefined のまま走って落ちる
   （プレビューが真っ白になった）。内部の変換関数を直に叩くテストだけでは通り抜ける。
+- **4 択の記述型は誤答を補充しない**。用語名を 1 個混ぜた 4 択は読まなくても解ける。
+  4 個そろわなければ問題ごと捨てる（`buildChoices`）。
 - **ノートを削除しても生成済みの問題は残る**（`notebook_id` が `ON DELETE SET NULL`）。復習資産を巻き込んで消さないため。
 - **PWA アイコンはプレースホルダ**。`node scripts/generate-icons.mjs` で作り直せる。ブランドアイコンが用意できたら `public/` の PNG を差し替える。
 
@@ -808,12 +862,14 @@ SQLite は列の NOT NULL 変更ができないため、drizzle-kit は「テー
   （`src/worker/lib/quiz-insert.ts` の `maxRowsPerInsert` / `chunkRows`）。
   **列数はテーブル定義から数える**ので、あとで列が増えても黙って上限を越えない
   （`quiz_questions` は 18 → 21 列になり、1 文 5 行 → 4 行に自動で下がった）。
+  `glossary_terms` は 10 列でちょうど 10 行（余白ゼロ）。**`inArray` の引数もバインド変数**なので、
+  100 件の存在確認を `IN (...)` で投げると 102 個になって越える。
 - 再作成の `INSERT ... SELECT` は、旧テーブルにまだ無い新規カラムまで SELECT してくるため、リテラルに書き換える。
 
 ## スコープ外
 
 リアルタイム同期（WebSocket・SSE でのプッシュ）/ ノートのバージョン履歴・3-way マージ
 （競合時は「破棄 or 強制上書き」の二択）/ オフライン時のノート編集キュー（判定のみ対象）/
-ドライブからの**読み戻し**（書き出しは一方通行）/ 用語の一括インポート /
+ドライブからの**読み戻し**（書き出しは一方通行）/ 用語の CSV・ファイル取り込み（貼り付けだけ）/
 サーバー側の本物のレート制限（AI 補完は行を作らないので月次の数に乗らない）/
 用語同士のリンク
