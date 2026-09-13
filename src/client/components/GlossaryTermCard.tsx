@@ -21,6 +21,11 @@ const MASTERY_STYLE: Record<MasteryStatus, string> = {
 
 interface Props {
   term: GlossaryTermDTO;
+  /**
+   * カテゴリのチップを出すか。**カテゴリ別にまとめた一覧では false**
+   * （見出しと同じ情報が全カードに並ぶ）。既定は true で、今までの見た目のまま。
+   */
+  showCategory?: boolean;
   selected: boolean;
   suggestions: string[];
   onToggleSelect: () => void;
@@ -31,6 +36,7 @@ interface Props {
 
 export default function GlossaryTermCard({
   term,
+  showCategory = true,
   selected,
   suggestions,
   onToggleSelect,
@@ -84,14 +90,16 @@ export default function GlossaryTermCard({
             >
               {MASTERY_LABELS[term.masteryStatus]}
             </span>
-            <span className="flex shrink-0 items-center gap-1 text-caption text-fg-subtle">
-              <span
-                className="h-2 w-2 rounded-full"
-                style={{ backgroundColor: term.categoryColor }}
-                aria-hidden
-              />
-              {term.categoryName}
-            </span>
+            {showCategory && (
+              <span className="flex shrink-0 items-center gap-1 text-caption text-fg-subtle">
+                <span
+                  className="h-2 w-2 rounded-full"
+                  style={{ backgroundColor: term.categoryColor }}
+                  aria-hidden
+                />
+                {term.categoryName}
+              </span>
+            )}
           </div>
 
           {isEditing ? (

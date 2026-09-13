@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   BookMarked,
   ChevronDown,
+  ChevronRight,
   ClipboardList,
   Cloud,
   CloudOff,
@@ -11,6 +12,8 @@ import {
 } from 'lucide-react';
 import type { CategoryDTO, GlossaryTermDTO } from '../../shared/types';
 import { api } from '../lib/api';
+import { groupTermsByCategory } from '../lib/glossary-groups';
+import { readIds, writeIds } from '../lib/stored-ids';
 import {
   collectTags,
   filterGlossaryTerms,
@@ -77,6 +80,13 @@ interface Props {
   openAddToken: number;
 }
 
+/**
+ * 閉じている「カテゴリ」の id。**既定で開く**ので、閉じている側だけを保存する
+ * （新しく増えたカテゴリが勝手に畳まれていると、用語が消えたように見える）。
+ * ノートツリーの `studyrecall:notes-closed-categories` とは別に持つ。
+ */
+const CLOSED_CATEGORIES_KEY = 'studyrecall:glossary-closed-categories';
+
 export default function GlossaryTab({
   glossary,
   categories,
@@ -134,6 +144,40 @@ export default function GlossaryTab({
       ),
     [terms, categoryId, query, selectedTags, mastery],
   );
+
+  // 並べ方だけを変える。何が見えるかは visible が決める
+  const groups = useMemo(() => groupTermsByCategory(visible, categories), [visible, categories]);
+  const [closedCategoryIds, setClosedCategoryIds] = useState<Set<string>>(() =>
+    readIds(CLOSED_CATEGORIES_KEY),
+  );
+  /*
+   * **検索語が入っている間は全部開く。** 閉じたカテゴリの中の一致が見えないと
+   * 「該当なし」に見える。保存した開閉は変えないので、検索を消せば元に戻る。
+   */
+  const isSearching = query.trim() !== '';
+
+  const toggleCategoryOpen = (id: string) => {
+    setClosedCategoryIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      writeIds(CLOSED_CATEGORIES_KEY, next);
+      return next;
+    });
+  };
+
+  /** カテゴリ内がすべて選ばれていれば外し、そうでなければ全部選ぶ */
+  const toggleSelectGroup = (ids: readonly string[]) => {
+    setSelectedIds((current) => {
+      const allSelected = ids.every((id) => current.has(id));
+      const next = new Set(current);
+      for (const id of ids) {
+        if (allSelected) next.delete(id);
+        else next.add(id);
+      }
+      return next;
+    });
+  };
 
   // タグの候補は「いま見えている範囲の 1 つ手前」から作る。
   // 絞り込んだ結果から作ると、押した途端に他のタグが消えて外せなくなる。
@@ -463,30 +507,79 @@ export default function GlossaryTab({
           }
         />
       ) : (
-        <ul className="space-y-2">
-          {visible.map((term) => (
-            <GlossaryTermCard
-              key={term.id}
-              term={term}
-              selected={selectedIds.has(term.id)}
-              suggestions={allTagNames}
-              onToggleSelect={() => toggleSelect(term.id)}
-              onEdit={() => {
-                setEditing(term);
-                setIsModalOpen(true);
-              }}
-              onDelete={() => {
-                setDeleting(term);
-                setDeleteCards(false);
-              }}
-              onSaveInline={async (values) => {
-                const saved = await glossary.update(term.id, values);
-                if (saved) onDriveTouch();
-                return saved !== null;
-              }}
-            />
-          ))}
-        </ul>
+        <div className="space-y-5">
+          {groups.map((group) => {
+            const isOpen = isSearching || !closedCategoryIds.has(group.categoryId);
+            const groupIds = group.terms.map((term) => term.id);
+            const allSelected = groupIds.every((id) => selectedIds.has(id));
+
+            return (
+              <section key={group.categoryId} aria-label={`${group.name} の用語`}>
+                {/* 狭い画面では「すべて選択」だけ次の行へ折り返す。名前は縦に割らない */}
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-line pb-1.5">
+                  <button
+                    type="button"
+                    onClick={() => toggleCategoryOpen(group.categoryId)}
+                    aria-expanded={isOpen}
+                    disabled={isSearching}
+                    title={isSearching ? '検索中はすべて開いて表示します' : undefined}
+                    className="flex min-w-0 items-center gap-2 rounded-control py-1 pr-2 text-left transition hover:bg-row-hover disabled:cursor-default disabled:hover:bg-transparent"
+                  >
+                    {isOpen ? (
+                      <ChevronDown className="h-4 w-4 shrink-0 text-fg-subtle" aria-hidden />
+                    ) : (
+                      <ChevronRight className="h-4 w-4 shrink-0 text-fg-subtle" aria-hidden />
+                    )}
+                    <span
+                      className="h-2.5 w-2.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: group.color }}
+                      aria-hidden
+                    />
+                    <span className="truncate text-body font-semibold text-fg">{group.name}</span>
+                    <span className="shrink-0 text-caption text-fg-subtle tabular-nums">
+                      （{group.terms.length}）
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => toggleSelectGroup(groupIds)}
+                    className="ml-auto rounded-control px-2 py-1 text-caption whitespace-nowrap text-fg-muted transition hover:bg-row-hover hover:text-fg"
+                  >
+                    {allSelected ? '選択を外す' : 'すべて選択'}
+                  </button>
+                </div>
+
+                {isOpen && (
+                  <ul className="mt-2 space-y-2">
+                    {group.terms.map((term) => (
+                      <GlossaryTermCard
+                        key={term.id}
+                        term={term}
+                        showCategory={false}
+                        selected={selectedIds.has(term.id)}
+                        suggestions={allTagNames}
+                        onToggleSelect={() => toggleSelect(term.id)}
+                        onEdit={() => {
+                          setEditing(term);
+                          setIsModalOpen(true);
+                        }}
+                        onDelete={() => {
+                          setDeleting(term);
+                          setDeleteCards(false);
+                        }}
+                        onSaveInline={async (values) => {
+                          const saved = await glossary.update(term.id, values);
+                          if (saved) onDriveTouch();
+                          return saved !== null;
+                        }}
+                      />
+                    ))}
+                  </ul>
+                )}
+              </section>
+            );
+          })}
+        </div>
       )}
 
       <GlossaryBulkAddModal

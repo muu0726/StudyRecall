@@ -11,6 +11,7 @@ import {
 import type { CategoryDTO, NotebookDTO } from '../../shared/types';
 import { buildTree, canMove, type NoteTreeNode } from '../../shared/note-tree';
 import { cn } from '../lib/cn';
+import { readIds, writeIds } from '../lib/stored-ids';
 
 /**
  * サイドバーの階層ツリー（VS Code のファイルエクスプローラー相当）。
@@ -53,26 +54,6 @@ interface Props {
   onOpenCategoryMenu: (category: CategoryDTO) => void;
   onOpenMenu: (notebook: NotebookDTO) => void;
   onMove: (intent: MoveIntent) => void;
-}
-
-function readIds(key: string): Set<string> {
-  try {
-    const raw = localStorage.getItem(key);
-    const parsed: unknown = raw ? JSON.parse(raw) : [];
-    return new Set(
-      Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : [],
-    );
-  } catch {
-    return new Set();
-  }
-}
-
-function writeIds(key: string, ids: Set<string>): void {
-  try {
-    localStorage.setItem(key, JSON.stringify([...ids]));
-  } catch {
-    // プライベートモード等での失敗は無視
-  }
 }
 
 function toggleIn(ids: Set<string>, id: string): Set<string> {
