@@ -100,12 +100,15 @@ export function normalizeChoices(
   return shuffle(choices.slice(0, CHOICE_COUNT), rand);
 }
 
-/** Fisher-Yates。元の配列は触らない */
-function shuffle(values: readonly string[], rand: () => number): string[] {
+/**
+ * Fisher-Yates。元の配列は触らない。
+ * 選択肢のほか、辞書から生成するときの用語選び（`glossary-generate-targets.ts`）も使う。
+ */
+export function shuffle<T>(values: readonly T[], rand: () => number = Math.random): T[] {
   const result = [...values];
   for (let i = result.length - 1; i > 0; i--) {
     const j = Math.floor(rand() * (i + 1));
-    [result[i], result[j]] = [result[j] as string, result[i] as string];
+    [result[i], result[j]] = [result[j] as T, result[i] as T];
   }
   return result;
 }

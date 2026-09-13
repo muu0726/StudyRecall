@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Sparkles } from 'lucide-react';
 import type { GlossaryTermDTO } from '../../shared/types';
 import { MAX_GLOSSARY_GENERATE_TERMS } from '../../shared/types';
+import { countFreshTerms, pickGenerateTargets } from '../lib/glossary-generate-targets';
 import { Banner, Button, Modal } from '../ui';
 
 /**
@@ -51,9 +52,14 @@ export default function GenerateFromGlossaryModal({
    */
   const effectiveScope: GenerateScope = pools[scope].length > 0 ? scope : 'filtered';
   const pool = pools[effectiveScope];
-  // 上限を超えるぶんは切る。**どこから切ったかが分かるよう、件数を必ず出す**
-  const targets = pool.slice(0, MAX_GLOSSARY_GENERATE_TERMS);
-  const trimmed = pool.length - targets.length;
+  /*
+   * 件数だけをここで決める（決定的）。**どの用語にするかは押した瞬間に選ぶ**
+   * （`pickGenerateTargets`）。描画のたびに乱数を引くと、再描画で対象が入れ替わる。
+   * 上限を超えるぶんは対象外になるので、件数は必ず出す。
+   */
+  const targetCount = Math.min(pool.length, MAX_GLOSSARY_GENERATE_TERMS);
+  const trimmed = pool.length - targetCount;
+  const freshCount = countFreshTerms(pool);
 
   return (
     <Modal
@@ -101,7 +107,7 @@ export default function GenerateFromGlossaryModal({
           </p>
         </div>
 
-        {targets.length < 4 && targets.length > 0 && (
+        {targetCount < 4 && targetCount > 0 && (
           <Banner tone="warning" size="sm">
             誤答は辞書の他の用語から作ります。対象が 4 件未満だと、AI が作った
             もっともらしい用語で埋まります。
@@ -110,22 +116,34 @@ export default function GenerateFromGlossaryModal({
 
         {trimmed > 0 && (
           <Banner tone="info" size="sm">
-            一度に作れるのは {MAX_GLOSSARY_GENERATE_TERMS} 件までです。先頭の {targets.length}{' '}
-            件だけ作り、残り {trimmed} 件は対象外になります。
+            一度に作れるのは {MAX_GLOSSARY_GENERATE_TERMS} 件までです。
+            まだ問題の無い用語を優先して、ランダムに {targetCount} 件選びます（残り {trimmed}{' '}
+            件は今回は対象外）。
           </Banner>
         )}
 
-        <Button
-          variant="primary"
-          size="lg"
-          fullWidth
-          disabled={targets.length === 0 || isGenerating}
-          loading={isGenerating}
-          icon={<Sparkles className="h-4 w-4" aria-hidden />}
-          onClick={() => onGenerate(targets.map((term) => term.id))}
-        >
-          {targets.length === 0 ? '対象の用語がありません' : `${targets.length} 問を作る`}
-        </Button>
+        <div className="space-y-1.5">
+          <Button
+            variant="primary"
+            size="lg"
+            fullWidth
+            disabled={targetCount === 0 || isGenerating}
+            loading={isGenerating}
+            icon={<Sparkles className="h-4 w-4" aria-hidden />}
+            onClick={() =>
+              onGenerate(
+                pickGenerateTargets(pool, MAX_GLOSSARY_GENERATE_TERMS).map((term) => term.id),
+              )
+            }
+          >
+            {targetCount === 0 ? '対象の用語がありません' : `${targetCount} 問を作る`}
+          </Button>
+          {targetCount > 0 && (
+            <p className="text-center text-caption text-fg-subtle">
+              この範囲で問題の無い用語 {freshCount} 件 / 全 {pool.length} 件
+            </p>
+          )}
+        </div>
       </div>
     </Modal>
   );
