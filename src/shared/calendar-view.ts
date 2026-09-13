@@ -351,3 +351,29 @@ export function compareEvents(a: CalendarEventDTO, b: CalendarEventDTO): number 
   if (at !== bt) return at < bt ? -1 : 1;
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
+
+/**
+ * タスク画面の下半分に何を出すか。
+ *
+ * **日を選んでいれば、タスクが 0 件でもその日の表示を出す。**
+ * 以前は「0 件」の判定が先にあり、タスクが無いと日を選んでも「タスクはありません」で止まった。
+ * その日の予定の一覧・追加・編集・削除はすべて日の表示の中にあるので、
+ * **タスクを 1 件も持たない人はカレンダーの予定を一切触れなかった。**
+ *
+ * 読み込み中だけは先に返す。まだ取れていない件数で「この日のタスク 0」と言わないため。
+ */
+export type TaskPanelMode = 'loading' | 'day' | 'empty' | 'groups';
+
+export function taskPanelMode({
+  isLoading,
+  taskCount,
+  selectedDay,
+}: {
+  isLoading: boolean;
+  taskCount: number;
+  selectedDay: string | null;
+}): TaskPanelMode {
+  if (isLoading) return 'loading';
+  if (selectedDay !== null) return 'day';
+  return taskCount === 0 ? 'empty' : 'groups';
+}

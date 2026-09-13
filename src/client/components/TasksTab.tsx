@@ -18,7 +18,7 @@ import type {
   TaskDTO,
 } from '../../shared/types';
 import { daysBetween, groupTasks, todayInJst } from '../../shared/task-sync';
-import { WEEKDAY_LABELS } from '../../shared/calendar-view';
+import { WEEKDAY_LABELS, taskPanelMode } from '../../shared/calendar-view';
 import { cn } from '../lib/cn';
 import { readShortcutContext } from '../lib/keyboard';
 import { Banner, Button, IconButton, Input } from '../ui';
@@ -66,6 +66,11 @@ export default function TasksTab({ tasks, categories, onOpenIntegrations }: Prop
   const today = todayInJst();
   const groups = groupTasks(tasks.tasks, today);
   const calendar = useCalendarEvents({ googleLinked: tasks.googleLinked });
+  const panelMode = taskPanelMode({
+    isLoading: tasks.isLoading,
+    taskCount: tasks.tasks.length,
+    selectedDay,
+  });
 
   // 選択の解除は Esc でもできるようにする。カレンダーから戻る動作は頻繁に使う。
   useEffect(() => {
@@ -223,16 +228,26 @@ export default function TasksTab({ tasks, categories, onOpenIntegrations }: Prop
           </div>
         )}
 
-        {tasks.isLoading ? (
+        {/*
+          **日の選択を 0 件より先に見る**（判定は shared/calendar-view.ts の taskPanelMode）。
+          予定の一覧・追加・編集・削除は DaySection の中にしか無いので、
+          0 件を先に見るとタスクを持たない人が予定を触れなくなる。
+        */}
+        {panelMode === 'loading' ? (
           <p className="flex items-center justify-center gap-2 px-4 py-16 text-body text-fg-muted">
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
             読み込み中…
           </p>
-        ) : tasks.tasks.length === 0 ? (
+        ) : panelMode === 'empty' ? (
           <p className="px-4 py-16 text-center text-body text-fg-muted">
             タスクはありません。上の欄から追加してください。
+            {tasks.googleLinked && (
+              <span className="mt-1 block text-caption text-fg-subtle">
+                カレンダーの日付を選ぶと、その日の予定を確認・追加できます。
+              </span>
+            )}
           </p>
-        ) : selectedDay !== null ? (
+        ) : panelMode === 'day' && selectedDay !== null ? (
           <DaySection
             day={selectedDay}
             today={today}

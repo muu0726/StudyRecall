@@ -15,6 +15,7 @@ import {
   jstTimeOf,
   normalizeEvent,
   shiftMonth,
+  taskPanelMode,
 } from './calendar-view';
 
 describe('buildMonthGrid', () => {
@@ -487,5 +488,39 @@ describe('compareEvents', () => {
     expect(compareEvents(a, b)).toBeLessThan(0);
     expect(compareEvents(b, a)).toBeGreaterThan(0);
     expect(compareEvents(a, a)).toBe(0);
+  });
+});
+
+describe('taskPanelMode', () => {
+  /**
+   * ここが本題。タスクが 0 件でも、日を選べばその日の表示（予定の一覧・追加・編集・削除）に届く。
+   * 以前は 0 件の判定が先で、タスクを持たない人は予定を一切触れなかった。
+   */
+  it('タスクが 0 件でも、日を選んでいればその日の表示', () => {
+    expect(taskPanelMode({ isLoading: false, taskCount: 0, selectedDay: '2026-09-13' })).toBe(
+      'day',
+    );
+  });
+
+  it('タスクがあって日を選んでいれば、その日の表示', () => {
+    expect(taskPanelMode({ isLoading: false, taskCount: 3, selectedDay: '2026-09-13' })).toBe(
+      'day',
+    );
+  });
+
+  it('日を選んでいなければ、0 件なら空の案内', () => {
+    expect(taskPanelMode({ isLoading: false, taskCount: 0, selectedDay: null })).toBe('empty');
+  });
+
+  it('日を選んでいなければ、タスクがあれば通常の仕分け', () => {
+    expect(taskPanelMode({ isLoading: false, taskCount: 2, selectedDay: null })).toBe('groups');
+  });
+
+  /* まだ取れていない件数で「この日のタスク 0」と言わない */
+  it('読み込み中は日を選んでいても読み込み中', () => {
+    expect(taskPanelMode({ isLoading: true, taskCount: 0, selectedDay: '2026-09-13' })).toBe(
+      'loading',
+    );
+    expect(taskPanelMode({ isLoading: true, taskCount: 5, selectedDay: null })).toBe('loading');
   });
 });
