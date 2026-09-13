@@ -28,6 +28,21 @@ export const MAX_GENERATED_QUESTIONS = 10;
 /** ノートからの生成で既定とする問題数 */
 export const DEFAULT_GENERATED_QUESTIONS = 5;
 
+/**
+ * 1 件の学習記録に書ける分数の上限（24 時間）。**画面の入力欄とサーバーで同じ値を使う。**
+ * サーバーに上限が無く、API を直接叩くと極端な値で統計が崩れた（全機能の調査で見つけた）。
+ */
+export const MAX_STUDY_LOG_MINUTES = 1440;
+
+/** ノートの題名の長さの上限 */
+export const MAX_NOTE_TITLE_LENGTH = 200;
+
+/**
+ * ノート本文の長さの上限。日本語でも UTF-8 で約 60 万バイトに収まり、D1 の行サイズの上限まで余裕を残す。
+ * 上限が無いと、極端に長い本文が保存時に 500 になりうる。
+ */
+export const MAX_NOTE_CONTENT_LENGTH = 200_000;
+
 export interface CategoryUsage {
   studyLogs: number;
   /** 生きているノート。ゴミ箱の分は含めない */

@@ -4,6 +4,7 @@ import { categories, tasks } from '../../db/schema';
 import { getDb, type AppEnv, type Db } from '../lib/db';
 import { toTaskDto } from '../lib/dto';
 import { newId } from '../lib/ids';
+import { ownsNotebook } from '../lib/ownership';
 import { getSettings, saveSettings } from '../lib/user-settings';
 import {
   GOOGLE_TASKS_SCOPE,
@@ -178,6 +179,11 @@ export const tasksRoute = new Hono<AppEnv>()
     if (categoryId && !(await ownsCategory(db, userId, categoryId))) {
       return c.json({ error: '指定されたカテゴリが見つかりません' }, 404);
     }
+    // 他人のノートの id を結び付けさせない（カテゴリと同じ扱い）
+    const notebookId = typeof body?.notebookId === 'string' ? body.notebookId : null;
+    if (notebookId && !(await ownsNotebook(db, userId, notebookId))) {
+      return c.json({ error: '指定されたノートが見つかりません' }, 404);
+    }
 
     const id = newId('tsk');
     await db.insert(tasks).values({
@@ -187,7 +193,7 @@ export const tasksRoute = new Hono<AppEnv>()
       memo: typeof body?.memo === 'string' ? body.memo : null,
       dueDate: dueDate ?? null,
       categoryId,
-      notebookId: typeof body?.notebookId === 'string' ? body.notebookId : null,
+      notebookId,
       syncState: 'pending',
     });
 
@@ -219,6 +225,10 @@ export const tasksRoute = new Hono<AppEnv>()
 
     if (typeof body.categoryId === 'string' && !(await ownsCategory(db, userId, body.categoryId))) {
       return c.json({ error: '指定されたカテゴリが見つかりません' }, 404);
+    }
+    // null（結び付けを外す）は通す。文字列なら自分のノートか確かめる
+    if (typeof body.notebookId === 'string' && !(await ownsNotebook(db, userId, body.notebookId))) {
+      return c.json({ error: '指定されたノートが見つかりません' }, 404);
     }
 
     const now = new Date();

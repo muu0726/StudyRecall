@@ -4,6 +4,7 @@ import { categories, glossaryTerms, quizQuestions } from '../../db/schema';
 import { getDb, type AppEnv, type Db } from '../lib/db';
 import { toGlossaryTermDto } from '../lib/dto';
 import { newId } from '../lib/ids';
+import { ownsNotebook } from '../lib/ownership';
 import { glossaryCardsJoin, glossarySelectWithStats } from '../lib/queries';
 import {
   MAX_PROMPT_TAGS,
@@ -212,6 +213,11 @@ export const glossaryRoute = new Hono<AppEnv>()
       .where(and(eq(categories.id, categoryId), eq(categories.userId, userId)))
       .limit(1);
     if (!category) return c.json({ error: '指定されたカテゴリが見つかりません' }, 404);
+
+    // ノートから登録したときの出所。**他人のノートの id を結び付けさせない**
+    if (notebookId && !(await ownsNotebook(db, userId, notebookId))) {
+      return c.json({ error: '指定されたノートが見つかりません' }, 404);
+    }
 
     const termKey = normalizeForSearch(term);
 

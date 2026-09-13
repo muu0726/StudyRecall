@@ -35,6 +35,11 @@
     "remark-gfm": "^4.0.1",
     "tailwind-merge": "^3.6.0"
   },
+  "overrides": {
+    "@esbuild-kit/core-utils": {
+      "esbuild": "^0.25.0"
+    }
+  },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.54.4",
     "@tailwindcss/vite": "^4.3.3",

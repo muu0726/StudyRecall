@@ -7,6 +7,7 @@ import { newId } from '../lib/ids';
 import { insertQuizQuestions } from '../lib/quiz-insert';
 import { startOfTodayJst, startOfWeekJst } from '../lib/time';
 import { CONTENT_KEPT, generateQuizFromStudyLog } from '../lib/gemini';
+import { MAX_STUDY_LOG_MINUTES } from '../../shared/types';
 import { buildStudyEvent } from '../../shared/calendar-event';
 import { insertEvent } from '../lib/google-calendar';
 import { describeGoogleError } from '../lib/google-error';
@@ -135,8 +136,16 @@ export const studyLogsRoute = new Hono<AppEnv>()
     const notes = typeof body?.notes === 'string' ? body.notes.trim() : '';
 
     if (!categoryId) return c.json({ error: 'categoryId は必須です' }, 400);
-    if (!Number.isInteger(durationMinutes) || durationMinutes < 1) {
-      return c.json({ error: 'durationMinutes は 1 以上の整数で指定してください' }, 400);
+    // 上限は画面の入力欄と同じ値。無いと極端な値で統計が崩れる
+    if (
+      !Number.isInteger(durationMinutes) ||
+      durationMinutes < 1 ||
+      durationMinutes > MAX_STUDY_LOG_MINUTES
+    ) {
+      return c.json(
+        { error: `durationMinutes は 1〜${MAX_STUDY_LOG_MINUTES} の整数で指定してください` },
+        400,
+      );
     }
     if (!notes) return c.json({ error: 'notes は必須です' }, 400);
 

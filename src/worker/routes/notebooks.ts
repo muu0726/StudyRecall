@@ -5,12 +5,16 @@ import { getDb, type AppEnv, type Db } from '../lib/db';
 import { toNotebookDto, toQuizQuestionDto } from '../lib/dto';
 import { newId } from '../lib/ids';
 import { insertQuizQuestions } from '../lib/quiz-insert';
+import { chunkIds } from '../lib/d1-in';
 import { CONTENT_KEPT, clampQuestionCount, generateQuizFromNotebook } from '../lib/gemini';
 import { canMove, collectSubtreeIds } from '../../shared/note-tree';
+import { orderDeepestFirst } from '../../shared/note-purge-order';
 import { buildPromptSource } from '../../shared/note-sanitize';
 import { getMonthlyQuota, quotaWarning } from '../lib/quota';
 import {
   DEFAULT_GENERATED_QUESTIONS,
+  MAX_NOTE_CONTENT_LENGTH,
+  MAX_NOTE_TITLE_LENGTH,
   type CreateNotebookRequest,
   type DeleteNotebookResponse,
   type GenerateNotebookQuizRequest,
@@ -103,6 +107,18 @@ export const notebooksRoute = new Hono<AppEnv>()
     let categoryId = typeof body?.categoryId === 'string' ? body.categoryId : '';
 
     if (!title) return c.json({ error: 'title は必須です' }, 400);
+    // 上限が無いと、極端に長い本文が D1 の行サイズの上限に当たって 500 になる
+    if (title.length > MAX_NOTE_TITLE_LENGTH) {
+      return c.json({ error: `タイトルは ${MAX_NOTE_TITLE_LENGTH} 文字以内にしてください` }, 400);
+    }
+    if (content.length > MAX_NOTE_CONTENT_LENGTH) {
+      return c.json(
+        {
+          error: `本文は ${MAX_NOTE_CONTENT_LENGTH.toLocaleString('ja-JP')} 文字以内にしてください`,
+        },
+        400,
+      );
+    }
 
     const db = getDb(c.env);
     const userId = c.get('userId');
@@ -176,6 +192,17 @@ export const notebooksRoute = new Hono<AppEnv>()
 
     const title = typeof body.title === 'string' ? body.title.trim() : undefined;
     if (title === '') return c.json({ error: 'title は空にできません' }, 400);
+    if (title !== undefined && title.length > MAX_NOTE_TITLE_LENGTH) {
+      return c.json({ error: `タイトルは ${MAX_NOTE_TITLE_LENGTH} 文字以内にしてください` }, 400);
+    }
+    if (typeof body.content === 'string' && body.content.length > MAX_NOTE_CONTENT_LENGTH) {
+      return c.json(
+        {
+          error: `本文は ${MAX_NOTE_CONTENT_LENGTH.toLocaleString('ja-JP')} 文字以内にしてください`,
+        },
+        400,
+      );
+    }
 
     const categoryId = typeof body.categoryId === 'string' ? body.categoryId : undefined;
     if (categoryId) {
@@ -229,11 +256,12 @@ export const notebooksRoute = new Hono<AppEnv>()
     if (updated.length > 0 && categoryId && existing.parentId === null) {
       const shape = await loadTreeShape(db, userId);
       const subtree = collectSubtreeIds(shape, id).filter((childId) => childId !== id);
-      if (subtree.length > 0) {
+      // 子孫が多いと IN (...) が D1 の変数上限を越えるので、分けて流す
+      for (const chunk of chunkIds(subtree)) {
         await db
           .update(notebooks)
           .set({ categoryId })
-          .where(and(eq(notebooks.userId, userId), inArray(notebooks.id, subtree), alive()));
+          .where(and(eq(notebooks.userId, userId), inArray(notebooks.id, chunk), alive()));
       }
     }
 
@@ -318,11 +346,12 @@ export const notebooksRoute = new Hono<AppEnv>()
     // カテゴリを子孫へ伝播（部分木ごとカテゴリが変わる）
     if (nextCategoryId !== target.categoryId) {
       const subtree = collectSubtreeIds(shape, id).filter((childId) => childId !== id);
-      if (subtree.length > 0) {
+      // 子孫が多いと IN (...) が D1 の変数上限を越えるので、分けて流す
+      for (const chunk of chunkIds(subtree)) {
         await db
           .update(notebooks)
           .set({ categoryId: nextCategoryId })
-          .where(and(eq(notebooks.userId, userId), inArray(notebooks.id, subtree), alive()));
+          .where(and(eq(notebooks.userId, userId), inArray(notebooks.id, chunk), alive()));
       }
     }
 
@@ -371,13 +400,19 @@ export const notebooksRoute = new Hono<AppEnv>()
     // 自己参照 FK の cascade は当てにせず、子孫 ID を自分で集める。件数も返せる。
     const ids = collectSubtreeIds(shape, id);
     // 部分木を同じ時刻で印付けする。この時刻が「まとめて消した単位」になる。
-    const deleted = await db
-      .update(notebooks)
-      .set({ deletedAt: new Date() })
-      .where(and(eq(notebooks.userId, userId), inArray(notebooks.id, ids), alive()))
-      .returning({ id: notebooks.id });
+    // **分けて流しても時刻は 1 つにそろえる。** ゴミ箱はこの時刻で「まとめて消した単位」を束ねる
+    const deletedAt = new Date();
+    let deletedCount = 0;
+    for (const chunk of chunkIds(ids)) {
+      const rows = await db
+        .update(notebooks)
+        .set({ deletedAt })
+        .where(and(eq(notebooks.userId, userId), inArray(notebooks.id, chunk), alive()))
+        .returning({ id: notebooks.id });
+      deletedCount += rows.length;
+    }
 
-    const response: DeleteNotebookResponse = { ok: true, deleted: deleted.length };
+    const response: DeleteNotebookResponse = { ok: true, deleted: deletedCount };
     return c.json(response);
   })
 
@@ -430,10 +465,12 @@ export const notebooksRoute = new Hono<AppEnv>()
     if (!target) return c.json({ error: 'ゴミ箱にそのノートがありません' }, 404);
 
     const ids = collectSubtreeIds(trashed, id);
-    await db
-      .update(notebooks)
-      .set({ deletedAt: null })
-      .where(and(eq(notebooks.userId, userId), inArray(notebooks.id, ids)));
+    for (const chunk of chunkIds(ids)) {
+      await db
+        .update(notebooks)
+        .set({ deletedAt: null })
+        .where(and(eq(notebooks.userId, userId), inArray(notebooks.id, chunk)));
+    }
 
     /*
      * 迷子を作らない。
@@ -468,13 +505,21 @@ export const notebooksRoute = new Hono<AppEnv>()
     }
 
     // ここで初めて FK の onDelete: 'set null' が効き、問題の notebookId が外れる
-    const ids = collectSubtreeIds(trashed, id);
-    const purged = await db
-      .delete(notebooks)
-      .where(and(eq(notebooks.userId, userId), inArray(notebooks.id, ids)))
-      .returning({ id: notebooks.id });
+    /*
+     * **深いノートから先に消す。** 塊に分けて消すので、親から消すと残りの子が
+     * 存在しない親を指して外部キーで落ちる（111 件のフォルダで踏んだ）。
+     */
+    const ids = orderDeepestFirst(trashed, collectSubtreeIds(trashed, id));
+    let purgedCount = 0;
+    for (const chunk of chunkIds(ids)) {
+      const rows = await db
+        .delete(notebooks)
+        .where(and(eq(notebooks.userId, userId), inArray(notebooks.id, chunk)))
+        .returning({ id: notebooks.id });
+      purgedCount += rows.length;
+    }
 
-    return c.json({ ok: true, purged: purged.length });
+    return c.json({ ok: true, purged: purgedCount });
   })
 
   /** ノート本文から4択を生成して notebookId 付きで保存する */

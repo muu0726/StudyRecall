@@ -787,6 +787,14 @@ DOM やネットワークを触るものは対象外（`environment: 'node'`）�
 
 > テストに実効性があるかは、`canMove` の深さ判定にオフバイワンを入れて 2 件落ちることで確認した。
 
+### drizzle-kit の中の esbuild を差し替えている
+
+drizzle-kit 0.31 は `@esbuild-kit/core-utils` 経由で esbuild 0.18 を連れてきて、
+`npm audit` に中程度の脆弱性（開発サーバーに任意のサイトから要求を送れる）が 4 件出ていた。
+`npm audit fix --force` は drizzle-kit を 0.18 へ大きく戻すので使わず、`package.json` の `overrides` で
+その esbuild だけを 0.25 系にしている。差し替え後も `npm run db:generate`（移行の生成）が動くことを確かめてある。
+drizzle-kit を上げたら、この指定がまだ要るか見直す。
+
 ### vitest のバージョンは 4 系に固定している
 
 `better-auth` が `peerOptional vitest@"^2 || ^3 || ^4"` を宣言しているため、
@@ -846,6 +854,14 @@ SW のプリキャッシュは 20 件 731 KiB（うち Inter latin が 48 KB）�
 - **バックアップの版を上げるときは `READABLE_VERSIONS` に古い版を残す**。
   `parseSnapshot` が完全一致で弾く作りだったので、素直に上げると
   **既存ユーザーのドライブにあるバックアップが全部読めなくなる**。
+- **他人の id を自分の行に結び付けさせない**。タスクと用語の `notebookId` は所有者を確かめてから保存する
+  （`src/worker/lib/ownership.ts`）。確かめていなかったので他人のノートの id を受け取れた。
+  題名などは漏れないが、自分のバックアップに他人の id が混ざると復元で外部キー違反になる。
+- **入力の上限はサーバーでも見る**。学習記録は 1440 分、ノートは題名 200 文字・本文 20 万文字
+  （`MAX_STUDY_LOG_MINUTES` / `MAX_NOTE_TITLE_LENGTH` / `MAX_NOTE_CONTENT_LENGTH`）。画面の入力欄だけだと、API を直接叩いた値で統計が崩れたり、D1 の行サイズの上限で 500 になったりする。
+- **ノートの子孫の id を `IN (...)` に渡すときは分けて流す**（`src/worker/lib/d1-in.ts` の `chunkIds`）。
+  子孫が 100 件前後あるフォルダの移動・ゴミ箱・復元・完全削除が 500 になっていた。
+  完全削除は**深いノートから先に消す**（`src/shared/note-purge-order.ts`）。親から塊で消すと、残りの子が消えた親を指して外部キーで落ちる。
 - **ポップオーバーのパネルは `document.body` へ出して `position: fixed` で置く**（`src/client/ui/Popover.tsx`）。
   親に `overflow-x: auto` があると CSS の仕様で縦も切り取られ、絶対配置のパネルが行の中に閉じ込められる。
   横スクロールの絞り込み行（フラッシュカード・用語辞書）で**カテゴリとジャンルのドロップダウンが開かなくなっていた**。
@@ -869,6 +885,10 @@ SQLite は列の NOT NULL 変更ができないため、drizzle-kit は「テー
 - **`assets.not_found_handling: "single-page-application"` は Worker より先にアセットを返す**。
   トップレベル遷移（OAuth コールバックなど）が index.html に吸われて Worker に届かなくなるため、
   `"run_worker_first": ["/api/*"]` が必須。fetch/XHR は影響を受けないので、**OAuth だけが壊れて気付きにくい**。
+- **`notebooks.parent_id` の外部キーは、スキーマでは `onDelete: 'cascade'` だが実際の DB は `NO ACTION`**（ローカル・本番とも）。
+  `0007_notebook_tree.sql` が `ALTER TABLE … ADD … REFERENCES notebooks(id)` で列を足したため、削除時の動作が入っていない。
+  直すにはテーブルの作り直しが要り、D1 では上の cascade の事故を踏みうるので**直していない**。
+  コードはカスケードに頼らず、子孫の id を自分で集めて深い順に消す。
 - **`PRAGMA foreign_keys=OFF/ON` は D1 が受け付けない**。参照されていないテーブルの再作成なら、そもそも不要なので削除する。
 - **`ADD COLUMN ... NOT NULL` は DEFAULT が必須**。既定値を与えてから `UPDATE` で埋める。
 - **D1 は 1 クエリのバインド変数を 100 個までに制限している。**

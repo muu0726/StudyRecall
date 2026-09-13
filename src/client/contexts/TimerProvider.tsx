@@ -16,6 +16,7 @@ import type {
 import { ApiError, api } from '../lib/api';
 import { getPomodoroState, toRecordedMinutes } from '../lib/pomodoro';
 import type { PomodoroConfig } from '../../shared/pomodoro-config';
+import { MAX_STUDY_LOG_MINUTES } from '../../shared/types';
 import { playAlarm, startFocusSound, type FocusSound, type SoundKind } from '../lib/audio';
 import { celebratePomodoro } from '../lib/celebrate';
 import { formatClock } from '../lib/format';
@@ -266,7 +267,11 @@ export function TimerProvider({ categories, onRecorded, onNavigateToTimer, child
       <RecordModal
         open={isModalOpen}
         categories={categories}
-        defaultMinutes={toRecordedMinutes(timer.elapsedMs, isPomodoro, timer.pomodoro)}
+        // 24 時間を超えて回したタイマーでも、初期値が上限を超えて「押せない」状態で開かないようにする
+        defaultMinutes={Math.min(
+          MAX_STUDY_LOG_MINUTES,
+          toRecordedMinutes(timer.elapsedMs, isPomodoro, timer.pomodoro),
+        )}
         isSubmitting={isSubmitting}
         error={submitError}
         onClose={() => setIsModalOpen(false)}

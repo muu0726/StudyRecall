@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Sparkles } from 'lucide-react';
 import type { CategoryDTO, CreateStudyLogRequest } from '../../shared/types';
+import { MAX_STUDY_LOG_MINUTES } from '../../shared/types';
 import { Banner, Button, Field, Input, Modal, Select, Textarea } from '../ui';
 
 interface Props {
@@ -33,7 +34,13 @@ export default function RecordModal({
     setCategoryId((current) => current || (categories[0]?.id ?? ''));
   }, [open, defaultMinutes, categories]);
 
-  const canSubmit = !isSubmitting && categoryId !== '' && minutes >= 1 && notes.trim() !== '';
+  const canSubmit =
+    !isSubmitting &&
+    categoryId !== '' &&
+    minutes >= 1 &&
+    // サーバーも同じ上限で弾く。押してから 400 を見せるより、押せないほうが分かりやすい
+    minutes <= MAX_STUDY_LOG_MINUTES &&
+    notes.trim() !== '';
 
   return (
     <Modal open={open} title="学習を記録する" onClose={onClose} closeDisabled={isSubmitting}>
@@ -54,7 +61,7 @@ export default function RecordModal({
             id="minutes"
             type="number"
             min={1}
-            max={1440}
+            max={MAX_STUDY_LOG_MINUTES}
             value={minutes}
             onChange={(event) => setMinutes(Number(event.target.value))}
           />
