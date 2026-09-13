@@ -81,6 +81,10 @@ function rows(overrides: Partial<SnapshotRows> = {}): SnapshotRows {
         accumulatedMs: 1500,
         isRunning: false,
         mode: 'pomodoro',
+        pomodoroWorkMinutes: 50,
+        pomodoroBreakMinutes: 10,
+        pomodoroLongBreakMinutes: 30,
+        pomodoroLongBreakEvery: 3,
         completedAt: at('2026-01-04T00:25:00.000Z'),
         studyLogId: 'log_1',
         createdAt: at('2026-01-04T00:00:00.000Z'),
@@ -130,7 +134,11 @@ function rows(overrides: Partial<SnapshotRows> = {}): SnapshotRows {
         updatedAt: at('2026-01-06T00:00:00.000Z'),
       },
     ],
-    settings: { calendarSyncEnabled: true, calendarId: 'primary' },
+    settings: {
+      calendarSyncEnabled: true,
+      calendarId: 'primary',
+      pomodoro: { workMinutes: 40, breakMinutes: 8, longBreakMinutes: 20, longBreakEvery: 4 },
+    },
     ...overrides,
   };
 }
@@ -367,13 +375,53 @@ describe('parseSnapshot が断るもの', () => {
  * 復元できないバックアップは、バックアップではない。
  */
 describe('古い版のバックアップ', () => {
-  /** いまのファイルから、v2 に無かった項目を落として v2 相当にする */
-  const asV2 = () => {
+  /** いまのファイルから、v3 に無かった項目を落として v3 相当にする */
+  const asV3 = () => {
     const file = JSON.parse(JSON.stringify(buildSnapshot(rows(), NOW)));
+    file.version = 3;
+    for (const session of file.data.timerSessions) delete session.pomodoro;
+    if (file.data.settings) delete file.data.settings.pomodoro;
+    return file;
+  };
+
+  /** さらに v2 に無かった項目まで落とす */
+  const asV2 = () => {
+    const file = asV3();
     file.version = 2;
     for (const category of file.data.categories) delete category.examName;
     return file;
   };
+
+  it('いまの版はポモドーロの周期を書き出す', () => {
+    const snapshot = buildSnapshot(rows(), NOW);
+    expect(snapshot.version).toBe(4);
+    expect(snapshot.data.timerSessions[0]?.pomodoro).toEqual({
+      workMinutes: 50,
+      breakMinutes: 10,
+      longBreakMinutes: 30,
+      longBreakEvery: 3,
+    });
+    expect(snapshot.data.settings?.pomodoro.longBreakEvery).toBe(4);
+  });
+
+  it('v3 のバックアップが今も読める', () => {
+    expect(parseSnapshot(asV3()).ok).toBe(true);
+  });
+
+  /* 周期はあとから入れた項目。無いファイルを弾かず、以前の固定値（25/5・長い休憩なし）で埋める */
+  it('v3 に無かったポモドーロの周期は既定値で埋まる', () => {
+    const result = parseSnapshot(asV3());
+    if (!result.ok) throw new Error(result.error);
+    const expected = { workMinutes: 25, breakMinutes: 5, longBreakMinutes: 15, longBreakEvery: 0 };
+    expect(result.value.data.timerSessions[0]?.pomodoro).toEqual(expected);
+    expect(result.value.data.settings?.pomodoro).toEqual(expected);
+  });
+
+  it('周期が書いてあるのに形が違えば断る', () => {
+    const file = JSON.parse(JSON.stringify(buildSnapshot(rows(), NOW)));
+    file.data.timerSessions[0].pomodoro = 'ながい';
+    expect(parseSnapshot(file).ok).toBe(false);
+  });
 
   /** さらに v1 に無かった項目まで落とす */
   const asV1 = () => {

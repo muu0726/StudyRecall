@@ -13,7 +13,7 @@ import { normalizeForSearch } from '../../shared/glossary-search';
 import { countRows, type BackupData, type SnapshotRows } from '../../shared/backup';
 import type { Db } from './db';
 import { chunkRows, maxRowsPerInsert } from './quiz-insert';
-import { getSettings, saveSettings } from './user-settings';
+import { getSettings, pomodoroColumns, pomodoroOf, saveSettings } from './user-settings';
 
 /**
  * バックアップに載せる行を D1 から集める。
@@ -63,6 +63,7 @@ export async function collectSnapshotRows(db: Db, userId: string): Promise<Snaps
     settings: {
       calendarSyncEnabled: settings.calendarSyncEnabled,
       calendarId: settings.calendarId,
+      pomodoro: pomodoroOf(settings),
     },
   };
 }
@@ -199,6 +200,7 @@ export async function applySnapshot(
       accumulatedMs: row.accumulatedMs,
       isRunning: row.isRunning,
       mode: row.mode,
+      ...pomodoroColumns(row.pomodoro),
       completedAt: dateOrNull(row.completedAt),
       studyLogId: row.studyLogId,
       createdAt: date(row.createdAt),
@@ -263,6 +265,7 @@ export async function applySnapshot(
     await saveSettings(db, userId, {
       calendarSyncEnabled: data.settings.calendarSyncEnabled,
       calendarId: data.settings.calendarId,
+      ...pomodoroColumns(data.settings.pomodoro),
     });
   }
 

@@ -243,6 +243,16 @@ export const timerSessions = sqliteTable(
     mode: text('mode', { enum: ['free', 'pomodoro'] })
       .notNull()
       .default('free'),
+    /*
+     * 開始した時点のポモドーロの周期（分）。**user_settings から写す。**
+     * 走っている最中に設定を変えても進行中のフェーズが飛ばないように、セッション側に持つ。
+     * 既定値は以前の固定値（25 分集中 / 5 分休憩 / 長い休憩なし）なので、既存の行は今の動きのまま。
+     */
+    pomodoroWorkMinutes: integer('pomodoro_work_minutes').notNull().default(25),
+    pomodoroBreakMinutes: integer('pomodoro_break_minutes').notNull().default(5),
+    pomodoroLongBreakMinutes: integer('pomodoro_long_break_minutes').notNull().default(15),
+    /** 何回の集中ごとに長い休憩を入れるか。0 = なし */
+    pomodoroLongBreakEvery: integer('pomodoro_long_break_every').notNull().default(0),
     /** null なら稼働中。確定済みなら確定時刻が入る */
     completedAt: integer('completed_at', { mode: 'timestamp_ms' }),
     /** 確定時に作られた学習記録 */
@@ -486,6 +496,15 @@ export const userSettings = sqliteTable('user_settings', {
   glossaryJsonFileId: text('glossary_json_file_id'),
   glossaryMdFileId: text('glossary_md_file_id'),
   glossarySyncedAt: integer('glossary_synced_at', { mode: 'timestamp_ms' }),
+  /*
+   * 次に開始するポモドーロの周期（分）。**全端末で共有する**
+   * （フェーズは各端末が経過時間から計算するので、端末ごとに違うと表示がずれる）。
+   * 既定値は以前の固定値。長い休憩は 0 = なし。
+   */
+  pomodoroWorkMinutes: integer('pomodoro_work_minutes').notNull().default(25),
+  pomodoroBreakMinutes: integer('pomodoro_break_minutes').notNull().default(5),
+  pomodoroLongBreakMinutes: integer('pomodoro_long_break_minutes').notNull().default(15),
+  pomodoroLongBreakEvery: integer('pomodoro_long_break_every').notNull().default(0),
   createdAt: integer('created_at', { mode: 'timestamp_ms' })
     .notNull()
     .$defaultFn(() => new Date()),

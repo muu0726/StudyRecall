@@ -30,10 +30,17 @@ export default function FloatingMiniTimer({ visible, variant = 'inline' }: Props
   // セッションが無い＝計測していないので何も出さない
   if (!visible || timer.sessionId === null) return null;
 
-  const pomodoro = timer.mode === 'pomodoro' ? getPomodoroState(timer.elapsedMs) : null;
+  const pomodoro =
+    timer.mode === 'pomodoro' ? getPomodoroState(timer.elapsedMs, timer.pomodoro) : null;
   // ポモドーロなら「集中/休憩」まで出す。カテゴリは計測中には決まっていない
   // （記録するときに選ぶ設計なので、ここではモードを見せる）。
-  const label = pomodoro ? (pomodoro.phase === 'work' ? '集中' : '休憩') : 'フリー計測';
+  const label = pomodoro
+    ? pomodoro.phase === 'work'
+      ? '集中'
+      : pomodoro.isLongBreak
+        ? '長い休憩'
+        : '休憩'
+    : 'フリー計測';
 
   return (
     <div

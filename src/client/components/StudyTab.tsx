@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Clock,
   Coffee,
@@ -6,11 +6,19 @@ import {
   Pause,
   Play,
   RotateCcw,
+  Settings2,
   Square,
   Volume2,
   VolumeX,
 } from 'lucide-react';
 import type { CategoryDTO } from '../../shared/types';
+import {
+  DEFAULT_POMODORO,
+  describePomodoro,
+  type PomodoroConfig,
+} from '../../shared/pomodoro-config';
+import { api } from '../lib/api';
+import PomodoroSettingsDialog from './PomodoroSettingsDialog';
 import { getPomodoroState } from '../lib/pomodoro';
 import { submitQuizResultResilient } from '../lib/offline-queue';
 import { useTimerContext } from '../contexts/TimerProvider';
@@ -33,7 +41,26 @@ export default function StudyTab({ categories, onRecorded }: Props) {
   const previewRef = useRef<HTMLDivElement>(null);
 
   const isPomodoro = timer.mode === 'pomodoro';
-  const pomodoro = isPomodoro ? getPomodoroState(timer.elapsedMs) : null;
+  // 走っているセッションは、開始時点の周期（サーバーが写した値）で計算する
+  const pomodoro = isPomodoro ? getPomodoroState(timer.elapsedMs, timer.pomodoro) : null;
+
+  /** 次に開始するセッションの周期。全端末で共有の設定をサーバーから取る */
+  const [nextPomodoro, setNextPomodoro] = useState<PomodoroConfig>(DEFAULT_POMODORO);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    api
+      .getTimerSettings()
+      .then(({ pomodoro: config }) => {
+        if (alive) setNextPomodoro(config);
+      })
+      .catch(() => {
+        // 取れなくても開始はできる（サーバーは開始時に自分の設定を使う）。表示だけ既定値のまま
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   // 記録直後に生成された問題まで送る。他画面から記録した場合もここへ来る。
   const generatedCount = timer.generated.length;
@@ -76,7 +103,7 @@ export default function StudyTab({ categories, onRecorded }: Props) {
 
         {/* 未開始のときだけモードを選べる。走行中はサーバーの mode が正。 */}
         {timer.sessionId === null ? (
-          <div className="mt-4 flex justify-center">
+          <div className="mt-4 flex flex-col items-center gap-2">
             <div className="flex rounded-control bg-surface-3 p-0.5">
               {(['free', 'pomodoro'] as const).map((m) => (
                 <button
@@ -95,6 +122,20 @@ export default function StudyTab({ categories, onRecorded }: Props) {
                 </button>
               ))}
             </div>
+            {/* 周期を変えられるのは未開始のときだけ。走っている間はセッションの周期が正 */}
+            {timer.desiredMode === 'pomodoro' && (
+              <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-caption text-fg-muted">
+                <span>{describePomodoro(nextPomodoro)}</span>
+                <button
+                  type="button"
+                  onClick={() => setIsSettingsOpen(true)}
+                  className="flex items-center gap-1 rounded-control px-2 py-1 font-medium text-fg-muted transition hover:bg-row-hover hover:text-fg"
+                >
+                  <Settings2 className="h-3.5 w-3.5" aria-hidden />
+                  周期を設定
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           isPomodoro &&
@@ -113,7 +154,7 @@ export default function StudyTab({ categories, onRecorded }: Props) {
                 ) : (
                   <Coffee className="h-3.5 w-3.5" aria-hidden />
                 )}
-                {pomodoro.phase === 'work' ? '集中' : '休憩'}
+                {pomodoro.phase === 'work' ? '集中' : pomodoro.isLongBreak ? '長い休憩' : '休憩'}
                 <span className="font-mono tabular-nums">
                   残り {formatDuration(pomodoro.remainingMs)}
                 </span>
@@ -128,9 +169,14 @@ export default function StudyTab({ categories, onRecorded }: Props) {
         </p>
 
         {isPomodoro && pomodoro && (
-          <p className="mt-1 text-caption text-fg-muted">
-            記録される集中時間 {formatDuration(pomodoro.focusMs)}（休憩は除外）
-          </p>
+          <>
+            <p className="mt-1 text-caption text-fg-muted">
+              記録される集中時間 {formatDuration(pomodoro.focusMs)}（休憩は除外）
+            </p>
+            <p className="mt-0.5 text-caption text-fg-subtle">
+              {describePomodoro(timer.pomodoro)}（周期の変更は次のセッションから）
+            </p>
+          </>
         )}
 
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
@@ -249,6 +295,19 @@ export default function StudyTab({ categories, onRecorded }: Props) {
           )}
         </section>
       )}
+
+      <PomodoroSettingsDialog
+        open={isSettingsOpen}
+        initial={nextPomodoro}
+        onClose={() => setIsSettingsOpen(false)}
+        onSaved={(config) => {
+          setNextPomodoro(config);
+          setIsSettingsOpen(false);
+          showToast(`ポモドーロの周期を「${describePomodoro(config)}」にしました`, {
+            kind: 'success',
+          });
+        }}
+      />
     </div>
   );
 }

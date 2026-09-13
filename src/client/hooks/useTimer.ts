@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { TimerMode, TimerSessionDTO } from '../../shared/types';
+import { DEFAULT_POMODORO, type PomodoroConfig } from '../../shared/pomodoro-config';
 import { api } from '../lib/api';
 
 /**
@@ -24,6 +25,11 @@ export interface TimerState {
   elapsedMs: number;
   /** 走っているセッションのモード。未開始なら null。 */
   mode: TimerMode | null;
+  /**
+   * 走っているセッションの**開始時点の**ポモドーロの周期。未開始なら既定値。
+   * 次に開始するときの設定は GET /api/timer/settings で別に取る。
+   */
+  pomodoro: PomodoroConfig;
   /** 記録モーダルの初期値。0 分では保存できないため最低 1 分。 */
   elapsedMinutes: number;
   isSyncing: boolean;
@@ -161,6 +167,7 @@ export function useTimer(): TimerState {
     isRunning: session?.isRunning ?? false,
     elapsedMs: displayMs,
     mode: session?.mode ?? null,
+    pomodoro: session?.pomodoro ?? DEFAULT_POMODORO,
     elapsedMinutes: Math.max(1, Math.round(displayMs / 60_000)),
     isSyncing,
     error,

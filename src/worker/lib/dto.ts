@@ -52,6 +52,12 @@ export function toTimerSessionDto(row: TimerSession, now: Date = new Date()): Ti
     isRunning: row.isRunning,
     elapsedMs: Math.max(0, row.accumulatedMs + runningMs),
     mode: row.mode,
+    pomodoro: {
+      workMinutes: row.pomodoroWorkMinutes,
+      breakMinutes: row.pomodoroBreakMinutes,
+      longBreakMinutes: row.pomodoroLongBreakMinutes,
+      longBreakEvery: row.pomodoroLongBreakEvery,
+    },
     createdAt: isoOrEpoch(row.createdAt),
   };
 }

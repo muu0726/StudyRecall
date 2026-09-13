@@ -16,8 +16,10 @@
  * ─────────────────────────────────────────────────────────────
  */
 
+import { DEFAULT_POMODORO, normalizePomodoroConfig, type PomodoroConfig } from './pomodoro-config';
+
 /** いま書き出す版 */
-export const BACKUP_VERSION = 3;
+export const BACKUP_VERSION = 4;
 
 /**
  * まだ読める版。
@@ -27,8 +29,9 @@ export const BACKUP_VERSION = 3;
  * 版を上げても古いものは読み続ける（足りない項目は既定値で埋める）。
  * v1 との差: glossaryTerms が無く、問題に questionType / choices / glossaryTermId が無い。
  * v2 との差: カテゴリに examName が無い。
+ * v3 との差: タイマーの記録と設定にポモドーロの周期（pomodoro）が無い。
  */
-const READABLE_VERSIONS: readonly number[] = [1, 2, 3];
+const READABLE_VERSIONS: readonly number[] = [1, 2, 3, 4];
 export const BACKUP_APP = 'study-recall';
 
 /** 全テーブル合計の行数の上限。これを超えるものは扱わない */
@@ -81,6 +84,8 @@ export interface BackupTimerSession {
   accumulatedMs: number;
   isRunning: boolean;
   mode: 'free' | 'pomodoro';
+  /** 開始した時点のポモドーロの周期。v3 までのファイルには無いので、読むときは既定値で埋める */
+  pomodoro: PomodoroConfig;
   completedAt: string | null;
   studyLogId: string | null;
   createdAt: string;
@@ -144,6 +149,8 @@ export interface BackupTask {
 export interface BackupSettings {
   calendarSyncEnabled: boolean;
   calendarId: string;
+  /** 次に開始するポモドーロの周期。v3 までのファイルには無いので、読むときは既定値で埋める */
+  pomodoro: PomodoroConfig;
 }
 
 export interface BackupData {
@@ -222,6 +229,10 @@ export interface SnapshotRows {
     accumulatedMs: number;
     isRunning: boolean;
     mode: 'free' | 'pomodoro';
+    pomodoroWorkMinutes: number;
+    pomodoroBreakMinutes: number;
+    pomodoroLongBreakMinutes: number;
+    pomodoroLongBreakEvery: number;
     completedAt: Date | null;
     studyLogId: string | null;
     createdAt: Date;
@@ -314,6 +325,12 @@ export function buildSnapshot(rows: SnapshotRows, now: Date): BackupSnapshot {
       accumulatedMs: row.accumulatedMs,
       isRunning: row.isRunning,
       mode: row.mode,
+      pomodoro: {
+        workMinutes: row.pomodoroWorkMinutes,
+        breakMinutes: row.pomodoroBreakMinutes,
+        longBreakMinutes: row.pomodoroLongBreakMinutes,
+        longBreakEvery: row.pomodoroLongBreakEvery,
+      },
       completedAt: isoOrNull(row.completedAt),
       studyLogId: row.studyLogId,
       createdAt: iso(row.createdAt),
@@ -646,6 +663,10 @@ export function parseSnapshot(raw: unknown): ParseResult {
     ) {
       return fail('タイマーの記録の形式が正しくありません。');
     }
+    // v3 までのファイルには無い。**無いことは壊れていることではない**。あるなら形は見る
+    if (row.pomodoro !== undefined && !isObject(row.pomodoro)) {
+      return fail('タイマーの記録の形式が正しくありません。');
+    }
     if (row.studyLogId !== null && !studyLogIds.has(row.studyLogId)) {
       return fail('タイマーの記録が、存在しない学習記録を指しています。');
     }
@@ -655,6 +676,10 @@ export function parseSnapshot(raw: unknown): ParseResult {
       accumulatedMs: row.accumulatedMs,
       isRunning: row.isRunning,
       mode: row.mode,
+      pomodoro:
+        row.pomodoro === undefined
+          ? { ...DEFAULT_POMODORO }
+          : normalizePomodoroConfig(row.pomodoro),
       completedAt: row.completedAt,
       studyLogId: row.studyLogId,
       createdAt: row.createdAt,
@@ -788,10 +813,23 @@ export function parseSnapshot(raw: unknown): ParseResult {
   let settings: BackupSettings | null = null;
   if (source.settings !== null && source.settings !== undefined) {
     const row = source.settings;
-    if (!isObject(row) || !bool(row.calendarSyncEnabled) || !str(row.calendarId)) {
+    if (
+      !isObject(row) ||
+      !bool(row.calendarSyncEnabled) ||
+      !str(row.calendarId) ||
+      // v3 までのファイルには無い。あるなら形は見る
+      (row.pomodoro !== undefined && !isObject(row.pomodoro))
+    ) {
       return fail('設定の形式が正しくありません。');
     }
-    settings = { calendarSyncEnabled: row.calendarSyncEnabled, calendarId: row.calendarId };
+    settings = {
+      calendarSyncEnabled: row.calendarSyncEnabled,
+      calendarId: row.calendarId,
+      pomodoro:
+        row.pomodoro === undefined
+          ? { ...DEFAULT_POMODORO }
+          : normalizePomodoroConfig(row.pomodoro),
+    };
   }
 
   const data: BackupData = {

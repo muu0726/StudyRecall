@@ -1,5 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { userSettings } from '../../db/schema';
+import { DEFAULT_POMODORO, type PomodoroConfig } from '../../shared/pomodoro-config';
 import type { Db } from './db';
 
 /**
@@ -27,6 +28,12 @@ export interface Settings {
   glossaryJsonFileId: string | null;
   glossaryMdFileId: string | null;
   glossarySyncedAt: Date | null;
+  /** 次に開始するポモドーロの周期（分）。**全端末で共有する** → shared/pomodoro-config.ts */
+  pomodoroWorkMinutes: number;
+  pomodoroBreakMinutes: number;
+  pomodoroLongBreakMinutes: number;
+  /** 0 = 長い休憩なし */
+  pomodoroLongBreakEvery: number;
 }
 
 const DEFAULTS: Settings = {
@@ -43,6 +50,8 @@ const DEFAULTS: Settings = {
   glossaryJsonFileId: null,
   glossaryMdFileId: null,
   glossarySyncedAt: null,
+  // 以前の固定値と同じ。設定していない人のタイマーの動きを変えない
+  ...pomodoroColumns(DEFAULT_POMODORO),
 };
 
 export async function getSettings(db: Db, userId: string): Promise<Settings> {
@@ -64,6 +73,33 @@ export async function getSettings(db: Db, userId: string): Promise<Settings> {
     glossaryJsonFileId: row.glossaryJsonFileId,
     glossaryMdFileId: row.glossaryMdFileId,
     glossarySyncedAt: row.glossarySyncedAt,
+    pomodoroWorkMinutes: row.pomodoroWorkMinutes,
+    pomodoroBreakMinutes: row.pomodoroBreakMinutes,
+    pomodoroLongBreakMinutes: row.pomodoroLongBreakMinutes,
+    pomodoroLongBreakEvery: row.pomodoroLongBreakEvery,
+  };
+}
+
+/** 設定の行からポモドーロの周期を取り出す */
+export function pomodoroOf(settings: Settings): PomodoroConfig {
+  return {
+    workMinutes: settings.pomodoroWorkMinutes,
+    breakMinutes: settings.pomodoroBreakMinutes,
+    longBreakMinutes: settings.pomodoroLongBreakMinutes,
+    longBreakEvery: settings.pomodoroLongBreakEvery,
+  };
+}
+
+/**
+ * 周期を列の形に戻す。`user_settings` と `timer_sessions` は**同じ列名**で持っているので、
+ * 設定の保存にも、開始したセッションへの写しにも同じ形で使える。
+ */
+export function pomodoroColumns(config: PomodoroConfig) {
+  return {
+    pomodoroWorkMinutes: config.workMinutes,
+    pomodoroBreakMinutes: config.breakMinutes,
+    pomodoroLongBreakMinutes: config.longBreakMinutes,
+    pomodoroLongBreakEvery: config.longBreakEvery,
   };
 }
 

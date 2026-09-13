@@ -5,6 +5,7 @@
  */
 
 import type { MasteryStatus } from './glossary-mastery';
+import type { PomodoroConfig } from './pomodoro-config';
 import type { BulkTermInput, PreparedBulkSkip } from './glossary-bulk';
 
 export type { MasteryStatus };
@@ -436,11 +437,6 @@ export interface GenerateNotebookQuizResponse {
 
 export type TimerMode = 'free' | 'pomodoro';
 
-/** ポモドーロ 1 サイクル: 25分集中 + 5分休憩 */
-export const POMODORO_WORK_MS = 25 * 60 * 1000;
-export const POMODORO_BREAK_MS = 5 * 60 * 1000;
-export const POMODORO_CYCLE_MS = POMODORO_WORK_MS + POMODORO_BREAK_MS;
-
 export interface TimerSessionDTO {
   id: string;
   /** 現在の計測区間の開始時刻（ISO） */
@@ -449,7 +445,22 @@ export interface TimerSessionDTO {
   /** サーバーが算出した経過ミリ秒。端末の時計ずれを避けるためこれを基準にする。 */
   elapsedMs: number;
   mode: TimerMode;
+  /**
+   * **開始した時点の**ポモドーロの周期。フリー計測でも入っている（使わないだけ）。
+   * 設定をあとで変えても、このセッションの値は変わらない。
+   */
+  pomodoro: PomodoroConfig;
   createdAt: string;
+}
+
+/** GET / PUT /api/timer/settings。次に開始するセッションの周期 */
+export interface TimerSettingsResponse {
+  pomodoro: PomodoroConfig;
+}
+
+export interface UpdateTimerSettingsRequest {
+  /** 送った項目だけ変わる。範囲外は丸められる（→ shared/pomodoro-config.ts） */
+  pomodoro: Partial<PomodoroConfig>;
 }
 
 export interface StartTimerRequest {

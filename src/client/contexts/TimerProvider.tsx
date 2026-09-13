@@ -15,6 +15,7 @@ import type {
 } from '../../shared/types';
 import { ApiError, api } from '../lib/api';
 import { getPomodoroState, toRecordedMinutes } from '../lib/pomodoro';
+import type { PomodoroConfig } from '../../shared/pomodoro-config';
 import { playAlarm, startFocusSound, type FocusSound, type SoundKind } from '../lib/audio';
 import { celebratePomodoro } from '../lib/celebrate';
 import { formatClock } from '../lib/format';
@@ -45,6 +46,8 @@ interface TimerContextValue {
   elapsedMs: number;
   /** 走っているセッションのモード。未開始なら null。 */
   mode: TimerMode | null;
+  /** 走っているセッションの開始時点のポモドーロの周期。未開始なら既定値 */
+  pomodoro: PomodoroConfig;
   isSyncing: boolean;
   error: string | null;
 
@@ -117,23 +120,31 @@ export function TimerProvider({ categories, onRecorded, onNavigateToTimer, child
   }, [endedElsewhere, acknowledgeEnded, showToast]);
 
   const isPomodoro = timer.mode === 'pomodoro';
-  const pomodoro = isPomodoro ? getPomodoroState(timer.elapsedMs) : null;
+  // 周期は**セッションに写した開始時点の値**で計算する（設定をあとで変えてもフェーズが飛ばない）
+  const pomodoro = isPomodoro ? getPomodoroState(timer.elapsedMs, timer.pomodoro) : null;
 
   // フェーズが切り替わった瞬間にアラームを鳴らす。
-  // 各端末が同じ elapsedMs から導出するので、鳴るタイミングも揃う。
+  // 各端末が同じ elapsedMs と周期から導出するので、鳴るタイミングも揃う。
   const previousPhaseRef = useRef<string | null>(null);
   useEffect(() => {
-    const phase = pomodoro && timer.isRunning ? pomodoro.phase : null;
+    // 長い休憩は別のフェーズとして扱う（休憩 → 長い休憩の切り替わりは起きないが、言い分けに使う）
+    const phase =
+      pomodoro && timer.isRunning ? (pomodoro.isLongBreak ? 'longBreak' : pomodoro.phase) : null;
     const previous = previousPhaseRef.current;
     previousPhaseRef.current = phase;
     if (phase && previous && phase !== previous) {
       // 集中入り＝3回、休憩入り＝2回で区別できるようにする
       playAlarm(phase === 'work' ? 3 : 2);
       // 休憩に入る = 集中を 1 セット完走したということ
-      if (phase === 'break') celebratePomodoro();
-      showToast(phase === 'work' ? '集中タイムを開始します' : '休憩に入りましょう', {
-        kind: 'info',
-      });
+      if (phase !== 'work') celebratePomodoro();
+      showToast(
+        phase === 'work'
+          ? '集中タイムを開始します'
+          : phase === 'longBreak'
+            ? '長い休憩に入りましょう'
+            : '休憩に入りましょう',
+        { kind: 'info' },
+      );
     }
   }, [pomodoro, timer.isRunning, showToast]);
 
@@ -227,6 +238,7 @@ export function TimerProvider({ categories, onRecorded, onNavigateToTimer, child
     isRunning: timer.isRunning,
     elapsedMs: timer.elapsedMs,
     mode: timer.mode,
+    pomodoro: timer.pomodoro,
     isSyncing: timer.isSyncing,
     error: timer.error,
     desiredMode,
@@ -254,7 +266,7 @@ export function TimerProvider({ categories, onRecorded, onNavigateToTimer, child
       <RecordModal
         open={isModalOpen}
         categories={categories}
-        defaultMinutes={toRecordedMinutes(timer.elapsedMs, isPomodoro)}
+        defaultMinutes={toRecordedMinutes(timer.elapsedMs, isPomodoro, timer.pomodoro)}
         isSubmitting={isSubmitting}
         error={submitError}
         onClose={() => setIsModalOpen(false)}

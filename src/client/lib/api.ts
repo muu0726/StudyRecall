@@ -46,6 +46,8 @@ import type {
   UpdateIntegrationsRequest,
   TimerMode,
   TimerResponse,
+  TimerSettingsResponse,
+  UpdateTimerSettingsRequest,
   HeatmapResponse,
   UpdateCategoryRequest,
   UpdateNotebookRequest,
@@ -164,6 +166,13 @@ export const api = {
   pauseTimer: () => request<TimerResponse>('/api/timer/pause', { method: 'POST' }),
   resumeTimer: () => request<TimerResponse>('/api/timer/resume', { method: 'POST' }),
   resetTimer: () => request<TimerResponse>('/api/timer/reset', { method: 'POST' }),
+  /** 次に開始するセッションのポモドーロの周期 */
+  getTimerSettings: () => request<TimerSettingsResponse>('/api/timer/settings'),
+  updateTimerSettings: (body: UpdateTimerSettingsRequest) =>
+    request<TimerSettingsResponse>('/api/timer/settings', {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
 
   // --- 学習記録 ---
   getStudyLogs: () => request<StudyLogsResponse>('/api/study-logs'),
