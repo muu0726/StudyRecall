@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { TimerMode, TimerSessionDTO } from '../../shared/types';
 import { DEFAULT_POMODORO, type PomodoroConfig } from '../../shared/pomodoro-config';
 import { api } from '../lib/api';
+import { sameSecond } from '../lib/format';
 
 /**
  * 学習タイマー。真実の情報源はサーバー（timer_sessions）にある。
@@ -106,7 +107,10 @@ export function useTimer(): TimerState {
     const tick = () => {
       const anchor = anchorRef.current;
       if (!anchor?.isRunning) return;
-      setDisplayMs(anchor.elapsedMs + (Date.now() - anchor.receivedAt));
+      const next = anchor.elapsedMs + (Date.now() - anchor.receivedAt);
+      // 表示は秒単位。秒が変わらないうちは同じ値を返し、再描画を起こさない
+      // （0.25 秒ごとに更新すると、タイマーを使う画面が毎秒 4 回描き直される）。
+      setDisplayMs((previous) => (sameSecond(previous, next) ? previous : next));
     };
     tick();
     const timerId = setInterval(tick, 250);

@@ -21,6 +21,11 @@ export function formatClock(ms: number): string {
   return hours > 0 ? `${hours}:${pad(minutes)}:${pad(seconds)}` : `${pad(minutes)}:${pad(seconds)}`;
 }
 
+/** 2 つのミリ秒が、秒単位の表示で同じになるか（formatDuration / formatClock と同じ切り捨て） */
+export function sameSecond(a: number, b: number): boolean {
+  return Math.floor(a / 1000) === Math.floor(b / 1000);
+}
+
 /** 分を「2時間30分」形式に整形する */
 export function formatMinutes(minutes: number): string {
   if (minutes < 60) return `${minutes}分`;

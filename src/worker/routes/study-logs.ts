@@ -19,12 +19,7 @@ import {
 import { getSettings } from '../lib/user-settings';
 import { getMonthlyQuota, quotaWarning } from '../lib/quota';
 import { MONTHLY_GENERATION_LIMIT } from '../../shared/types';
-import type {
-  CategoryTotal,
-  CreateStudyLogRequest,
-  CreateStudyLogResponse,
-  StudyStats,
-} from '../../shared/types';
+import type { CreateStudyLogRequest, CreateStudyLogResponse, StudyStats } from '../../shared/types';
 
 const LOG_LIMIT = 100;
 /** 学習メモから作る問題数の上限 */
@@ -36,8 +31,12 @@ const toUnixSeconds = (date: Date) => Math.floor(date.getTime() / 1000);
 async function buildStats(db: Db, userId: string): Promise<StudyStats> {
   const todaySec = toUnixSeconds(startOfTodayJst());
   const weekSec = toUnixSeconds(startOfWeekJst());
+  // due_at は秒精度の unixepoch で入っている（drizzle の timestamp モード）
+  const nowSec = Math.floor(Date.now() / 1000);
 
-  const [duration] = await db
+  // 集計どうしは互いに依存しないので同時に投げる。
+  // 順に await すると、D1 への往復がそのまま待ち時間として積み上がる。
+  const durationQuery = db
     .select({
       total: sql<number>`coalesce(sum(${studyLogs.durationMinutes}), 0)`,
       today: sql<number>`coalesce(sum(case when ${studyLogs.createdAt} >= ${todaySec} then ${studyLogs.durationMinutes} else 0 end), 0)`,
@@ -47,7 +46,7 @@ async function buildStats(db: Db, userId: string): Promise<StudyStats> {
     .where(eq(studyLogs.userId, userId));
 
   // 記録が 0 件のカテゴリも 0 分として出したいので categories 起点の leftJoin
-  const byCategory: CategoryTotal[] = await db
+  const byCategoryQuery = db
     .select({
       categoryId: categories.id,
       name: categories.name,
@@ -60,11 +59,7 @@ async function buildStats(db: Db, userId: string): Promise<StudyStats> {
     .groupBy(categories.id, categories.name, categories.color)
     .orderBy(desc(sql`coalesce(sum(${studyLogs.durationMinutes}), 0)`));
 
-  const nowMs = Date.now();
-  // due_at は秒精度の unixepoch で入っている（drizzle の timestamp モード）
-  const nowSec = Math.floor(nowMs / 1000);
-
-  const [quiz] = await db
+  const quizQuery = db
     .select({
       total: sql<number>`count(*)`,
       mastered: sql<number>`coalesce(sum(case when ${quizQuestions.isMastered} = 1 then 1 else 0 end), 0)`,
@@ -78,12 +73,17 @@ async function buildStats(db: Db, userId: string): Promise<StudyStats> {
     .from(quizQuestions)
     .where(eq(quizQuestions.userId, userId));
 
+  const [[duration], byCategory, [quiz], monthly] = await Promise.all([
+    durationQuery,
+    byCategoryQuery,
+    quizQuery,
+    // 今月の生成数（上限の目安として出す）
+    getMonthlyQuota(db, userId),
+  ]);
+
   const quizTotal = Number(quiz?.total ?? 0);
   const quizMastered = Number(quiz?.mastered ?? 0);
   const nextDueSec = quiz?.nextDueSec ?? null;
-
-  // 今月の生成数（上限の目安として出す）
-  const monthly = await getMonthlyQuota(db, userId);
 
   return {
     todayMinutes: Number(duration?.today ?? 0),
@@ -107,7 +107,7 @@ export const studyLogsRoute = new Hono<AppEnv>()
     const db = getDb(c.env);
     const userId = c.get('userId');
 
-    const rows = await db
+    const logsQuery = db
       .select({
         id: studyLogs.id,
         userId: studyLogs.userId,
@@ -124,7 +124,7 @@ export const studyLogsRoute = new Hono<AppEnv>()
       .orderBy(desc(studyLogs.createdAt))
       .limit(LOG_LIMIT);
 
-    const stats = await buildStats(db, userId);
+    const [rows, stats] = await Promise.all([logsQuery, buildStats(db, userId)]);
     return c.json({ logs: rows.map(toStudyLogDto), stats });
   })
 

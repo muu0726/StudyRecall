@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import type { BatchItem } from 'drizzle-orm/batch';
 import { categories, notebooks } from '../../db/schema';
 import { getDb, type AppEnv, type Db } from '../lib/db';
 import { toNotebookDto, toQuizQuestionDto } from '../lib/dto';
@@ -337,21 +338,29 @@ export const notebooksRoute = new Hono<AppEnv>()
       nextCategoryId = body.categoryId;
     }
 
+    /*
+     * 書き込みは db.batch で 1 往復にまとめる。
+     * 兄弟の数だけ UPDATE を順に await すると、その数だけ D1 との往復が積み上がる。
+     * batch は D1 側で 1 つのトランザクションとして流れるので、途中で落ちても半端な並びが残らない。
+     */
     // 親の付け替え
-    await db
+    const reparent = db
       .update(notebooks)
       .set({ parentId, categoryId: nextCategoryId, updatedAt: new Date() })
       .where(and(eq(notebooks.id, id), eq(notebooks.userId, userId), alive()));
+    const writes: BatchItem<'sqlite'>[] = [];
 
     // カテゴリを子孫へ伝播（部分木ごとカテゴリが変わる）
     if (nextCategoryId !== target.categoryId) {
       const subtree = collectSubtreeIds(shape, id).filter((childId) => childId !== id);
-      // 子孫が多いと IN (...) が D1 の変数上限を越えるので、分けて流す
+      // 子孫が多いと IN (...) が D1 の変数上限を越えるので、分けて流す（上限は文ごとに数えられる）
       for (const chunk of chunkIds(subtree)) {
-        await db
-          .update(notebooks)
-          .set({ categoryId: nextCategoryId })
-          .where(and(eq(notebooks.userId, userId), inArray(notebooks.id, chunk), alive()));
+        writes.push(
+          db
+            .update(notebooks)
+            .set({ categoryId: nextCategoryId })
+            .where(and(eq(notebooks.userId, userId), inArray(notebooks.id, chunk), alive())),
+        );
       }
     }
 
@@ -363,12 +372,19 @@ export const notebooksRoute = new Hono<AppEnv>()
       .map((n) => n.id);
     siblings.splice(Math.min(index, siblings.length), 0, id);
 
+    const currentOrder = new Map(shape.map((n) => [n.id, n.sortOrder]));
     for (const [position, siblingId] of siblings.entries()) {
-      await db
-        .update(notebooks)
-        .set({ sortOrder: position })
-        .where(and(eq(notebooks.id, siblingId), eq(notebooks.userId, userId), alive()));
+      // 位置が変わらない兄弟は書かない（動かした本人は親が変わりうるので常に書く）
+      if (siblingId !== id && currentOrder.get(siblingId) === position) continue;
+      writes.push(
+        db
+          .update(notebooks)
+          .set({ sortOrder: position })
+          .where(and(eq(notebooks.id, siblingId), eq(notebooks.userId, userId), alive())),
+      );
     }
+
+    await db.batch([reparent, ...writes]);
 
     const [row] = await db
       .select(notebookSelectWithCategory)

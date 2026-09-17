@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { and, asc, eq, isNull } from 'drizzle-orm';
+import type { BatchItem } from 'drizzle-orm/batch';
 import { categories, tasks } from '../../db/schema';
 import { getDb, type AppEnv, type Db } from '../lib/db';
 import { toTaskDto } from '../lib/dto';
@@ -359,11 +360,22 @@ export const tasksRoute = new Hono<AppEnv>()
     let pushed = 0;
     const failures: string[] = [];
 
+    /*
+     * DB への書き込みはためておき、最後に db.batch で 1 往復にまとめる。
+     * 1 件ずつ await すると、差分の件数だけ D1 との往復が積み上がる。
+     * Google への呼び出しは結果（id や更新時刻）が書き込みに要るので、これまでどおり 1 件ずつ。
+     */
+    const writes: {
+      query: BatchItem<'sqlite'>;
+      counts: 'pulled' | 'pushed' | null;
+      kind: string;
+    }[] = [];
+
     for (const action of reconcile(locals, remotes)) {
       try {
         switch (action.kind) {
           case 'create-local': {
-            await db.insert(tasks).values({
+            const query = db.insert(tasks).values({
               id: newId('tsk'),
               userId,
               googleTaskId: action.remote.id,
@@ -376,12 +388,12 @@ export const tasksRoute = new Hono<AppEnv>()
               googleUpdatedAt: new Date(action.remote.updated),
               syncState: 'synced',
             });
-            pulled++;
+            writes.push({ query, counts: 'pulled', kind: action.kind });
             break;
           }
           case 'update-local': {
             const completed = action.remote.status === 'completed';
-            await db
+            const query = db
               .update(tasks)
               .set({
                 title: action.remote.title || '（無題）',
@@ -394,13 +406,16 @@ export const tasksRoute = new Hono<AppEnv>()
                 updatedAt: new Date(action.remote.updated),
               })
               .where(eq(tasks.id, action.id));
-            pulled++;
+            writes.push({ query, counts: 'pulled', kind: action.kind });
             break;
           }
           case 'delete-local':
           case 'purge-local': {
-            await db.delete(tasks).where(eq(tasks.id, action.id));
-            if (action.kind === 'delete-local') pulled++;
+            writes.push({
+              query: db.delete(tasks).where(eq(tasks.id, action.id)),
+              counts: action.kind === 'delete-local' ? 'pulled' : null,
+              kind: action.kind,
+            });
             break;
           }
           case 'create-remote': {
@@ -408,15 +423,18 @@ export const tasksRoute = new Hono<AppEnv>()
             if (!row) break;
             const remote = await insertTask(access.accessToken, payloadOf(row));
             if (remote) {
-              await db
-                .update(tasks)
-                .set({
-                  googleTaskId: remote.id,
-                  googleUpdatedAt: new Date(remote.updated),
-                  syncState: 'synced',
-                })
-                .where(eq(tasks.id, action.id));
-              pushed++;
+              writes.push({
+                query: db
+                  .update(tasks)
+                  .set({
+                    googleTaskId: remote.id,
+                    googleUpdatedAt: new Date(remote.updated),
+                    syncState: 'synced',
+                  })
+                  .where(eq(tasks.id, action.id)),
+                counts: 'pushed',
+                kind: action.kind,
+              });
             }
             break;
           }
@@ -425,18 +443,24 @@ export const tasksRoute = new Hono<AppEnv>()
             if (!row) break;
             const remote = await patchTask(access.accessToken, action.googleTaskId, payloadOf(row));
             if (remote) {
-              await db
-                .update(tasks)
-                .set({ googleUpdatedAt: new Date(remote.updated), syncState: 'synced' })
-                .where(eq(tasks.id, action.id));
-              pushed++;
+              writes.push({
+                query: db
+                  .update(tasks)
+                  .set({ googleUpdatedAt: new Date(remote.updated), syncState: 'synced' })
+                  .where(eq(tasks.id, action.id)),
+                counts: 'pushed',
+                kind: action.kind,
+              });
             }
             break;
           }
           case 'delete-remote': {
             await deleteTask(access.accessToken, action.googleTaskId);
-            await db.delete(tasks).where(eq(tasks.id, action.id));
-            pushed++;
+            writes.push({
+              query: db.delete(tasks).where(eq(tasks.id, action.id)),
+              counts: 'pushed',
+              kind: action.kind,
+            });
             break;
           }
         }
@@ -444,6 +468,33 @@ export const tasksRoute = new Hono<AppEnv>()
         // 1 件の失敗で同期全体を止めない。残りは進め、まとめて伝える。
         console.error(`[tasks] sync action ${action.kind} failed:`, error);
         failures.push(describeGoogleError(error));
+      }
+    }
+
+    const count = (write: (typeof writes)[number]) => {
+      if (write.counts === 'pulled') pulled++;
+      if (write.counts === 'pushed') pushed++;
+    };
+    const [first, ...rest] = writes;
+    if (first) {
+      try {
+        await db.batch([first.query, ...rest.map((write) => write.query)]);
+        writes.forEach(count);
+      } catch (batchError) {
+        /*
+         * batch は 1 つのトランザクションなので、1 文の失敗で全部が戻る。
+         * 「1 件の失敗で同期全体を止めない」を守るため、1 件ずつに戻して流し直す。
+         */
+        console.warn('[tasks] batch write failed; retrying one by one:', batchError);
+        for (const write of writes) {
+          try {
+            await write.query;
+            count(write);
+          } catch (error) {
+            console.error(`[tasks] sync action ${write.kind} failed:`, error);
+            failures.push(describeGoogleError(error));
+          }
+        }
       }
     }
 
