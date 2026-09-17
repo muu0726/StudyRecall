@@ -60,4 +60,15 @@ export default defineConfig({
     }),
     cloudflare(),
   ],
+  environments: {
+    /*
+     * Worker（環境名は wrangler.jsonc の name の - を _ にしたもの）。
+     * 既定では圧縮されず 2.2MB あり、しばらく使われなかったあとの最初の応答で
+     * この分を読み込む。圧縮して小さくし、ログの行番号はソースマップで引けるようにする
+     * （wrangler.jsonc の upload_source_maps）。
+     */
+    study_recall: {
+      build: { minify: true, sourcemap: true },
+    },
+  },
 });

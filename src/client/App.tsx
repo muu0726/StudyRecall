@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Columns2,
   FileDown,
@@ -25,27 +25,72 @@ import { useTasks } from './hooks/useTasks';
 import { usePwaUpdate } from './hooks/usePwaUpdate';
 import Sidebar, { VIEWS, type ViewId } from './components/Sidebar';
 import StudyTab from './components/StudyTab';
-import NotesTab from './components/NotesTab';
-import TasksTab from './components/TasksTab';
 import NoteTabs from './components/NoteTabs';
-import ReviewTab from './components/ReviewTab';
-import GlossaryTab from './components/GlossaryTab';
-import StatsTab from './components/StatsTab';
-import CategoryManagerModal from './components/CategoryManagerModal';
-import IntegrationsModal from './components/IntegrationsModal';
-import RestoreBackupDialog from './components/RestoreBackupDialog';
 import PrintableNote from './components/PrintableNote';
-import DeleteCategoryDialog from './components/DeleteCategoryDialog';
-import CreateCategoryDialog from './components/CreateCategoryDialog';
-import MoveNoteDialog from './components/MoveNoteDialog';
 import ConfirmDialog from './components/ConfirmDialog';
-import TrashDialog from './components/TrashDialog';
 import { useToast } from './components/Toast';
 import { TimerProvider } from './contexts/TimerProvider';
 import FloatingMiniTimer from './components/FloatingMiniTimer';
 import { cn } from './lib/cn';
 import { exportNotebookMarkdown } from './lib/export';
+import { lazyWithPreload } from './lib/lazy-with-preload';
+import { useOpenedOnce } from './hooks/useOpenedOnce';
 import { LAYER } from './ui';
+
+/*
+ * 起動時に見えるのはタイマー画面（既定）か、前回開いていた画面の 1 つだけ。
+ * ほかの画面とダイアログは最初のバンドルから外し、読み込みが落ち着いてから裏で読む（preloadDeferred）。
+ * StudyTab は既定の画面で、タイマーの本体も抱えているので最初から載せておく。
+ */
+const NotesTab = lazyWithPreload(() => import('./components/NotesTab'));
+const TasksTab = lazyWithPreload(() => import('./components/TasksTab'));
+const ReviewTab = lazyWithPreload(() => import('./components/ReviewTab'));
+const GlossaryTab = lazyWithPreload(() => import('./components/GlossaryTab'));
+const StatsTab = lazyWithPreload(() => import('./components/StatsTab'));
+const CategoryManagerModal = lazyWithPreload(() => import('./components/CategoryManagerModal'));
+const IntegrationsModal = lazyWithPreload(() => import('./components/IntegrationsModal'));
+const RestoreBackupDialog = lazyWithPreload(() => import('./components/RestoreBackupDialog'));
+const DeleteCategoryDialog = lazyWithPreload(() => import('./components/DeleteCategoryDialog'));
+const CreateCategoryDialog = lazyWithPreload(() => import('./components/CreateCategoryDialog'));
+const MoveNoteDialog = lazyWithPreload(() => import('./components/MoveNoteDialog'));
+const TrashDialog = lazyWithPreload(() => import('./components/TrashDialog'));
+
+const DEFERRED = [
+  NotesTab,
+  TasksTab,
+  ReviewTab,
+  GlossaryTab,
+  StatsTab,
+  CategoryManagerModal,
+  IntegrationsModal,
+  RestoreBackupDialog,
+  DeleteCategoryDialog,
+  CreateCategoryDialog,
+  MoveNoteDialog,
+  TrashDialog,
+];
+
+/**
+ * 外した分を裏で読んでおく。画面を切り替えた瞬間に「読み込み中」を挟まないため。
+ * 起動の描画と API の取得を邪魔しないよう、ブラウザが暇になってから始める。
+ */
+function preloadDeferred() {
+  const run = () => {
+    for (const component of DEFERRED) {
+      // 失敗しても、その画面を開いたときに lazy がもう一度読みに行く
+      component.preload().catch(() => undefined);
+    }
+  };
+  if ('requestIdleCallback' in window) window.requestIdleCallback(run, { timeout: 3000 });
+  else setTimeout(run, 1500);
+}
+
+const viewFallback = (
+  <div className="flex items-center justify-center gap-2 py-20 text-body text-fg-muted">
+    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+    読み込み中…
+  </div>
+);
 
 const VIEW_KEY = 'studyrecall:view';
 const COLLAPSED_KEY = 'studyrecall:sidebar-collapsed';
@@ -402,6 +447,19 @@ export default function App() {
 
   const handleTitleFocused = useCallback(() => setRenameTargetId(null), []);
 
+  // 遅延読み込みのダイアログ: 一度開くまでは描かない（→ useOpenedOnce）
+  const hasOpenedDeleteCategory = useOpenedOnce(deleteCategoryTarget !== null);
+  const hasOpenedMove = useOpenedOnce(moveTarget !== null);
+  const hasOpenedCreateCategory = useOpenedOnce(isCreateCategoryOpen);
+  const hasOpenedIntegrations = useOpenedOnce(isIntegrationsOpen);
+  const hasOpenedRestore = useOpenedOnce(isRestoreOpen);
+  const hasOpenedCategory = useOpenedOnce(isCategoryOpen);
+  const hasOpenedTrash = useOpenedOnce(isTrashOpen);
+
+  useEffect(() => {
+    preloadDeferred();
+  }, []);
+
   /**
    * フォルダの削除。**中身の扱いはダイアログで選ばせ、ここは投げるだけ。**
    * 消したフォルダのノートが開かれていることがあるので、成功したら全体を取り直す。
@@ -532,12 +590,9 @@ export default function App() {
               )}
 
               {isLoading ? (
-                <div className="flex items-center justify-center gap-2 py-20 text-body text-fg-muted">
-                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                  読み込み中…
-                </div>
+                viewFallback
               ) : (
-                <>
+                <Suspense fallback={viewFallback}>
                   {view === 'timer' && (
                     <StudyTab categories={categories} onRecorded={() => void refresh()} />
                   )}
@@ -624,7 +679,7 @@ export default function App() {
                     />
                   )}
                   {view === 'dashboard' && logsData && <StatsTab data={logsData} />}
-                </>
+                </Suspense>
               )}
             </div>
           </main>
@@ -768,28 +823,40 @@ export default function App() {
           </div>
         )}
 
-        <DeleteCategoryDialog
-          category={deleteCategoryTarget}
-          others={categories.filter((c) => c.id !== deleteCategoryTarget?.id)}
-          isBusy={isDeletingCategory}
-          onClose={() => setDeleteCategoryTarget(null)}
-          onConfirm={(options) => void deleteCategory(options)}
-        />
+        {/*
+         * 遅延読み込みのダイアログは、最初に開くまで描かない（描くと読み込みが始まってしまう）。
+         * 読み込みの間はダイアログが出ないだけなので、fallback は置かない。
+         */}
+        <Suspense fallback={null}>
+          {hasOpenedDeleteCategory && (
+            <DeleteCategoryDialog
+              category={deleteCategoryTarget}
+              others={categories.filter((c) => c.id !== deleteCategoryTarget?.id)}
+              isBusy={isDeletingCategory}
+              onClose={() => setDeleteCategoryTarget(null)}
+              onConfirm={(options) => void deleteCategory(options)}
+            />
+          )}
 
-        <MoveNoteDialog
-          open={moveTarget !== null}
-          target={moveTarget}
-          notebooks={notes.notebooks}
-          categories={categories}
-          isBusy={notes.isMoving}
-          onClose={() => setMoveTarget(null)}
-          onMove={(parentId, categoryId) => {
-            if (!moveTarget) return;
-            void notes.move({ id: moveTarget.id, parentId, index: 0, categoryId }).then((ok) => {
-              if (ok) setMoveTarget(null);
-            });
-          }}
-        />
+          {hasOpenedMove && (
+            <MoveNoteDialog
+              open={moveTarget !== null}
+              target={moveTarget}
+              notebooks={notes.notebooks}
+              categories={categories}
+              isBusy={notes.isMoving}
+              onClose={() => setMoveTarget(null)}
+              onMove={(parentId, categoryId) => {
+                if (!moveTarget) return;
+                void notes
+                  .move({ id: moveTarget.id, parentId, index: 0, categoryId })
+                  .then((ok) => {
+                    if (ok) setMoveTarget(null);
+                  });
+              }}
+            />
+          )}
+        </Suspense>
 
         <ConfirmDialog
           open={deleteTarget !== null}
@@ -810,42 +877,54 @@ export default function App() {
           onCancel={() => setDeleteTarget(null)}
         />
 
-        <CreateCategoryDialog
-          open={isCreateCategoryOpen}
-          onClose={() => setIsCreateCategoryOpen(false)}
-          onCreated={() => void refresh()}
-        />
-
         {printTarget && (
           <PrintableNote notebook={printTarget} onDone={() => setPrintTarget(null)} />
         )}
 
-        <IntegrationsModal
-          open={isIntegrationsOpen}
-          onClose={() => setIsIntegrationsOpen(false)}
-          onOpenRestore={() => setIsRestoreOpen(true)}
-        />
+        <Suspense fallback={null}>
+          {hasOpenedCreateCategory && (
+            <CreateCategoryDialog
+              open={isCreateCategoryOpen}
+              onClose={() => setIsCreateCategoryOpen(false)}
+              onCreated={() => void refresh()}
+            />
+          )}
 
-        <RestoreBackupDialog
-          open={isRestoreOpen}
-          onClose={() => setIsRestoreOpen(false)}
-          // 中身が丸ごと入れ替わるので、開いているものを含めて取り直す
-          onRestored={() => void refresh()}
-        />
+          {hasOpenedIntegrations && (
+            <IntegrationsModal
+              open={isIntegrationsOpen}
+              onClose={() => setIsIntegrationsOpen(false)}
+              onOpenRestore={() => setIsRestoreOpen(true)}
+            />
+          )}
 
-        <CategoryManagerModal
-          open={isCategoryOpen}
-          categories={categories}
-          onClose={() => setIsCategoryOpen(false)}
-          onChanged={() => void refresh()}
-        />
+          {hasOpenedRestore && (
+            <RestoreBackupDialog
+              open={isRestoreOpen}
+              onClose={() => setIsRestoreOpen(false)}
+              // 中身が丸ごと入れ替わるので、開いているものを含めて取り直す
+              onRestored={() => void refresh()}
+            />
+          )}
 
-        <TrashDialog
-          open={isTrashOpen}
-          onClose={() => setIsTrashOpen(false)}
-          onRestore={(id) => notes.restore(id)}
-          onPurge={(id) => notes.purge(id)}
-        />
+          {hasOpenedCategory && (
+            <CategoryManagerModal
+              open={isCategoryOpen}
+              categories={categories}
+              onClose={() => setIsCategoryOpen(false)}
+              onChanged={() => void refresh()}
+            />
+          )}
+
+          {hasOpenedTrash && (
+            <TrashDialog
+              open={isTrashOpen}
+              onClose={() => setIsTrashOpen(false)}
+              onRestore={(id) => notes.restore(id)}
+              onPurge={(id) => notes.purge(id)}
+            />
+          )}
+        </Suspense>
 
         {/* タイマー画面には同じ情報が大きく出ているので、そこでは出さない */}
       </div>
