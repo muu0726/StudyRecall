@@ -33,13 +33,24 @@ function listRows(db: Db, userId: string) {
     .orderBy(asc(portalLinks.sortOrder), asc(portalLinks.createdAt));
 }
 
-/** 末尾に置くための sortOrder */
-async function nextSortOrder(db: Db, userId: string): Promise<number> {
+/**
+ * 件数と、末尾に置くための sortOrder を**1 往復で**まとめて引く。
+ * 上限の判定と並び順の決定で別々に投げると、追加のたびに D1 へ 2 回行くことになる。
+ */
+async function countAndNextOrder(db: Db, userId: string): Promise<{ total: number; next: number }> {
   const [row] = await db
-    .select({ max: sql<number | null>`max(${portalLinks.sortOrder})` })
+    .select({
+      total: sql<number>`count(*)`,
+      max: sql<number | null>`max(${portalLinks.sortOrder})`,
+    })
     .from(portalLinks)
     .where(eq(portalLinks.userId, userId));
-  return (Number(row?.max ?? -1) || 0) + 1;
+  return { total: Number(row?.total ?? 0), next: nextOrderFrom(row?.max ?? null) };
+}
+
+/** 末尾の次の位置。行が無ければ 0 から始める */
+function nextOrderFrom(max: number | null): number {
+  return max === null ? 0 : Number(max) + 1;
 }
 
 export const portalLinksRoute = new Hono<AppEnv>()
@@ -59,22 +70,14 @@ export const portalLinksRoute = new Hono<AppEnv>()
     const db = getDb(c.env);
     const userId = c.get('userId');
 
-    const [count] = await db
-      .select({ total: sql<number>`count(*)` })
-      .from(portalLinks)
-      .where(eq(portalLinks.userId, userId));
-    if (Number(count?.total ?? 0) >= MAX_PORTAL_LINKS) {
+    const { total, next } = await countAndNextOrder(db, userId);
+    if (total >= MAX_PORTAL_LINKS) {
       return c.json({ error: `リンクは ${MAX_PORTAL_LINKS} 件までです` }, 400);
     }
 
     const [row] = await db
       .insert(portalLinks)
-      .values({
-        id: newId('lnk'),
-        userId,
-        ...input,
-        sortOrder: await nextSortOrder(db, userId),
-      })
+      .values({ id: newId('lnk'), userId, ...input, sortOrder: next })
       .returning();
 
     const response: PortalLinkResponse = { link: toPortalLinkDto(row) };
@@ -171,8 +174,16 @@ export const portalLinksRoute = new Hono<AppEnv>()
       accepted.push(input);
     }
 
+    /*
+     * 並び順は**引いてきた行から決める**（`max(sort_order)` をもう一度引かない）。
+     * 入れた行は `returning()` で受け取り、一覧の引き直しもしない。
+     * 取り込み 1 回あたりの D1 との往復が「読み 1 + 書き n + 読み 1」から「読み 1 + 書き n」に減る。
+     */
+    const inserted: (typeof existing)[number][] = [];
     if (accepted.length > 0) {
-      const base = await nextSortOrder(db, userId);
+      const base = nextOrderFrom(
+        existing.length === 0 ? null : Math.max(...existing.map((row) => row.sortOrder)),
+      );
       const rows = accepted.map((input, index) => ({
         id: newId('lnk'),
         userId,
@@ -182,16 +193,16 @@ export const portalLinksRoute = new Hono<AppEnv>()
       // D1 はバインド変数が 1 クエリ 100 個まで。列数から行数を決めて分けて流す
       const size = maxRowsPerInsert(Object.keys(getTableColumns(portalLinks)).length);
       for (const chunk of chunkRows(rows, size)) {
-        await db.insert(portalLinks).values(chunk);
+        inserted.push(...(await db.insert(portalLinks).values(chunk).returning()));
       }
     }
 
-    const links = await listRows(db, userId);
     const response: ImportPortalLinksResponse = {
-      added: accepted.length,
+      added: inserted.length,
       skipped,
       dropped,
-      links: links.map(toPortalLinkDto),
+      // 既存は並び順で引いてあり、追加分はその後ろに続く
+      links: [...existing, ...inserted].map(toPortalLinkDto),
     };
     return c.json(response);
   });

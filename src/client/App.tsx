@@ -35,7 +35,7 @@ import { cn } from './lib/cn';
 import { exportNotebookMarkdown } from './lib/export';
 import { lazyWithPreload } from './lib/lazy-with-preload';
 import { useOpenedOnce } from './hooks/useOpenedOnce';
-import { LAYER } from './ui';
+import { LAYER, menuItem } from './ui';
 
 /*
  * 起動時に見えるのはタイマー画面（既定）か、前回開いていた画面の 1 つだけ。
@@ -714,7 +714,7 @@ export default function App() {
                   setRenameTargetId(menuFor.id);
                   setMenuFor(null);
                 }}
-                className="flex w-full items-center gap-2 px-4 py-3 text-left text-body text-fg transition hover:bg-row-hover"
+                className={menuItem('default', 'py-3')}
               >
                 <Pencil className="h-4 w-4" aria-hidden />
                 名前を変更
@@ -729,7 +729,7 @@ export default function App() {
                   goTo('notes');
                   setMenuFor(null);
                 }}
-                className="hidden w-full items-center gap-2 px-4 py-3 text-left text-body text-fg transition hover:bg-row-hover md:flex"
+                className={menuItem('default', 'hidden py-3 md:flex')}
               >
                 <Columns2 className="h-4 w-4" aria-hidden />
                 右のペインで開く
@@ -740,7 +740,7 @@ export default function App() {
                   void downloadMarkdown(menuFor);
                   setMenuFor(null);
                 }}
-                className="flex w-full items-center gap-2 border-t border-line px-4 py-3 text-left text-body text-fg transition hover:bg-row-hover"
+                className={menuItem('default', 'border-t border-line py-3')}
               >
                 <FileDown className="h-4 w-4" aria-hidden />
                 Markdown で保存
@@ -755,7 +755,7 @@ export default function App() {
                   void printNote(menuFor);
                   setMenuFor(null);
                 }}
-                className="flex w-full items-center gap-2 px-4 py-3 text-left text-body text-fg transition hover:bg-row-hover"
+                className={menuItem('default', 'py-3')}
               >
                 <Printer className="h-4 w-4" aria-hidden />
                 PDF で保存
@@ -766,7 +766,7 @@ export default function App() {
                   setMoveTarget(menuFor);
                   setMenuFor(null);
                 }}
-                className="flex w-full items-center gap-2 border-t border-line px-4 py-3 text-left text-body text-fg transition hover:bg-row-hover"
+                className={menuItem('default', 'border-t border-line py-3')}
               >
                 <FolderTree className="h-4 w-4" aria-hidden />
                 移動する
@@ -777,7 +777,7 @@ export default function App() {
                   setDeleteTarget(menuFor);
                   setMenuFor(null);
                 }}
-                className="flex w-full items-center gap-2 border-t border-line px-4 py-3 text-left text-body text-danger transition hover:bg-danger-soft"
+                className={menuItem('danger', 'border-t border-line py-3')}
               >
                 <Trash2 className="h-4 w-4" aria-hidden />
                 削除する
@@ -806,7 +806,7 @@ export default function App() {
                   setIsCategoryOpen(true);
                   setCategoryMenuFor(null);
                 }}
-                className="flex w-full items-center gap-2 px-4 py-3 text-left text-body text-fg transition hover:bg-row-hover"
+                className={menuItem('default', 'py-3')}
               >
                 <Palette className="h-4 w-4" aria-hidden />
                 名前と色を変更
@@ -817,7 +817,7 @@ export default function App() {
                   setDeleteCategoryTarget(categoryMenuFor);
                   setCategoryMenuFor(null);
                 }}
-                className="flex w-full items-center gap-2 border-t border-line px-4 py-3 text-left text-body text-danger transition hover:bg-danger-soft"
+                className={menuItem('danger', 'border-t border-line py-3')}
               >
                 <FolderX className="h-4 w-4" aria-hidden />
                 フォルダを削除

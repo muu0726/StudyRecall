@@ -33,6 +33,7 @@ import {
   Popover,
   SearchInput,
   Segmented,
+  menuItem,
 } from '../ui';
 import ConfirmDialog from './ConfirmDialog';
 import GenerateFromGlossaryModal from './GenerateFromGlossaryModal';
@@ -375,7 +376,7 @@ export default function GlossaryTab({
                   close();
                   setIsBulkOpen(true);
                 }}
-                className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-body text-fg transition hover:bg-row-hover"
+                className={menuItem('default', 'gap-2.5 px-3')}
               >
                 <ClipboardList className="h-4 w-4 shrink-0 text-fg-muted" aria-hidden />
                 まとめて追加

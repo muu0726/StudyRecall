@@ -10,6 +10,21 @@ import { cn } from '../lib/cn';
  * バーは ::before の絶対配置にしてある。border-l だと行の幅が 2px 動き、
  * ツリーのインデント（インライン style で padding を計算している）とずれる。
  */
+/**
+ * ポップオーバーの中に並べるメニュー項目（`role="menuitem"` のボタン）の共通表現。
+ *
+ * 同じ組み合わせのクラスが 10 か所以上にコピーされていて、
+ * 余白や hover の色を直すたびに**直し漏れた場所だけ見た目が変わる**状態だった。
+ * 区切り線や `md:` の出し分けは呼び出し側の事情なので className で足す。
+ */
+export function menuItem(tone: 'default' | 'danger' = 'default', className?: string): string {
+  return cn(
+    'flex w-full items-center gap-2 px-4 py-2 text-left text-body transition',
+    tone === 'danger' ? 'text-danger hover:bg-danger-soft' : 'text-fg hover:bg-row-hover',
+    className,
+  );
+}
+
 export function selectableRow(selected: boolean, className?: string): string {
   return cn(
     'relative rounded-control transition',

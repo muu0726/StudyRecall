@@ -12,7 +12,7 @@ export { LAYER } from './layers';
 export { Modal } from './Modal';
 export { Popover } from './Popover';
 export type { ModalTone } from './Modal';
-export { selectableRow } from './rowStyles';
+export { menuItem, selectableRow } from './rowStyles';
 export { SearchInput } from './SearchInput';
 export { Segmented } from './Segmented';
 export type { SegmentedOption } from './Segmented';

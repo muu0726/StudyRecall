@@ -21,7 +21,7 @@ import { daysUntil } from '../../shared/srs';
 import { formatDate } from '../lib/format';
 import FlashCard from './FlashCard';
 import SpeechPlayer from './SpeechPlayer';
-import { Banner, FilterMenu, IconButton, Popover, Segmented } from '../ui';
+import { Banner, FilterMenu, IconButton, Popover, Segmented, menuItem } from '../ui';
 
 interface Props {
   categories: CategoryDTO[];
@@ -356,7 +356,10 @@ function MenuItem({
       role="menuitem"
       disabled={disabled}
       onClick={onClick}
-      className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-body text-fg transition hover:bg-row-hover disabled:cursor-not-allowed disabled:opacity-40"
+      className={menuItem(
+        'default',
+        'gap-2.5 px-3 disabled:cursor-not-allowed disabled:opacity-40',
+      )}
     >
       <span className="shrink-0 text-fg-muted">{icon}</span>
       {label}

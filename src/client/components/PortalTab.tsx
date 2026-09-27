@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Download, LayoutGrid, MoreVertical, Pencil, Plus, Trash2, Upload } from 'lucide-react';
 import type { CreatePortalLinkRequest, PortalLinkDTO } from '../../shared/types';
 import {
@@ -13,8 +13,16 @@ import { usePortalLinks } from '../hooks/usePortalLinks';
 import { useOpenedOnce } from '../hooks/useOpenedOnce';
 import { downloadBlob } from '../lib/export';
 import { readStoredText, writeStoredText } from '../lib/stored-value';
-import { cn } from '../lib/cn';
-import { Banner, Button, EmptyState, IconButton, Popover, SearchInput, Segmented } from '../ui';
+import {
+  Banner,
+  Button,
+  EmptyState,
+  IconButton,
+  Popover,
+  SearchInput,
+  Segmented,
+  menuItem,
+} from '../ui';
 import { useToast } from './Toast';
 import ConfirmDialog from './ConfirmDialog';
 
@@ -43,6 +51,7 @@ export default function PortalTab() {
   const hasOpenedDialog = useOpenedOnce(editing !== null);
 
   const categories = useMemo(() => categoriesOf(portal.links), [portal.links]);
+  const categoryNames = useMemo(() => categories.map((item) => item.name), [categories]);
   const visible = useMemo(
     () => filterLinks(portal.links, { query, category }),
     [portal.links, query, category],
@@ -162,7 +171,7 @@ export default function PortalTab() {
               <button
                 type="button"
                 role="menuitem"
-                className="flex w-full items-center gap-2 px-4 py-2 text-left text-body transition hover:bg-row-hover"
+                className={menuItem()}
                 onClick={() => {
                   close();
                   exportJson();
@@ -174,7 +183,7 @@ export default function PortalTab() {
               <button
                 type="button"
                 role="menuitem"
-                className="flex w-full items-center gap-2 px-4 py-2 text-left text-body transition hover:bg-row-hover"
+                className={menuItem()}
                 onClick={() => {
                   close();
                   fileRef.current?.click();
@@ -244,7 +253,7 @@ export default function PortalTab() {
         <ul className="grid grid-cols-4 gap-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8">
           {visible.map((link) => (
             <li key={link.id} className="group relative">
-              <LinkTile link={link} />
+              <LinkTile key={`${link.url}|${link.iconKind}|${link.iconValue}`} link={link} />
               <div className="absolute top-0 right-0 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
                 <Popover
                   placement="bottom-end"
@@ -263,7 +272,7 @@ export default function PortalTab() {
                       <button
                         type="button"
                         role="menuitem"
-                        className="flex w-full items-center gap-2 px-4 py-2 text-left text-body transition hover:bg-row-hover"
+                        className={menuItem()}
                         onClick={() => {
                           close();
                           setEditing({ target: link });
@@ -275,7 +284,7 @@ export default function PortalTab() {
                       <button
                         type="button"
                         role="menuitem"
-                        className="flex w-full items-center gap-2 px-4 py-2 text-left text-body text-danger transition hover:bg-danger-soft"
+                        className={menuItem('danger')}
                         onClick={() => {
                           close();
                           setDeleteTarget(link);
@@ -298,7 +307,7 @@ export default function PortalTab() {
           <PortalLinkDialog
             open={editing !== null}
             target={editing?.target ?? null}
-            categories={categories.map((item) => item.name)}
+            categories={categoryNames}
             isBusy={portal.isSaving}
             onClose={() => setEditing(null)}
             onSubmit={(body) => void submit(body)}
@@ -321,13 +330,16 @@ export default function PortalTab() {
   );
 }
 
-/** アイコン 1 つ。画像が読めなければ頭文字に切り替える */
-function LinkTile({ link }: { link: PortalLinkDTO }) {
+/**
+ * アイコン 1 つ。画像が読めなければ頭文字に切り替える。
+ *
+ * **memo にしてある。** 検索欄を 1 文字打つたびに一覧が作り直されるので、
+ * そのままだと並んでいるタイル全部が描き直され、画像の描画がちらつく。
+ * 「読み込みに失敗した」状態は `key`（URL とアイコン）で捨てる。
+ */
+const LinkTile = memo(function LinkTile({ link }: { link: PortalLinkDTO }) {
   const [failed, setFailed] = useState(false);
   const image = failed ? null : iconImageOf(link);
-
-  // URL やアイコンを編集したら、もう一度画像を試す
-  useEffect(() => setFailed(false), [link.url, link.iconKind, link.iconValue]);
 
   return (
     <a
@@ -339,10 +351,7 @@ function LinkTile({ link }: { link: PortalLinkDTO }) {
     >
       <span
         aria-hidden
-        className={cn(
-          'flex aspect-square w-full items-center justify-center overflow-hidden rounded-[22%]',
-          'border border-line bg-surface shadow-overlay',
-        )}
+        className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-[22%] border border-line bg-surface shadow-overlay"
       >
         {link.iconKind === 'emoji' && link.iconValue ? (
           <span className="text-title leading-none">{link.iconValue}</span>
@@ -362,4 +371,4 @@ function LinkTile({ link }: { link: PortalLinkDTO }) {
       <span className="w-full truncate text-center text-caption text-fg-muted">{link.title}</span>
     </a>
   );
-}
+});
