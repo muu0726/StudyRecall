@@ -53,6 +53,12 @@ import type {
   UpdateNotebookRequest,
   DeleteNotebookResponse,
   MoveNotebookRequest,
+  PortalLinkResponse,
+  PortalLinksResponse,
+  CreatePortalLinkRequest,
+  UpdatePortalLinkRequest,
+  ImportPortalLinksRequest,
+  ImportPortalLinksResponse,
 } from '../../shared/types';
 
 /**
@@ -197,6 +203,31 @@ export const api = {
 
   /** 双方向の突き合わせ。未連携でもエラーにはならず warning で返る。 */
   syncTasks: () => request<SyncTasksResponse>('/api/tasks/sync', { method: 'POST' }),
+
+  // --- ポータル（リンク集約） ---
+  listPortalLinks: () => request<PortalLinksResponse>('/api/portal-links'),
+
+  createPortalLink: (body: CreatePortalLinkRequest) =>
+    request<PortalLinkResponse>('/api/portal-links', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  updatePortalLink: (id: string, body: UpdatePortalLinkRequest) =>
+    request<PortalLinkResponse>(`/api/portal-links/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+
+  deletePortalLink: (id: string) =>
+    request<{ ok: true }>(`/api/portal-links/${id}`, { method: 'DELETE' }),
+
+  /** まとめて取り込み。重複と上限超過は件数で返り、エラーにはならない。 */
+  importPortalLinks: (body: ImportPortalLinksRequest) =>
+    request<ImportPortalLinksResponse>('/api/portal-links/import', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 
   // --- カレンダー（Google Calendar の読み取り） ---
   /** その月のグリッドに載る予定。未連携でもエラーにはならず warning で返る。 */

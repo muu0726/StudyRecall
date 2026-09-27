@@ -43,6 +43,17 @@ export const MAX_NOTE_TITLE_LENGTH = 200;
  */
 export const MAX_NOTE_CONTENT_LENGTH = 200_000;
 
+/**
+ * ポータル（リンク集約）の上限。**画面の入力欄とサーバーで同じ値を使う。**
+ * 件数の上限は、1 画面に並べて選べる現実的な数と、取り込みが暴走しない歯止めを兼ねる。
+ */
+export const MAX_PORTAL_LINKS = 200;
+export const MAX_PORTAL_TITLE_LENGTH = 60;
+export const MAX_PORTAL_URL_LENGTH = 2000;
+export const MAX_PORTAL_CATEGORY_LENGTH = 30;
+/** 絵文字 1 個か、画像の URL が入る */
+export const MAX_PORTAL_ICON_VALUE_LENGTH = 500;
+
 export interface CategoryUsage {
   studyLogs: number;
   /** 生きているノート。ゴミ箱の分は含めない */
@@ -719,4 +730,56 @@ export interface RestoreBackupResponse {
   counts: Record<string, number>;
   /** 復元の直前に取った安全用のバックアップ */
   safetyBackup: BackupFileDTO | null;
+}
+
+// ---------------------------------------------------------------------------
+// ポータル（リンク集約）
+// ---------------------------------------------------------------------------
+
+export type PortalIconKind = 'favicon' | 'emoji' | 'image';
+
+export interface PortalLinkDTO {
+  id: string;
+  title: string;
+  url: string;
+  /** 自由入力。空文字は「未分類」 */
+  category: string;
+  iconKind: PortalIconKind;
+  /** 'emoji' なら絵文字、'image' なら画像の URL。'favicon' は空（URL から導く） */
+  iconValue: string;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PortalLinksResponse {
+  links: PortalLinkDTO[];
+}
+
+export interface PortalLinkResponse {
+  link: PortalLinkDTO;
+}
+
+export interface CreatePortalLinkRequest {
+  title: string;
+  url: string;
+  category?: string;
+  iconKind?: PortalIconKind;
+  iconValue?: string;
+}
+
+export type UpdatePortalLinkRequest = Partial<CreatePortalLinkRequest>;
+
+export interface ImportPortalLinksRequest {
+  links: CreatePortalLinkRequest[];
+}
+
+export interface ImportPortalLinksResponse {
+  /** 取り込めた件数 */
+  added: number;
+  /** 同じ URL が既にあって飛ばした件数 */
+  skipped: number;
+  /** 上限に当たって入らなかった件数 */
+  dropped: number;
+  links: PortalLinkDTO[];
 }

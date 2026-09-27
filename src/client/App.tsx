@@ -47,6 +47,7 @@ const TasksTab = lazyWithPreload(() => import('./components/TasksTab'));
 const ReviewTab = lazyWithPreload(() => import('./components/ReviewTab'));
 const GlossaryTab = lazyWithPreload(() => import('./components/GlossaryTab'));
 const StatsTab = lazyWithPreload(() => import('./components/StatsTab'));
+const PortalTab = lazyWithPreload(() => import('./components/PortalTab'));
 const CategoryManagerModal = lazyWithPreload(() => import('./components/CategoryManagerModal'));
 const IntegrationsModal = lazyWithPreload(() => import('./components/IntegrationsModal'));
 const RestoreBackupDialog = lazyWithPreload(() => import('./components/RestoreBackupDialog'));
@@ -61,6 +62,7 @@ const DEFERRED = [
   ReviewTab,
   GlossaryTab,
   StatsTab,
+  PortalTab,
   CategoryManagerModal,
   IntegrationsModal,
   RestoreBackupDialog,
@@ -679,6 +681,7 @@ export default function App() {
                     />
                   )}
                   {view === 'dashboard' && logsData && <StatsTab data={logsData} />}
+                  {view === 'portal' && <PortalTab />}
                 </Suspense>
               )}
             </div>

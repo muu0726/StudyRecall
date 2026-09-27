@@ -17,9 +17,11 @@
  */
 
 import { DEFAULT_POMODORO, normalizePomodoroConfig, type PomodoroConfig } from './pomodoro-config';
+import { coerceIconKind, normalizeUrl } from './portal-links';
+import type { PortalIconKind } from './types';
 
 /** いま書き出す版 */
-export const BACKUP_VERSION = 4;
+export const BACKUP_VERSION = 5;
 
 /**
  * まだ読める版。
@@ -30,8 +32,9 @@ export const BACKUP_VERSION = 4;
  * v1 との差: glossaryTerms が無く、問題に questionType / choices / glossaryTermId が無い。
  * v2 との差: カテゴリに examName が無い。
  * v3 との差: タイマーの記録と設定にポモドーロの周期（pomodoro）が無い。
+ * v4 との差: ポータルのリンク（portalLinks）が無い。
  */
-const READABLE_VERSIONS: readonly number[] = [1, 2, 3, 4];
+const READABLE_VERSIONS: readonly number[] = [1, 2, 3, 4, 5];
 export const BACKUP_APP = 'study-recall';
 
 /** 全テーブル合計の行数の上限。これを超えるものは扱わない */
@@ -146,6 +149,18 @@ export interface BackupTask {
   updatedAt: string;
 }
 
+export interface BackupPortalLink {
+  id: string;
+  title: string;
+  url: string;
+  category: string;
+  iconKind: PortalIconKind;
+  iconValue: string;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface BackupSettings {
   calendarSyncEnabled: boolean;
   calendarId: string;
@@ -163,6 +178,8 @@ export interface BackupData {
   timerSessions: BackupTimerSession[];
   quizQuestions: BackupQuiz[];
   tasks: BackupTask[];
+  /** ポータルのリンク。v4 までのファイルには無いので、読むときは空配列で埋める */
+  portalLinks: BackupPortalLink[];
   settings: BackupSettings | null;
 }
 
@@ -277,6 +294,17 @@ export interface SnapshotRows {
     createdAt: Date;
     updatedAt: Date;
   }[];
+  portalLinks: {
+    id: string;
+    title: string;
+    url: string;
+    category: string;
+    iconKind: PortalIconKind;
+    iconValue: string;
+    sortOrder: number;
+    createdAt: Date;
+    updatedAt: Date;
+  }[];
   settings: BackupSettings | null;
 }
 
@@ -375,6 +403,17 @@ export function buildSnapshot(rows: SnapshotRows, now: Date): BackupSnapshot {
       createdAt: iso(row.createdAt),
       updatedAt: iso(row.updatedAt),
     })),
+    portalLinks: rows.portalLinks.map((row) => ({
+      id: row.id,
+      title: row.title,
+      url: row.url,
+      category: row.category,
+      iconKind: row.iconKind,
+      iconValue: row.iconValue,
+      sortOrder: row.sortOrder,
+      createdAt: iso(row.createdAt),
+      updatedAt: iso(row.updatedAt),
+    })),
     settings: rows.settings,
   };
 
@@ -396,6 +435,7 @@ export function countRows(data: BackupData): Record<string, number> {
     timerSessions: data.timerSessions.length,
     quizQuestions: data.quizQuestions.length,
     tasks: data.tasks.length,
+    portalLinks: data.portalLinks.length,
   };
 }
 
@@ -494,6 +534,7 @@ export function parseSnapshot(raw: unknown): ParseResult {
   const timerSessions: BackupTimerSession[] = [];
   const quizQuestions: BackupQuiz[] = [];
   const tasks: BackupTask[] = [];
+  const portalLinks: BackupPortalLink[] = [];
 
   const rawCategories = readArray(source, 'categories');
   const rawNotebooks = readArray(source, 'notebooks');
@@ -503,7 +544,10 @@ export function parseSnapshot(raw: unknown): ParseResult {
   const rawTimerSessions = readArray(source, 'timerSessions');
   const rawQuizzes = readArray(source, 'quizQuestions');
   const rawTasks = readArray(source, 'tasks');
+  // v4 のファイルには無い。無いことは壊れていることではない
+  const rawPortalLinks = source.portalLinks === undefined ? [] : readArray(source, 'portalLinks');
   if (
+    !rawPortalLinks ||
     !rawCategories ||
     !rawNotebooks ||
     !rawGlossary ||
@@ -522,7 +566,8 @@ export function parseSnapshot(raw: unknown): ParseResult {
     rawStudyLogs.length +
     rawTimerSessions.length +
     rawQuizzes.length +
-    rawTasks.length;
+    rawTasks.length +
+    rawPortalLinks.length;
   if (total > MAX_BACKUP_ROWS) {
     return fail(`バックアップの件数が多すぎます（${total} 件／上限 ${MAX_BACKUP_ROWS} 件）。`);
   }
@@ -810,6 +855,43 @@ export function parseSnapshot(raw: unknown): ParseResult {
     });
   }
 
+  /*
+   * ポータルのリンク。**URL は読むときにも検証する。**
+   * バックアップは人の手で編集できるファイルなので、`javascript:` を書いて復元させれば
+   * 画面に仕込めてしまう。normalizeLinkInput を通し、通らない行は捨てる（復元全体は止めない）。
+   */
+  for (const row of rawPortalLinks) {
+    if (
+      !isObject(row) ||
+      !str(row.id) ||
+      !str(row.title) ||
+      !str(row.url) ||
+      !str(row.category) ||
+      !num(row.sortOrder) ||
+      !isoStr(row.createdAt) ||
+      !isoStr(row.updatedAt)
+    ) {
+      return fail('ポータルのリンクの形式が正しくありません。');
+    }
+    const url = normalizeUrl(row.url);
+    if (!url) continue;
+    const iconKind = coerceIconKind(row.iconKind);
+    const iconValue = str(row.iconValue) ? row.iconValue : '';
+    portalLinks.push({
+      id: row.id,
+      title: row.title,
+      url,
+      category: row.category,
+      // 画像アイコンの URL も同じ検証を通す。だめなら favicon に落とす
+      ...(iconKind === 'image' && !normalizeUrl(iconValue)
+        ? { iconKind: 'favicon' as const, iconValue: '' }
+        : { iconKind, iconValue }),
+      sortOrder: row.sortOrder,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    });
+  }
+
   let settings: BackupSettings | null = null;
   if (source.settings !== null && source.settings !== undefined) {
     const row = source.settings;
@@ -840,6 +922,7 @@ export function parseSnapshot(raw: unknown): ParseResult {
     timerSessions,
     quizQuestions,
     tasks,
+    portalLinks,
     settings,
   };
 

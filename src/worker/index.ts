@@ -13,6 +13,7 @@ import { tasksRoute } from './routes/tasks';
 import { integrationsRoute } from './routes/integrations';
 import { calendarRoute } from './routes/calendar';
 import { backupRoute } from './routes/backup';
+import { portalLinksRoute } from './routes/portal-links';
 
 const app = new Hono<AppEnv>();
 
@@ -46,6 +47,7 @@ app.route('/api/study-logs', studyLogsRoute);
 app.route('/api/quizzes', quizzesRoute);
 app.route('/api/notebooks', notebooksRoute);
 app.route('/api/tags', tagsRoute);
+app.route('/api/portal-links', portalLinksRoute);
 app.route('/api/glossary', glossaryRoute);
 app.route('/api/timer', timerRoute);
 app.route('/api/stats', statsRoute);

@@ -4,6 +4,7 @@ import {
   categories,
   glossaryTerms,
   notebooks,
+  portalLinks,
   quizQuestions,
   studyLogs,
   tasks,
@@ -40,6 +41,7 @@ export async function collectSnapshotRows(db: Db, userId: string): Promise<Snaps
     timerRows,
     quizRows,
     taskRows,
+    portalRows,
     settings,
   ] = await Promise.all([
     db.select().from(categories).where(eq(categories.userId, userId)),
@@ -49,6 +51,7 @@ export async function collectSnapshotRows(db: Db, userId: string): Promise<Snaps
     db.select().from(timerSessions).where(eq(timerSessions.userId, userId)),
     db.select().from(quizQuestions).where(eq(quizQuestions.userId, userId)),
     db.select().from(tasks).where(eq(tasks.userId, userId)),
+    db.select().from(portalLinks).where(eq(portalLinks.userId, userId)),
     getSettings(db, userId),
   ]);
 
@@ -60,6 +63,7 @@ export async function collectSnapshotRows(db: Db, userId: string): Promise<Snaps
     timerSessions: timerRows,
     quizQuestions: quizRows,
     tasks: taskRows,
+    portalLinks: portalRows,
     settings: {
       calendarSyncEnabled: settings.calendarSyncEnabled,
       calendarId: settings.calendarId,
@@ -118,6 +122,8 @@ export async function applySnapshot(
   await db.delete(timerSessions).where(eq(timerSessions.userId, userId));
   await db.delete(tasks).where(eq(tasks.userId, userId));
   await db.delete(studyLogs).where(eq(studyLogs.userId, userId));
+  // ポータルのリンクは誰からも参照されないので、どこで消してもよい
+  await db.delete(portalLinks).where(eq(portalLinks.userId, userId));
   await db.delete(notebooks).where(eq(notebooks.userId, userId));
   await db.delete(categories).where(eq(categories.userId, userId));
 
@@ -258,6 +264,23 @@ export async function applySnapshot(
       updatedAt: date(row.updatedAt),
     })),
     (chunk) => db.insert(tasks).values(chunk),
+  );
+
+  await insertAll(
+    portalLinks,
+    data.portalLinks.map((row) => ({
+      id: row.id,
+      userId,
+      title: row.title,
+      url: row.url,
+      category: row.category,
+      iconKind: row.iconKind,
+      iconValue: row.iconValue,
+      sortOrder: row.sortOrder,
+      createdAt: date(row.createdAt),
+      updatedAt: date(row.updatedAt),
+    })),
+    (chunk) => db.insert(portalLinks).values(chunk),
   );
 
   if (data.settings) {

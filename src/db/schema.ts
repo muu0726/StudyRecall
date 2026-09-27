@@ -461,6 +461,44 @@ export const tasks = sqliteTable(
 );
 
 /**
+ * ポータル（リンク集約）に並べる外部サイト。
+ *
+ * カテゴリは**この画面専用の自由入力**で、学習カテゴリ（`categories`）とは別物。
+ * 「開発」「ツール」のような並べ替えのための見出しに、学習の分類を混ぜたくないため。
+ * 空文字は「未分類」を意味する（null にしないのは、絞り込みの比較を 1 通りに保つため）。
+ */
+export const portalLinks = sqliteTable(
+  'portal_links',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    title: text('title').notNull(),
+    /** http / https のみ。検証は src/shared/portal-links.ts の normalizeUrl ひとつだけ。 */
+    url: text('url').notNull(),
+    category: text('category').notNull().default(''),
+    /**
+     * アイコンの出どころ。
+     * 'favicon' は URL から毎回導くので icon_value は空。'emoji' は 1 文字前後、'image' は画像の URL。
+     */
+    iconKind: text('icon_kind', { enum: ['favicon', 'emoji', 'image'] })
+      .notNull()
+      .default('favicon'),
+    iconValue: text('icon_value').notNull().default(''),
+    /** 並び順。追加は末尾。 */
+    sortOrder: integer('sort_order').notNull().default(0),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [index('portal_links_user_sort_idx').on(t.userId, t.sortOrder)],
+);
+
+/**
  * ユーザーごとの連携設定。ユーザー 1 人につき 1 行。
  *
  * 行が無いことを「既定のまま」として扱う。サインイン時に作らないのは、
@@ -521,4 +559,5 @@ export type TimerSession = typeof timerSessions.$inferSelect;
 export type QuizQuestion = typeof quizQuestions.$inferSelect;
 export type GlossaryTerm = typeof glossaryTerms.$inferSelect;
 export type Task = typeof tasks.$inferSelect;
+export type PortalLink = typeof portalLinks.$inferSelect;
 export type UserSettings = typeof userSettings.$inferSelect;

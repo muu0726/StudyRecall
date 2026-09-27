@@ -134,6 +134,19 @@ function rows(overrides: Partial<SnapshotRows> = {}): SnapshotRows {
         updatedAt: at('2026-01-06T00:00:00.000Z'),
       },
     ],
+    portalLinks: [
+      {
+        id: 'lnk_1',
+        title: 'GitHub',
+        url: 'https://github.com/',
+        category: '開発',
+        iconKind: 'favicon',
+        iconValue: '',
+        sortOrder: 0,
+        createdAt: at('2026-01-07T00:00:00.000Z'),
+        updatedAt: at('2026-01-07T00:00:00.000Z'),
+      },
+    ],
     settings: {
       calendarSyncEnabled: true,
       calendarId: 'primary',
@@ -159,6 +172,7 @@ describe('buildSnapshot', () => {
       timerSessions: 1,
       quizQuestions: 1,
       tasks: 1,
+      portalLinks: 1,
     });
   });
 
@@ -375,9 +389,17 @@ describe('parseSnapshot が断るもの', () => {
  * 復元できないバックアップは、バックアップではない。
  */
 describe('古い版のバックアップ', () => {
+  /** いまのファイルから、v4 に無かった項目を落として v4 相当にする */
+  const asV4 = () => {
+    const file = JSON.parse(JSON.stringify(buildSnapshot(rows(), NOW)));
+    file.version = 4;
+    delete file.data.portalLinks;
+    return file;
+  };
+
   /** いまのファイルから、v3 に無かった項目を落として v3 相当にする */
   const asV3 = () => {
-    const file = JSON.parse(JSON.stringify(buildSnapshot(rows(), NOW)));
+    const file = asV4();
     file.version = 3;
     for (const session of file.data.timerSessions) delete session.pomodoro;
     if (file.data.settings) delete file.data.settings.pomodoro;
@@ -394,7 +416,7 @@ describe('古い版のバックアップ', () => {
 
   it('いまの版はポモドーロの周期を書き出す', () => {
     const snapshot = buildSnapshot(rows(), NOW);
-    expect(snapshot.version).toBe(4);
+    expect(snapshot.version).toBe(5);
     expect(snapshot.data.timerSessions[0]?.pomodoro).toEqual({
       workMinutes: 50,
       breakMinutes: 10,
@@ -406,6 +428,33 @@ describe('古い版のバックアップ', () => {
 
   it('v3 のバックアップが今も読める', () => {
     expect(parseSnapshot(asV3()).ok).toBe(true);
+  });
+
+  it('v4 のバックアップが今も読め、ポータルのリンクは空で埋まる', () => {
+    const result = parseSnapshot(asV4());
+    if (!result.ok) throw new Error(result.error);
+    expect(result.value.data.portalLinks).toEqual([]);
+  });
+
+  /*
+   * バックアップは人の手で編集できるファイル。`javascript:` を書いて復元させれば
+   * 画面に仕込めるので、**読むときにも URL を検証して落とす**（復元全体は止めない）。
+   */
+  it('ポータルのリンクに仕込まれた javascript: は取り込まない', () => {
+    const file = JSON.parse(JSON.stringify(buildSnapshot(rows(), NOW)));
+    file.data.portalLinks[0].url = 'javascript:alert(1)';
+    const result = parseSnapshot(file);
+    if (!result.ok) throw new Error(result.error);
+    expect(result.value.data.portalLinks).toEqual([]);
+  });
+
+  it('画像アイコンの URL が危なければ favicon に落として読む', () => {
+    const file = JSON.parse(JSON.stringify(buildSnapshot(rows(), NOW)));
+    file.data.portalLinks[0].iconKind = 'image';
+    file.data.portalLinks[0].iconValue = 'javascript:alert(1)';
+    const result = parseSnapshot(file);
+    if (!result.ok) throw new Error(result.error);
+    expect(result.value.data.portalLinks[0]).toMatchObject({ iconKind: 'favicon', iconValue: '' });
   });
 
   /* 周期はあとから入れた項目。無いファイルを弾かず、以前の固定値（25/5・長い休憩なし）で埋める */

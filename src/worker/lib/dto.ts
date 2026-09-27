@@ -5,6 +5,7 @@ import type {
   NotebookDTO,
   QuizQuestionDTO,
   StudyLogDTO,
+  PortalLinkDTO,
   TaskDTO,
   TimerSessionDTO,
 } from '../../shared/types';
@@ -12,6 +13,7 @@ import type {
   Category,
   GlossaryTerm,
   Notebook,
+  PortalLink,
   QuizQuestion,
   StudyLog,
   Task,
@@ -191,6 +193,21 @@ export function toTaskDto(row: TaskRow): TaskDTO {
     isCompleted: row.isCompleted,
     completedAt: toIso(row.completedAt),
     syncState: row.syncState,
+    createdAt: isoOrEpoch(row.createdAt),
+    updatedAt: isoOrEpoch(row.updatedAt),
+  };
+}
+
+/** ポータルのリンク。userId は返さない（自分の行しか引かないので要らない） */
+export function toPortalLinkDto(row: PortalLink): PortalLinkDTO {
+  return {
+    id: row.id,
+    title: row.title,
+    url: row.url,
+    category: row.category,
+    iconKind: row.iconKind,
+    iconValue: row.iconValue,
+    sortOrder: row.sortOrder,
     createdAt: isoOrEpoch(row.createdAt),
     updatedAt: isoOrEpoch(row.updatedAt),
   };

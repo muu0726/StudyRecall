@@ -10,6 +10,7 @@ import {
   FolderPlus,
   Hash,
   Layers,
+  LayoutGrid,
   Link2,
   ListTodo,
   Loader2,
@@ -45,7 +46,7 @@ import type { ThemeSetting } from '../lib/theme';
  * （狭い画面でアイコンだけ出しても意味がないため）。
  */
 
-export type ViewId = 'timer' | 'notes' | 'tasks' | 'glossary' | 'review' | 'dashboard';
+export type ViewId = 'timer' | 'notes' | 'tasks' | 'glossary' | 'review' | 'dashboard' | 'portal';
 
 export const VIEWS: {
   id: ViewId;
@@ -61,6 +62,7 @@ export const VIEWS: {
   { id: 'glossary', label: '用語辞書', title: '用語辞書', icon: BookMarked },
   { id: 'review', label: 'フラッシュカード', title: 'フラッシュカード復習', icon: Layers },
   { id: 'dashboard', label: 'ダッシュボード', title: 'ダッシュボード', icon: BarChart3 },
+  { id: 'portal', label: 'ポータル', title: 'ポータル', icon: LayoutGrid },
 ];
 
 interface Props {

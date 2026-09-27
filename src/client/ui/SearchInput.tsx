@@ -1,3 +1,4 @@
+import type { Ref } from 'react';
 import { Search, X } from 'lucide-react';
 import { cn } from '../lib/cn';
 import { Input } from './Field';
@@ -19,6 +20,8 @@ interface Props {
   placeholder?: string;
   'aria-label': string;
   className?: string;
+  /** ショートカット（⌘K など）から検索欄へ移りたい画面のために渡す */
+  inputRef?: Ref<HTMLInputElement>;
 }
 
 export function SearchInput({
@@ -27,6 +30,7 @@ export function SearchInput({
   placeholder,
   'aria-label': ariaLabel,
   className,
+  inputRef,
 }: Props) {
   return (
     <div className={cn('relative', className)}>
@@ -35,6 +39,7 @@ export function SearchInput({
         aria-hidden
       />
       <Input
+        ref={inputRef}
         type="search"
         value={value}
         onChange={(event) => onChange(event.target.value)}
