@@ -4,6 +4,7 @@ import type {
   CreateGlossaryTermsRequest,
   CreateGlossaryTermsResponse,
   GlossaryTermDTO,
+  GlossaryTermsResponse,
   UpdateGlossaryTermRequest,
 } from '../../shared/types';
 import { api, asGlossaryDuplicate } from '../lib/api';
@@ -27,6 +28,8 @@ export interface GlossaryApi {
   truncated: boolean;
   isSaving: boolean;
   reload: () => Promise<void>;
+  /** 取得済みの一覧を当てる（/api/bootstrap から配られたぶん）。自分では取りに行かない */
+  applyList: (next: GlossaryTermsResponse | null, message?: string) => void;
   /** 重複（409）のときは既にある用語を返す。呼び出し側が「開いて編集」へ誘導する */
   create: (
     body: CreateGlossaryTermRequest,
@@ -70,6 +73,21 @@ export function useGlossary(): GlossaryApi {
     } finally {
       if (aliveRef.current) setIsLoading(false);
     }
+  }, []);
+
+  /**
+   * 取得済みの一覧をそのまま当てる（`/api/bootstrap` から配られたぶん）。
+   * **自分では取りに行かない。**
+   */
+  const applyList = useCallback((next: GlossaryTermsResponse | null, message?: string) => {
+    if (next) {
+      setTerms(next.terms);
+      setTruncated(next.truncated);
+      setError(null);
+    } else if (message) {
+      setError(message);
+    }
+    setIsLoading(false);
   }, []);
 
   const create = useCallback(
@@ -172,6 +190,7 @@ export function useGlossary(): GlossaryApi {
     truncated,
     isSaving,
     reload,
+    applyList,
     create,
     createMany,
     update,

@@ -21,6 +21,7 @@ import {
   type GenerateNotebookQuizRequest,
   type GenerateNotebookQuizResponse,
   type MoveNotebookRequest,
+  type NotebookDTO,
   type UpdateNotebookRequest,
 } from '../../shared/types';
 
@@ -84,19 +85,26 @@ async function nextSortOrder(db: Db, userId: string, parentId: string | null): P
   return (Number(row?.max ?? -1) || 0) + (row?.max === null ? 1 : 1);
 }
 
+/**
+ * 生きているノートのフラットな一覧。ツリーの組み立ては描画側に任せる
+ * （並び順が確定していれば、同じ親の子は必ずこの順で並ぶ）。
+ * **ルートと `/api/bootstrap` の両方がここを通る。**
+ */
+export async function listNotebookDtos(db: Db, userId: string): Promise<NotebookDTO[]> {
+  const rows = await db
+    .select(notebookSelectWithCategory)
+    .from(notebooks)
+    .innerJoin(categories, eq(notebooks.categoryId, categories.id))
+    .where(and(eq(notebooks.userId, userId), alive()))
+    .orderBy(asc(notebooks.sortOrder), asc(notebooks.createdAt));
+
+  return rows.map(toNotebookDto);
+}
+
 export const notebooksRoute = new Hono<AppEnv>()
   .get('/', async (c) => {
-    const db = getDb(c.env);
-    // ツリーの組み立ては描画側に任せ、ここはフラットな配列を返す。
-    // 並び順が確定していれば、同じ親の子は必ずこの順で並ぶ。
-    const rows = await db
-      .select(notebookSelectWithCategory)
-      .from(notebooks)
-      .innerJoin(categories, eq(notebooks.categoryId, categories.id))
-      .where(and(eq(notebooks.userId, c.get('userId')), alive()))
-      .orderBy(asc(notebooks.sortOrder), asc(notebooks.createdAt));
-
-    return c.json({ notebooks: rows.map(toNotebookDto) });
+    const list = await listNotebookDtos(getDb(c.env), c.get('userId'));
+    return c.json({ notebooks: list });
   })
 
   .post('/', async (c) => {

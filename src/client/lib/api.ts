@@ -52,6 +52,7 @@ import type {
   UpdateCategoryRequest,
   UpdateNotebookRequest,
   DeleteNotebookResponse,
+  BootstrapResponse,
   MoveNotebookRequest,
   PortalLinkResponse,
   PortalLinksResponse,
@@ -189,6 +190,12 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
+  /**
+   * 起動時にまとめて取る 1 本。**区画ごとに独立**していて、1 つ失敗しても残りは入っている。
+   * 個別の API（listCategories など）は保存後の取り直しで今までどおり使う。
+   */
+  getBootstrap: () => request<BootstrapResponse>('/api/bootstrap'),
+
   // --- タスク（Google Tasks 連携） ---
   listTasks: () => request<TasksResponse>('/api/tasks'),
 
@@ -221,6 +228,13 @@ export const api = {
 
   deletePortalLink: (id: string) =>
     request<{ ok: true }>(`/api/portal-links/${id}`, { method: 'DELETE' }),
+
+  /** 並べ替え。**新しい並びの id を全部**送る（差分にしない） */
+  reorderPortalLinks: (ids: string[]) =>
+    request<PortalLinksResponse>('/api/portal-links/reorder', {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+    }),
 
   /** まとめて取り込み。重複と上限超過は件数で返り、エラーにはならない。 */
   importPortalLinks: (body: ImportPortalLinksRequest) =>

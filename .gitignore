@@ -5,3 +5,6 @@ dist/
 *.local
 .DS_Store
 *.log
+
+# ビルドで作る（vite-plugins/security-headers.ts）。dev で試すときだけ手で置く
+public/_headers

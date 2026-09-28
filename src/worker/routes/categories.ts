@@ -6,6 +6,7 @@ import { toCategoryDto } from '../lib/dto';
 import { newId } from '../lib/ids';
 import { MAX_EXAM_NAME_LENGTH } from '../../shared/types';
 import type {
+  CategoryDTO,
   CategoryInUseResponse,
   CategoryUsage,
   CreateCategoryRequest,
@@ -90,24 +91,32 @@ async function findUsage(db: Db, categoryId: string, userId: string) {
   return row;
 }
 
+/**
+ * カテゴリ一覧（参照件数つき）。
+ * **ルートと `/api/bootstrap` の両方がここを通る。** 同じ一覧を 2 か所で組み立てない。
+ */
+export async function listCategoryDtos(db: Db, userId: string): Promise<CategoryDTO[]> {
+  const rows = await db
+    .select({
+      id: categories.id,
+      name: categories.name,
+      color: categories.color,
+      examName: categories.examName,
+      createdAt: categories.createdAt,
+      userId: categories.userId,
+      ...usageSelect(),
+    })
+    .from(categories)
+    .where(eq(categories.userId, userId))
+    .orderBy(asc(categories.createdAt));
+
+  return rows.map((row) => toCategoryDto(row, toUsage(row)));
+}
+
 export const categoriesRoute = new Hono<AppEnv>()
   .get('/', async (c) => {
-    const db = getDb(c.env);
-    const rows = await db
-      .select({
-        id: categories.id,
-        name: categories.name,
-        color: categories.color,
-        examName: categories.examName,
-        createdAt: categories.createdAt,
-        userId: categories.userId,
-        ...usageSelect(),
-      })
-      .from(categories)
-      .where(eq(categories.userId, c.get('userId')))
-      .orderBy(asc(categories.createdAt));
-
-    return c.json({ categories: rows.map((row) => toCategoryDto(row, toUsage(row))) });
+    const list = await listCategoryDtos(getDb(c.env), c.get('userId'));
+    return c.json({ categories: list });
   })
 
   .post('/', async (c) => {

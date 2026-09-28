@@ -4,6 +4,7 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import { cloudflare } from '@cloudflare/vite-plugin';
+import { securityHeaders } from './vite-plugins/security-headers';
 
 // バージョンの正は package.json だけ。2 か所に持つと必ずズレる。
 const { version } = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
@@ -58,7 +59,9 @@ export default defineConfig({
         navigateFallbackDenylist: [/^\/api\//],
       },
     }),
-    cloudflare(),
+    securityHeaders(),
+    // _headers を dev でも読ませる（既定では本番の配信でしか効かない）
+    cloudflare({ experimental: { headersAndRedirectsDevModeSupport: true } }),
   ],
   environments: {
     /*

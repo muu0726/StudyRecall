@@ -18,7 +18,8 @@ export default defineConfig({
     __APP_VERSION__: JSON.stringify(version),
   },
   test: {
-    include: ['src/**/*.test.ts'],
+    // vite-plugins も対象。CSP の組み立ては壊れると本番の画面が真っ白になる
+    include: ['src/**/*.test.ts', 'vite-plugins/**/*.test.ts'],
     environment: 'node',
   },
 });

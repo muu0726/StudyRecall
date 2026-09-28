@@ -215,6 +215,8 @@ scripts/
 | メソッド   | パス                                     | 認証 | 内容                                                                                     |
 | ---------- | ---------------------------------------- | ---- | ---------------------------------------------------------------------------------------- |
 | GET        | `/api/auth-config`                       | 不要 | ログイン画面が出す手段（Google / モック）の可否                                          |
+| GET        | `/api/bootstrap`                         | 必要 | **起動時の 1 本。** カテゴリ・学習記録＋集計・タグ・ノート・用語をまとめて返す           |
+| GET        | `/api/icon?domain=…&sz=128`              | 必要 | ファビコンの中継（Cloudflare のキャッシュに載る。失敗は 404）                            |
 | POST       | `/api/auth/dev-login`                    | 不要 | 開発用モックログイン（`ALLOW_DEV_LOGIN=true` のときだけ）                                |
 | GET/POST   | `/api/auth/*`                            | 不要 | Better Auth（Google OAuth・セッション・サインアウト）                                    |
 | GET        | `/api/categories`                        | 必要 | カテゴリ一覧                                                                             |
@@ -295,13 +297,19 @@ scripts/
 
 ### アイコン
 
-`favicon`（既定）/ `emoji` / `image` の 3 通り。favicon は
-`https://www.google.com/s2/favicons?domain=…&sz=128` から取る。
+`favicon`（既定）/ `emoji` / `image` の 3 通り。
 
-- **登録したサイトのドメインが Google に伝わる。** ダイアログにその旨を書き、絵文字と画像 URL も選べる
+**favicon は `/api/icon?domain=…` を通す（`src/worker/routes/icon.ts`）。**
+画面から直接 `https://www.google.com/s2/favicons` を叩くと、**利用者が登録したサイトのドメインが
+利用者ごとに Google へ伝わる**。中継にすれば出ていくのはサーバーだけで、
+Cloudflare のキャッシュに載るので 2 回目以降は速い（手元で 143ms → 1ms）。
+
+- URL を組み立てるのは `faviconUrl()` 一箇所。ホスト名は `normalizeIconDomain()` を通す
+  （**サーバーも同じ関数**。緩いと中継を任意の取得先への踏み台にされる）
+- **ログイン必須の位置に置く。** 誰でも叩ける中継にしない
+- 取得できなければ **404 を返す**（JSON のエラーにしない）。画面は `onError` で頭文字へ落ちる
 - 既存の `<img>`（サイドバーの Google アカウント画像）に合わせて `referrerPolicy="no-referrer"`
-- **読み込みに失敗したら頭文字に切り替える**（`onError`）。workbox に `runtimeCaching` が無く
-  外部ドメインの画像はキャッシュされないので、オフラインでは必ずここに落ちる
+- オフラインでは頭文字になる（workbox に `runtimeCaching` は足していない）
 
 ## 用語辞書
 
@@ -881,6 +889,46 @@ drizzle-kit を上げたら、この指定がまだ要るか見直す。
 圧縮後は 1.0 MB（gzip 250 KB）。ログのエラー位置は `upload_source_maps` で元のソースに戻して読める。
 例外の判定（`gemini-error.ts` / `google-error.ts`）は `error.name` を見ているが、
 どちらも SDK と自前のクラスで名前を文字列で代入しているので、圧縮で名前が変わっても壊れない。
+
+## 起動時の 1 本（`/api/bootstrap`）
+
+画面を開くと一覧を 5 本並べて叩いていた（**ログイン確認もその回数だけ**走っていた）。
+`/api/bootstrap` 1 本にまとめ、起動時の通信は `bootstrap` と `timer` の 2 本になった。
+
+- 中身は各ルートが持つ一覧関数（`listCategoryDtos` / `listStudyLogs` / `listTagCounts` /
+  `listNotebookDtos` / `listGlossaryTerms`）を呼ぶだけ。**組み立てを二重に持たない**
+- **`Promise.allSettled` で、1 つ失敗しても残りは返す。** 失敗した区画は `null` にして
+  `errors` に理由を入れる。ここで 500 にすると、以前の「ノートだけ失敗しても他は更新される」より悪くなる
+- **タイマーは入れない。** 経過時間を返す時間依存の API で、`TimerProvider` は App より先に立ち上がる
+- 個別の一覧 API は**残す**（保存後の取り直しで使う）
+
+## ログイン確認と掃除
+
+- **セッションは Cookie にもキャッシュする**（`session.cookieCache`、5 分）。
+  `requireAuth` は毎リクエストで `getSession` を呼ぶので、これが無いと API ごとに D1 を引く。
+  代償は「**別端末でサインアウトしても最大 5 分は有効**」。実際に `sessions` を空にしても
+  API が 200 を返すことを手元で確認した（＝DB を見ていない）
+- `requireAuth` は `getSession({ headers })` としか呼べず、焼き直された Cookie を返せない。
+  更新は画面側の `authClient.useSession()`（`/api/auth/get-session`）が担う
+- **期限切れの掃除は cron**（`wrangler.jsonc` の `triggers.crons`、JST 4:17）。
+  `sessions` と `verifications` の `expires_at < now` を消す（`src/worker/lib/cleanup.ts`）。
+  dev では `curl "http://localhost:5173/cdn-cgi/local/scheduled?cron=17+19+*+*+*"` で試せる
+- `expires_at` は**秒**（`{ mode: 'timestamp' }`）。ms の列と混在しているので、生 SQL で比較しない
+
+## CSP と安全ヘッダー
+
+`_headers` を**ビルド時に作る**（`vite-plugins/security-headers.ts`）。
+静的ファイルは Worker より先に配られるので、ヘッダーはここで付ける。
+
+- `index.html` のテーマ先当て（インライン script）の **sha256 を出力 HTML から毎回計算する**。
+  手書きすると script を直すたびにズレ、**画面が真っ白になる**
+- 緩めてあるのは 2 つだけ: `style-src 'unsafe-inline'`（React のインライン style）と
+  `img-src https:`（利用者が貼る画像 URL・Markdown の画像・Google のアカウント画像）
+- **`form-action` と navigate 系は入れない。** Google ログインは Worker からの 302 で、
+  ここを締めると認証が壊れうる（本番のログインはこちらで試せない）
+- Worker が返す `/api/*` には `_headers` が効かないので、`nosniff` だけ middleware で付ける
+- 確認のしかた: `_headers` の内容を `index.html` の `<meta http-equiv>` に一時的に写して
+  `npm run preview` で全画面を巡回し、`securitypolicyviolation` が 0 件であることを見る
 
 ## 設計上の注意点
 

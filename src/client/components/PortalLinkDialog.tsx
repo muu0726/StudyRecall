@@ -196,8 +196,8 @@ export default function PortalLinkDialog({
             )}
             {iconKind === 'favicon' && (
               <p className="text-caption text-fg-subtle">
-                サイトのアイコンは Google のサービスから取得します（そのサイトのドメインが Google
-                に伝わります）。オフラインでは頭文字を表示します。
+                サイトのアイコンは StudyRecall のサーバーが取りに行きます（登録したサイトの
+                ドメインがあなたの端末から外部へ出ることはありません）。取得できないときは頭文字を表示します。
               </p>
             )}
           </div>

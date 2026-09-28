@@ -783,3 +783,28 @@ export interface ImportPortalLinksResponse {
   dropped: number;
   links: PortalLinkDTO[];
 }
+
+// ---------------------------------------------------------------------------
+// 起動時にまとめて配る 1 本（/api/bootstrap）
+// ---------------------------------------------------------------------------
+
+export type BootstrapSection = 'categories' | 'studyLogs' | 'tags' | 'notebooks' | 'glossary';
+
+/**
+ * **区画ごとに独立している。** 1 つ失敗しても残りは入っており、失敗した区画だけ null になる。
+ * タイマーはここに入れない（経過時間を返す時間依存の API で、別に取る）。
+ */
+export interface BootstrapResponse {
+  categories: CategoryDTO[] | null;
+  studyLogs: StudyLogsResponse | null;
+  tags: TagCount[] | null;
+  notebooks: NotebookDTO[] | null;
+  glossary: GlossaryTermsResponse | null;
+  /** 失敗した区画の理由。全部成功したときは付かない */
+  errors?: Partial<Record<BootstrapSection, string>>;
+}
+
+export interface ReorderPortalLinksRequest {
+  /** 新しい並びの id を**全部**。欠けや余りがあれば 404 */
+  ids: string[];
+}

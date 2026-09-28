@@ -83,6 +83,33 @@ export function usePortalLinks() {
     [run],
   );
 
+  /**
+   * 並べ替え。**先に画面を並べ替えてから送る。**
+   * 押した瞬間に動かないと、並べ替えは操作している感じがしない。
+   * 失敗したらサーバーの並びに戻す（戻せなければ error に出す）。
+   */
+  const reorder = useCallback(
+    async (ids: string[]) => {
+      const previous = links;
+      setLinks((current) => {
+        const byId = new Map(current.map((link) => [link.id, link]));
+        return ids.flatMap((id) => {
+          const link = byId.get(id);
+          return link ? [link] : [];
+        });
+      });
+      try {
+        const result = await api.reorderPortalLinks(ids);
+        setLinks(result.links);
+        return null;
+      } catch (reorderError) {
+        setLinks(previous);
+        return reorderError instanceof Error ? reorderError.message : String(reorderError);
+      }
+    },
+    [links],
+  );
+
   /** 取り込み。件数は呼び出し側が文言にする */
   const importLinks = useCallback(async (body: CreatePortalLinkRequest[]) => {
     setIsSaving(true);
@@ -100,7 +127,18 @@ export function usePortalLinks() {
     }
   }, []);
 
-  return { links, isLoading, isSaving, error, reload, create, update, remove, importLinks };
+  return {
+    links,
+    isLoading,
+    isSaving,
+    error,
+    reload,
+    create,
+    update,
+    remove,
+    reorder,
+    importLinks,
+  };
 }
 
 export type PortalLinksState = ReturnType<typeof usePortalLinks>;

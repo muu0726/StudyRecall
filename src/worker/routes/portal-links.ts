@@ -14,6 +14,7 @@ import type {
   ImportPortalLinksResponse,
   PortalLinkResponse,
   PortalLinksResponse,
+  ReorderPortalLinksRequest,
   UpdatePortalLinkRequest,
 } from '../../shared/types';
 
@@ -133,6 +134,44 @@ export const portalLinksRoute = new Hono<AppEnv>()
 
     if (deleted.length === 0) return c.json({ error: '指定されたリンクが見つかりません' }, 404);
     return c.json({ ok: true });
+  })
+
+  /**
+   * 並べ替え。**受け取るのは「新しい並びの id 全部」。**
+   *
+   * 差分（この id をここへ）で受けると、送信の取りこぼしで並びが少しずつ壊れる。
+   * 全部を受け取り、**自分の行とちょうど一致しなければ 404**（他人の id・古い一覧を弾く）。
+   */
+  .post('/reorder', async (c) => {
+    const body = await c.req.json<Partial<ReorderPortalLinksRequest>>().catch(() => null);
+    const ids = Array.isArray(body?.ids) ? body.ids.filter((id) => typeof id === 'string') : null;
+    if (!ids) return c.json({ error: 'ids は配列で指定してください' }, 400);
+
+    const db = getDb(c.env);
+    const userId = c.get('userId');
+    const existing = await listRows(db, userId);
+
+    const mine = new Set(existing.map((row) => row.id));
+    const unique = new Set(ids);
+    if (unique.size !== ids.length || ids.length !== mine.size || ids.some((id) => !mine.has(id))) {
+      return c.json({ error: '並び順の対象が見つかりません' }, 404);
+    }
+
+    // 0,1,2… で振り直す。件数ぶんの UPDATE を db.batch で 1 往復にまとめる（ノートの移動と同じ）
+    const writes = ids.map((id, index) =>
+      db
+        .update(portalLinks)
+        .set({ sortOrder: index })
+        .where(and(eq(portalLinks.id, id), eq(portalLinks.userId, userId))),
+    );
+    const [first, ...rest] = writes;
+    if (first) await db.batch([first, ...rest]);
+
+    const byId = new Map(existing.map((row) => [row.id, row]));
+    const response: PortalLinksResponse = {
+      links: ids.map((id, index) => toPortalLinkDto({ ...byId.get(id)!, sortOrder: index })),
+    };
+    return c.json(response);
   })
 
   /**

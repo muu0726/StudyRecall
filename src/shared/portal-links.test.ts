@@ -5,6 +5,7 @@ import {
   filterLinks,
   iconImageOf,
   initialOf,
+  normalizeIconDomain,
   normalizeLinkInput,
   normalizeUrl,
   parseImport,
@@ -159,8 +160,22 @@ describe('categoriesOf', () => {
 });
 
 describe('iconImageOf / initialOf', () => {
-  it('favicon は URL から導く', () => {
-    expect(iconImageOf(link())).toBe('https://www.google.com/s2/favicons?domain=github.com&sz=128');
+  /* 画面から直接 Google を叩くと、登録したサイトのドメインが利用者ごとに伝わる。中継を通す */
+  it('favicon は自分のサーバー（/api/icon）を指す。外部の URL を組み立てない', () => {
+    const src = iconImageOf(link());
+    expect(src).toBe('/api/icon?domain=github.com&sz=128');
+    expect(src).not.toContain('google.com');
+  });
+
+  it('ホスト名として変な値は URL を作らない（中継を踏み台にさせない）', () => {
+    expect(normalizeIconDomain('example.com')).toBe('example.com');
+    expect(normalizeIconDomain('EXAMPLE.com ')).toBe('example.com');
+    expect(normalizeIconDomain('example..com')).toBeNull();
+    expect(normalizeIconDomain('-example.com')).toBeNull();
+    expect(normalizeIconDomain('example.com/../evil')).toBeNull();
+    expect(normalizeIconDomain('example.com?x=1')).toBeNull();
+    expect(normalizeIconDomain('a'.repeat(300))).toBeNull();
+    expect(normalizeIconDomain(null)).toBeNull();
   });
 
   it('emoji は画像を持たない（頭文字ではなく絵文字を描く側の判断に回す）', () => {

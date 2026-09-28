@@ -42,6 +42,20 @@ export function useNotebooks() {
     }
   }, []);
 
+  /**
+   * 取得済みの一覧をそのまま当てる（`/api/bootstrap` から配られたぶん）。
+   * **自分では取りに行かない。** 起動時に同じ一覧を 2 回引かないためにある。
+   */
+  const applyList = useCallback((next: NotebookDTO[] | null, message?: string) => {
+    if (next) {
+      setNotebooks(next);
+      setError(null);
+    } else if (message) {
+      setError(message);
+    }
+    setIsLoading(false);
+  }, []);
+
   /** 作ったらそのまま開く。親を指定するとカテゴリはサーバー側で親から継承される。 */
   const create = useCallback(
     async (categoryId: string, parentId?: string) => {
@@ -180,6 +194,7 @@ export function useNotebooks() {
     selectedId,
     select: setSelectedId,
     reload,
+    applyList,
     create,
     move,
     remove,

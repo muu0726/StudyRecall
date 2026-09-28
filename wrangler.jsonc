@@ -28,6 +28,9 @@
   // 本番にモックログインが漏れる。未定義なら worker 側の `=== 'true'` が偽になり自動的に無効。
   // ("false" と書かない理由: wrangler types が vars をリテラル型で吐くため、
   //  `env.ALLOW_DEV_LOGIN === 'true'` が「重ならない型の比較」で型エラーになる)
+  // 期限切れのセッションと検証トークンを 1 日 1 回掃除する（src/worker/index.ts の scheduled）。
+  // UTC 19:17 = JST 翌 4:17。利用者が動いていない時間に寄せてある。
+  "triggers": { "crons": ["17 19 * * *"] },
   // Worker は圧縮してビルドする（vite.config.ts）。ログのエラー位置を元のソースで読めるよう、マップも上げる。
   "upload_source_maps": true,
   "observability": {

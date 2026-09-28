@@ -1,5 +1,15 @@
 import { Suspense, lazy, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Download, LayoutGrid, MoreVertical, Pencil, Plus, Trash2, Upload } from 'lucide-react';
+import {
+  ArrowLeft,
+  ArrowRight,
+  Download,
+  LayoutGrid,
+  MoreVertical,
+  Pencil,
+  Plus,
+  Trash2,
+  Upload,
+} from 'lucide-react';
 import type { CreatePortalLinkRequest, PortalLinkDTO } from '../../shared/types';
 import {
   buildExport,
@@ -9,10 +19,12 @@ import {
   initialOf,
   parseImport,
 } from '../../shared/portal-links';
+import { moveTo, sameOrder, shiftVisible, type DropPosition } from '../../shared/portal-order';
 import { usePortalLinks } from '../hooks/usePortalLinks';
 import { useOpenedOnce } from '../hooks/useOpenedOnce';
 import { downloadBlob } from '../lib/export';
 import { isPlainLeftClick } from '../lib/link-click';
+import { cn } from '../lib/cn';
 import { readStoredText, writeStoredText } from '../lib/stored-value';
 import {
   Banner,
@@ -46,6 +58,9 @@ export default function PortalTab() {
   const [category, setCategory] = useState(() => readStoredText(CATEGORY_KEY));
   const [editing, setEditing] = useState<{ target: PortalLinkDTO | null } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<PortalLinkDTO | null>(null);
+  /** ドラッグ中のリンクと、落とす位置（PC だけ。スマホはメニューから動かす） */
+  const [dragging, setDragging] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<{ id: string; position: DropPosition } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -66,6 +81,46 @@ export default function PortalTab() {
   const chooseCategory = (value: string) => {
     setCategory(value);
     writeStoredText(CATEGORY_KEY, value);
+  };
+
+  /**
+   * 並べ替え。**判断は `shared/portal-order.ts`。**
+   * ドラッグ（PC）とメニューの「前へ / 後ろへ」（どの端末でも）が同じ関数を通る。
+   */
+  const applyOrder = useCallback(
+    async (next: string[]) => {
+      const current = portal.links.map((link) => link.id);
+      if (sameOrder(current, next)) return;
+      const message = await portal.reorder(next);
+      if (message) showToast(message, { kind: 'error' });
+    },
+    [portal, showToast],
+  );
+
+  const drop = async (targetId: string, position: DropPosition) => {
+    const dragged = dragging;
+    setDragging(null);
+    setDropTarget(null);
+    if (!dragged) return;
+    await applyOrder(
+      moveTo(
+        portal.links.map((link) => link.id),
+        dragged,
+        targetId,
+        position,
+      ),
+    );
+  };
+
+  const shift = async (id: string, direction: 'prev' | 'next') => {
+    await applyOrder(
+      shiftVisible(
+        portal.links.map((link) => link.id),
+        visible.map((link) => link.id),
+        id,
+        direction,
+      ),
+    );
   };
 
   /**
@@ -253,8 +308,39 @@ export default function PortalTab() {
       ) : (
         <ul className="grid grid-cols-4 gap-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8">
           {visible.map((link) => (
-            <li key={link.id} className="group relative">
-              <LinkTile key={`${link.url}|${link.iconKind}|${link.iconValue}`} link={link} />
+            <li
+              key={link.id}
+              className={cn(
+                'group relative rounded-card',
+                dragging === link.id && 'opacity-40',
+                // 落とす位置を縦線で示す（横に並ぶので before は左、after は右）
+                dropTarget?.id === link.id &&
+                  (dropTarget.position === 'before'
+                    ? 'ring-2 [box-shadow:inset_2px_0_0_var(--color-accent)] ring-accent ring-offset-0'
+                    : '[box-shadow:inset_-2px_0_0_var(--color-accent)]'),
+              )}
+              onDragOver={(event) => {
+                if (!dragging || dragging === link.id) return;
+                event.preventDefault();
+                const rect = event.currentTarget.getBoundingClientRect();
+                const position = event.clientX < rect.left + rect.width / 2 ? 'before' : 'after';
+                setDropTarget({ id: link.id, position });
+              }}
+              onDragLeave={() => setDropTarget((t) => (t?.id === link.id ? null : t))}
+              onDrop={(event) => {
+                event.preventDefault();
+                if (dropTarget?.id === link.id) void drop(link.id, dropTarget.position);
+              }}
+            >
+              <LinkTile
+                key={`${link.url}|${link.iconKind}|${link.iconValue}`}
+                link={link}
+                onDragStart={() => setDragging(link.id)}
+                onDragEnd={() => {
+                  setDragging(null);
+                  setDropTarget(null);
+                }}
+              />
               <div className="absolute top-0 right-0 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
                 <Popover
                   placement="bottom-end"
@@ -281,6 +367,33 @@ export default function PortalTab() {
                       >
                         <Pencil className="h-4 w-4" aria-hidden />
                         編集
+                      </button>
+                      {/* どの端末でも並べ替えられるように。スマホではドラッグが使えない */}
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className={menuItem()}
+                        disabled={visible[0]?.id === link.id}
+                        onClick={() => {
+                          close();
+                          void shift(link.id, 'prev');
+                        }}
+                      >
+                        <ArrowLeft className="h-4 w-4" aria-hidden />
+                        前へ
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className={menuItem()}
+                        disabled={visible.at(-1)?.id === link.id}
+                        onClick={() => {
+                          close();
+                          void shift(link.id, 'next');
+                        }}
+                      >
+                        <ArrowRight className="h-4 w-4" aria-hidden />
+                        後ろへ
                       </button>
                       <button
                         type="button"
@@ -338,8 +451,18 @@ export default function PortalTab() {
  * そのままだと並んでいるタイル全部が描き直され、画像の描画がちらつく。
  * 「読み込みに失敗した」状態は `key`（URL とアイコン）で捨てる。
  */
-const LinkTile = memo(function LinkTile({ link }: { link: PortalLinkDTO }) {
+const LinkTile = memo(function LinkTile({
+  link,
+  onDragStart,
+  onDragEnd,
+}: {
+  link: PortalLinkDTO;
+  onDragStart: () => void;
+  onDragEnd: () => void;
+}) {
   const [failed, setFailed] = useState(false);
+  // ドラッグの終わりに出るクリックで、外のサイトが開いてしまうのを止める
+  const draggedRef = useRef(false);
   const image = failed ? null : iconImageOf(link);
 
   return (
@@ -348,6 +471,20 @@ const LinkTile = memo(function LinkTile({ link }: { link: PortalLinkDTO }) {
       target="_blank"
       rel="noopener noreferrer"
       title={`${link.title}（${link.url}）`}
+      draggable
+      onDragStart={(event) => {
+        // リンクの既定のドラッグ（URL の持ち出し）と混ざらないよう、移動として扱う
+        event.dataTransfer.effectAllowed = 'move';
+        draggedRef.current = true;
+        onDragStart();
+      }}
+      onDragEnd={() => {
+        onDragEnd();
+        // クリックはドラッグの直後に飛んでくるので、1 拍おいてから戻す
+        setTimeout(() => {
+          draggedRef.current = false;
+        }, 0);
+      }}
       /*
        * **自分で新しいタブを開く。**
        * インストールしたアプリ（standalone の PWA）では `target="_blank"` が守られず、
@@ -357,6 +494,11 @@ const LinkTile = memo(function LinkTile({ link }: { link: PortalLinkDTO }) {
        * 今までどおり `<a>` の動作に戻る（「押しても何も起きない」を作らない）。
        */
       onClick={(event) => {
+        // 並べ替えたときは開かない
+        if (draggedRef.current) {
+          event.preventDefault();
+          return;
+        }
         if (!isPlainLeftClick(event.nativeEvent)) return;
         const opened = window.open(link.url, '_blank', 'noopener,noreferrer');
         if (opened) event.preventDefault();

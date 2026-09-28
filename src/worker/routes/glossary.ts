@@ -150,40 +150,48 @@ async function findDuplicate(
   return row?.id ?? null;
 }
 
+/**
+ * 用語の一覧。カテゴリとタグだけで絞る（検索と習得ステータスはクライアント側）。
+ * **ルートと `/api/bootstrap` の両方がここを通る。**
+ */
+export async function listGlossaryTerms(
+  db: Db,
+  userId: string,
+  filter: { categoryId?: string; tag?: string } = {},
+): Promise<GlossaryTermsResponse> {
+  const { categoryId, tag } = filter;
+
+  const filters = [eq(glossaryTerms.userId, userId)];
+  if (categoryId) filters.push(eq(glossaryTerms.categoryId, categoryId));
+  if (tag) {
+    // quizzes.ts と同じ json_each の書き方に揃える
+    filters.push(sql`exists (select 1 from json_each(${glossaryTerms.tags}) where value = ${tag})`);
+  }
+
+  const rows = await db
+    .select(glossarySelectWithStats)
+    .from(glossaryTerms)
+    .innerJoin(categories, eq(glossaryTerms.categoryId, categories.id))
+    .leftJoin(quizQuestions, glossaryCardsJoin(userId))
+    .where(and(...filters))
+    .groupBy(glossaryTerms.id)
+    .orderBy(desc(glossaryTerms.updatedAt))
+    // 1 件多く取って、切れたかどうかを判定する
+    .limit(GLOSSARY_LIMIT + 1);
+
+  return {
+    terms: rows.slice(0, GLOSSARY_LIMIT).map(toGlossaryTermDto),
+    truncated: rows.length > GLOSSARY_LIMIT,
+  };
+}
+
 export const glossaryRoute = new Hono<AppEnv>()
   /** 一覧。カテゴリとタグだけで絞る（q と習得ステータスはクライアント側） */
   .get('/', async (c) => {
-    const db = getDb(c.env);
-    const userId = c.get('userId');
-
-    const categoryId = c.req.query('categoryId');
-    const tag = c.req.query('tag');
-
-    const filters = [eq(glossaryTerms.userId, userId)];
-    if (categoryId) filters.push(eq(glossaryTerms.categoryId, categoryId));
-    if (tag) {
-      // quizzes.ts と同じ json_each の書き方に揃える
-      filters.push(
-        sql`exists (select 1 from json_each(${glossaryTerms.tags}) where value = ${tag})`,
-      );
-    }
-
-    const rows = await db
-      .select(glossarySelectWithStats)
-      .from(glossaryTerms)
-      .innerJoin(categories, eq(glossaryTerms.categoryId, categories.id))
-      .leftJoin(quizQuestions, glossaryCardsJoin(userId))
-      .where(and(...filters))
-      .groupBy(glossaryTerms.id)
-      .orderBy(desc(glossaryTerms.updatedAt))
-      // 1 件多く取って、切れたかどうかを判定する
-      .limit(GLOSSARY_LIMIT + 1);
-
-    const truncated = rows.length > GLOSSARY_LIMIT;
-    const response: GlossaryTermsResponse = {
-      terms: rows.slice(0, GLOSSARY_LIMIT).map(toGlossaryTermDto),
-      truncated,
-    };
+    const response = await listGlossaryTerms(getDb(c.env), c.get('userId'), {
+      categoryId: c.req.query('categoryId'),
+      tag: c.req.query('tag'),
+    });
     return c.json(response);
   })
 

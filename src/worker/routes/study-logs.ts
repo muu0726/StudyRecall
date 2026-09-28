@@ -19,7 +19,12 @@ import {
 import { getSettings } from '../lib/user-settings';
 import { getMonthlyQuota, quotaWarning } from '../lib/quota';
 import { MONTHLY_GENERATION_LIMIT } from '../../shared/types';
-import type { CreateStudyLogRequest, CreateStudyLogResponse, StudyStats } from '../../shared/types';
+import type {
+  CreateStudyLogRequest,
+  CreateStudyLogResponse,
+  StudyLogsResponse,
+  StudyStats,
+} from '../../shared/types';
 
 const LOG_LIMIT = 100;
 /** 学習メモから作る問題数の上限 */
@@ -28,7 +33,7 @@ const QUESTIONS_PER_LOG = 5;
 /** timestamp モードのカラムは UNIX 秒で格納されるため、生 SQL 比較用に秒へ変換する */
 const toUnixSeconds = (date: Date) => Math.floor(date.getTime() / 1000);
 
-async function buildStats(db: Db, userId: string): Promise<StudyStats> {
+export async function buildStats(db: Db, userId: string): Promise<StudyStats> {
   const todaySec = toUnixSeconds(startOfTodayJst());
   const weekSec = toUnixSeconds(startOfWeekJst());
   // due_at は秒精度の unixepoch で入っている（drizzle の timestamp モード）
@@ -102,30 +107,36 @@ async function buildStats(db: Db, userId: string): Promise<StudyStats> {
   };
 }
 
+/**
+ * 学習記録の一覧と集計。**ルートと `/api/bootstrap` の両方がここを通る。**
+ * 一覧は画面用の上限（`LOG_LIMIT`）で切る。バックアップはこの関数を通さない。
+ */
+export async function listStudyLogs(db: Db, userId: string): Promise<StudyLogsResponse> {
+  const logsQuery = db
+    .select({
+      id: studyLogs.id,
+      userId: studyLogs.userId,
+      categoryId: studyLogs.categoryId,
+      durationMinutes: studyLogs.durationMinutes,
+      notes: studyLogs.notes,
+      createdAt: studyLogs.createdAt,
+      categoryName: categories.name,
+      categoryColor: categories.color,
+    })
+    .from(studyLogs)
+    .innerJoin(categories, eq(studyLogs.categoryId, categories.id))
+    .where(eq(studyLogs.userId, userId))
+    .orderBy(desc(studyLogs.createdAt))
+    .limit(LOG_LIMIT);
+
+  const [rows, stats] = await Promise.all([logsQuery, buildStats(db, userId)]);
+  return { logs: rows.map(toStudyLogDto), stats };
+}
+
 export const studyLogsRoute = new Hono<AppEnv>()
   .get('/', async (c) => {
-    const db = getDb(c.env);
-    const userId = c.get('userId');
-
-    const logsQuery = db
-      .select({
-        id: studyLogs.id,
-        userId: studyLogs.userId,
-        categoryId: studyLogs.categoryId,
-        durationMinutes: studyLogs.durationMinutes,
-        notes: studyLogs.notes,
-        createdAt: studyLogs.createdAt,
-        categoryName: categories.name,
-        categoryColor: categories.color,
-      })
-      .from(studyLogs)
-      .innerJoin(categories, eq(studyLogs.categoryId, categories.id))
-      .where(eq(studyLogs.userId, userId))
-      .orderBy(desc(studyLogs.createdAt))
-      .limit(LOG_LIMIT);
-
-    const [rows, stats] = await Promise.all([logsQuery, buildStats(db, userId)]);
-    return c.json({ logs: rows.map(toStudyLogDto), stats });
+    const response = await listStudyLogs(getDb(c.env), c.get('userId'));
+    return c.json(response);
   })
 
   .post('/', async (c) => {

@@ -78,17 +78,36 @@ export function domainOf(url: string): string {
   }
 }
 
+/** ファビコンの大きさ。サーバーの中継とキャッシュのキーもこの値で揃える */
+export const FAVICON_SIZE = 128;
+
 /**
- * ファビコンの取得先（Google のサービス）。
+ * ホスト名として受け取ってよい形か。だめなら null。
  *
- * **登録したサイトのドメインが Google に伝わる。** それが嫌な人のために、
- * 画面では絵文字と画像 URL も選べるようにしてある。
- * オフラインでは読めないので、読み込みに失敗したら頭文字を出す（画面側の役目）。
+ * **画面とサーバーの両方がこれを通る。** サーバーは受け取った値をそのまま外部の URL に
+ * 埋めるので、ここが緩いと中継を踏み台にされる（任意の取得先を作られる）。
  */
-export function faviconUrl(url: string, size = 128): string {
-  const domain = domainOf(url);
+export function normalizeIconDomain(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const domain = raw.trim().toLowerCase();
+  if (!domain || domain.length > 253) return null;
+  // 英数と . - だけ。先頭・末尾の . - と連続する .. は認めない
+  if (!/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/.test(domain)) return null;
+  if (domain.includes('..')) return null;
+  return domain;
+}
+
+/**
+ * ファビコンの取得先。**自分のサーバー（`/api/icon`）を通す。**
+ *
+ * 画面から直接 Google を叩くと、**登録したサイトのドメインが利用者ごとに Google へ伝わる**。
+ * 中継にすると伝わるのはサーバーだけになり、2 回目以降はキャッシュから返せる。
+ * それでも取れないとき（オフラインなど）は、読み込み失敗として頭文字に落ちる（画面側の役目）。
+ */
+export function faviconUrl(url: string, size = FAVICON_SIZE): string {
+  const domain = normalizeIconDomain(domainOf(url));
   if (!domain) return '';
-  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=${size}`;
+  return `/api/icon?domain=${encodeURIComponent(domain)}&sz=${size}`;
 }
 
 /** アイコンに出す頭文字。題名が空ならドメインの頭を使う */

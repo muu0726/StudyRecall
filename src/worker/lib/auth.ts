@@ -70,6 +70,20 @@ export function createAuth(env: Env, requestUrl: string) {
       // D1 は対話的トランザクションを持たないので逐次実行させる
       transaction: false,
     }),
+    /*
+     * セッションの中身を署名付き Cookie にも持たせる。
+     *
+     * **API ごとに `sessions` を引かなくなる。** `requireAuth` は毎リクエストで
+     * `getSession` を呼ぶので、これが無いと画面を 1 回開くたびに D1 へその回数だけ行く。
+     *
+     * 代償: **別の端末でサインアウトしても、この端末では最大 5 分は有効なまま**になる。
+     * 期限を延ばすほど往復は減るが、取り消しの効きが遅くなる。
+     *
+     * なお `requireAuth` は `getSession({ headers })` としか呼べず（Hono の応答は別に作る）、
+     * 焼き直された Cookie を返せない。キャッシュの更新は画面側の `authClient.useSession()`
+     * （`/api/auth/get-session`）が担う。
+     */
+    session: { cookieCache: { enabled: true, maxAge: 300 } },
     // 開発用モックログインの土台。Google が未設定でもログインできる経路を残す。
     emailAndPassword: { enabled: true },
     databaseHooks: {

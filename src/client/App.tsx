@@ -157,7 +157,6 @@ export default function App() {
   const tasks = useTasks({ active: view === 'tasks' });
   /** 用語辞書。絞り込みは画面側で畳むので、ここは取得と CRUD だけ */
   const glossary = useGlossary();
-  const { reload: reloadGlossary } = glossary;
   /**
    * 用語辞書の Drive 書き出しの状態。連携設定と同じ DTO から取る。
    * **辞書の画面を開いたときだけ引く**（全ユーザーが毎回叩く理由が無い）。
@@ -228,28 +227,32 @@ export default function App() {
    * カテゴリ・学習記録＋統計・タグ・ノートをまとめて取り直す。
    * ノートも含めるのは、どの画面を見ていてもサイドバーのツリーを最新に保つため。
    */
-  const { reload: reloadNotebooks } = notes;
+  const { applyList: applyNotebooks } = notes;
+  const { applyList: applyGlossary } = glossary;
   const refresh = useCallback(async () => {
     try {
-      const [categoriesResult, logsResult, tagsResult] = await Promise.all([
-        api.listCategories(),
-        api.getStudyLogs(),
-        api.listTags(),
-        reloadNotebooks(),
-        // 用語はノートのプレビューでも印を付けるので、辞書を開かなくても要る
-        reloadGlossary(),
-      ]);
-      setCategories(categoriesResult.categories);
-      setLogsData(logsResult);
-      setTags(tagsResult.tags);
-      setError(null);
+      /*
+       * **1 本で取る。** 以前は 5 本を並べて叩いていて、ログイン確認もその回数だけ走っていた。
+       * 区画ごとに独立しているので、1 つ失敗しても残りはそのまま当たる
+       * （ノートだけ失敗したら他は更新する、という以前の挙動を保つ）。
+       */
+      const data = await api.getBootstrap();
+      if (data.categories) setCategories(data.categories);
+      if (data.studyLogs) setLogsData(data.studyLogs);
+      if (data.tags) setTags(data.tags);
+      // 用語はノートのプレビューでも印を付けるので、辞書を開かなくても要る
+      applyNotebooks(data.notebooks, data.errors?.notebooks);
+      applyGlossary(data.glossary, data.errors?.glossary);
+
+      // 帯に出すのは、画面の骨格になる区画の失敗だけ（ノートは notes.error が持つ）
+      setError(data.errors?.categories ?? data.errors?.studyLogs ?? data.errors?.tags ?? null);
       markFetchedRef.current?.();
     } catch (refreshError) {
       setError(refreshError instanceof Error ? refreshError.message : String(refreshError));
     } finally {
       setIsLoading(false);
     }
-  }, [reloadNotebooks, reloadGlossary]);
+  }, [applyNotebooks, applyGlossary]);
 
   useEffect(() => {
     void refresh();
