@@ -12,6 +12,7 @@ import {
 import { usePortalLinks } from '../hooks/usePortalLinks';
 import { useOpenedOnce } from '../hooks/useOpenedOnce';
 import { downloadBlob } from '../lib/export';
+import { isPlainLeftClick } from '../lib/link-click';
 import { readStoredText, writeStoredText } from '../lib/stored-value';
 import {
   Banner,
@@ -347,6 +348,19 @@ const LinkTile = memo(function LinkTile({ link }: { link: PortalLinkDTO }) {
       target="_blank"
       rel="noopener noreferrer"
       title={`${link.title}（${link.url}）`}
+      /*
+       * **自分で新しいタブを開く。**
+       * インストールしたアプリ（standalone の PWA）では `target="_blank"` が守られず、
+       * アプリの窓ごと外のサイトへ移ってしまうことがある。戻るボタンが無いので詰む。
+       *
+       * 開けたことを確かめてから既定の遷移を止めるので、ポップアップが阻まれたときは
+       * 今までどおり `<a>` の動作に戻る（「押しても何も起きない」を作らない）。
+       */
+      onClick={(event) => {
+        if (!isPlainLeftClick(event.nativeEvent)) return;
+        const opened = window.open(link.url, '_blank', 'noopener,noreferrer');
+        if (opened) event.preventDefault();
+      }}
       className="flex flex-col items-center gap-1.5 rounded-card p-1 outline-offset-2 transition-transform duration-150 hover:-translate-y-0.5 hover:scale-105 active:scale-95 motion-reduce:transform-none motion-reduce:transition-none"
     >
       <span

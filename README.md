@@ -280,6 +280,19 @@ scripts/
 スキームが無ければ `https://` を補う（「github.com」と打てる）。
 補うのは**スキームらしき文字列が無いときだけ**なので、`javascript:alert(1)` は補われずに弾かれる。
 
+### 別タブで開くのに `target="_blank"` だけでは足りない
+
+**インストールしたアプリ（`display: standalone` の PWA）は `target="_blank"` を守らないことがある。**
+アプリの窓ごと外のサイトへ移ってしまい、アドレスバーも戻るボタンも無いので学習画面へ戻れなくなる。
+
+そこでタイルは押されたときに**自分で `window.open(url, '_blank', 'noopener,noreferrer')` する**。
+
+- **開けたことを確かめてから `preventDefault()`**。ポップアップが阻まれたときは `<a>` の既定の動作に戻る
+  （「押しても何も起きない」を作らない）
+- **修飾キー付きのクリックと中クリックには手を出さない**（`src/client/lib/link-click.ts` の
+  `isPlainLeftClick`）。ブラウザ自身の「新しいタブ / 窓で開く」を横取りすると、いつもの使い方が壊れる
+- `<a href target="_blank">` は残す。右クリックのメニュー・中クリック・リンクのコピーのため
+
 ### アイコン
 
 `favicon`（既定）/ `emoji` / `image` の 3 通り。favicon は
