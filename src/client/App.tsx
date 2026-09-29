@@ -22,7 +22,6 @@ import { useGlossary } from './hooks/useGlossary';
 import { useGlossaryDriveSync } from './hooks/useGlossaryDriveSync';
 import { useNoteSaver } from './hooks/useNoteSaver';
 import { useTasks } from './hooks/useTasks';
-import { usePwaUpdate } from './hooks/usePwaUpdate';
 import Sidebar, { VIEWS, type ViewId } from './components/Sidebar';
 import StudyTab from './components/StudyTab';
 import NoteTabs from './components/NoteTabs';
@@ -142,9 +141,6 @@ export default function App() {
   const [addTermToken, setAddTermToken] = useState(0);
   const [isTrashOpen, setIsTrashOpen] = useState(false);
   const [isIntegrationsOpen, setIsIntegrationsOpen] = useState(false);
-
-  // 新しいビルドが用意できたらトーストで知らせる（本番ビルドでのみ動く）
-  usePwaUpdate();
 
   /** ノートはサイドバーのツリーとノート画面の両方が描くので、状態はここで持つ */
   const notes = useNotebooks();

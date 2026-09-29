@@ -22,6 +22,12 @@ export default defineConfig({
       // デプロイ直後の 1 回目は古い画面が出る（実際に本番で踏んだ）。
       // 'prompt' にして、更新があることをトーストで知らせる。
       registerType: 'prompt',
+      /*
+       * 登録は `usePwaUpdate`（virtual:pwa-register）が行うので、**registerSW.js は要らない。**
+       * 既定（'auto'）のままだと配信されないファイルが出力に残り、
+       * `/registerSW.js` を叩くと SPA のフォールバックで index.html が返っていた。
+       */
+      injectRegister: null,
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
         name: 'StudyRecall',
