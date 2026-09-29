@@ -8,7 +8,6 @@ import {
   Download,
   FileArchive,
   FolderPlus,
-  Hash,
   Layers,
   LayoutGrid,
   Link2,
@@ -32,7 +31,7 @@ import { authClient } from '../lib/auth-client';
 import { exportAnkiCsv, exportNotebooksZip, todayStamp } from '../lib/export';
 import { cn } from '../lib/cn';
 import { APP_VERSION, formatVersion } from '../lib/version';
-import { LAYER, Segmented, selectableRow } from '../ui';
+import { FilterMenu, LAYER, Segmented, selectableRow } from '../ui';
 import { useToast } from './Toast';
 import NoteTree, { type MoveIntent } from './NoteTree';
 import { useTheme } from '../contexts/ThemeProvider';
@@ -329,42 +328,30 @@ function SidebarBody({
           </div>
         )}
 
-        {/* ジャンル。AI が付けたタグからそのまま絞り込み復習へ飛べる。 */}
+        {/*
+          ジャンル。AI が付けたタグからそのまま絞り込み復習へ飛べる。
+
+          **一覧はパネルに畳む。** 並べるとタグの数だけノートのツリーが下へ押し出され、
+          肝心の「どのノートを開くか」が見えなくなっていた。
+          中身は復習画面の絞り込みと同じ FilterMenu で、先頭の「すべて」が解除になる。
+        */}
         {!collapsed && (
           <div className="mt-6">
             <p className="px-3 text-caption font-semibold tracking-wide text-fg-subtle uppercase">
               ジャンル
             </p>
-            {tags.length === 0 ? (
-              <p className="mt-2 px-3 text-caption leading-relaxed text-fg-subtle">
-                まだタグがありません。問題を生成するとAIがジャンルを付けます。
-              </p>
-            ) : (
-              <ul className="mt-1.5 space-y-0.5">
-                {tags.map(({ tag, count }) => {
-                  const isActive = view === 'review' && activeTag === tag;
-                  return (
-                    <li key={tag}>
-                      <button
-                        type="button"
-                        onClick={() => onSelectTag(tag)}
-                        aria-current={isActive ? 'page' : undefined}
-                        className={selectableRow(
-                          isActive,
-                          'flex w-full items-center gap-1.5 px-3 py-1.5 text-body',
-                        )}
-                      >
-                        <Hash className="h-3.5 w-3.5 shrink-0 text-fg-subtle" aria-hidden />
-                        <span className="min-w-0 flex-1 truncate text-left">{tag}</span>
-                        <span className="shrink-0 text-caption text-fg-subtle tabular-nums">
-                          {count}
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
+            <div className="mt-1.5 px-3">
+              <FilterMenu
+                label="ジャンル"
+                value={view === 'review' ? activeTag : ''}
+                onChange={onSelectTag}
+                emptyHint="まだタグがありません。問題を生成するとAIがジャンルを付けます。"
+                className="h-9 w-full justify-start"
+                // ドロワー（z-40）の中から開くので、既定の段のままだと裏に隠れる
+                layer="overDrawer"
+                options={tags.map(({ tag, count }) => ({ value: tag, label: `#${tag}`, count }))}
+              />
+            </div>
           </div>
         )}
       </nav>

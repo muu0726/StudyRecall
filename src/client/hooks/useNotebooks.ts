@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import type { NotebookDTO } from '../../shared/types';
 import { collectSubtreeIds } from '../../shared/note-tree';
-import { api } from '../lib/api';
+import { api, asNoteDuplicate } from '../lib/api';
 import { clearDraft } from '../lib/note-draft';
 import { useToast } from '../components/Toast';
 import type { MoveIntent } from '../components/NoteTree';
@@ -12,8 +12,6 @@ import type { MoveIntent } from '../components/NoteTree';
  * ツリーはサイドバー、本文はノート画面と、**同じノートを 2 か所が描く**ようになったため、
  * どちらか一方に state を置くと必ずズレる。App が本フックを持ち、両方へ props で降ろす。
  */
-
-const NEW_NOTE_TITLE = '無題のノート';
 
 export function useNotebooks() {
   const { showToast } = useToast();
@@ -56,24 +54,35 @@ export function useNotebooks() {
     setIsLoading(false);
   }, []);
 
-  /** 作ったらそのまま開く。親を指定するとカテゴリはサーバー側で親から継承される。 */
+  /**
+   * 作ったらそのまま開く。親を指定するとカテゴリはサーバー側で親から継承される。
+   *
+   * **題名は呼び出し側が決める**（以前は「無題のノート」を送っていた）。
+   * 同じ場所に同じ名前があるとサーバーが断るので、その文言は投げずに返す
+   * （ダイアログが入力欄のそばに出す。トーストだと入力中に見落とす）。
+   */
   const create = useCallback(
-    async (categoryId: string, parentId?: string) => {
+    async (
+      categoryId: string,
+      parentId: string | undefined,
+      title: string,
+    ): Promise<{ notebook: NotebookDTO } | { error: string }> => {
       try {
         const { notebook } = await api.createNotebook({
           categoryId,
-          title: NEW_NOTE_TITLE,
+          title,
           content: '',
           ...(parentId ? { parentId } : {}),
         });
         await reload();
         setSelectedId(notebook.id);
-        return notebook;
+        return { notebook };
       } catch (createError) {
-        showToast(createError instanceof Error ? createError.message : String(createError), {
-          kind: 'error',
-        });
-        return null;
+        const duplicate = asNoteDuplicate(createError);
+        if (duplicate) return { error: duplicate };
+        const message = createError instanceof Error ? createError.message : String(createError);
+        showToast(message, { kind: 'error' });
+        return { error: message };
       }
     },
     [reload, showToast],

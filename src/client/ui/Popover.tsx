@@ -25,6 +25,11 @@ interface PopoverProps {
   placement?: Placement;
   panelClassName?: string;
   role?: 'menu' | 'listbox';
+  /**
+   * 重なりの段。既定は通常のポップオーバー。
+   * `'overDrawer'` は**モバイルのドロワーの中から開くとき**に使う（既定だと裏に隠れる）。
+   */
+  layer?: 'base' | 'overDrawer';
   children: (close: () => void) => ReactNode;
 }
 
@@ -33,8 +38,13 @@ export function Popover({
   placement = 'bottom-start',
   panelClassName,
   role = 'menu',
+  layer = 'base',
   children,
 }: PopoverProps) {
+  const layers =
+    layer === 'overDrawer'
+      ? { backdrop: LAYER.drawerPopoverBackdrop, panel: LAYER.drawerPopoverPanel }
+      : { backdrop: LAYER.popoverBackdrop, panel: LAYER.popoverPanel };
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState<PopoverPosition | null>(null);
   const boxRef = useRef<HTMLDivElement>(null);
@@ -91,7 +101,7 @@ export function Popover({
         createPortal(
           <>
             <div
-              className={cn('fixed inset-0', LAYER.popoverBackdrop)}
+              className={cn('fixed inset-0', layers.backdrop)}
               onClick={() => setOpen(false)}
               aria-hidden
             />
@@ -102,7 +112,7 @@ export function Popover({
               style={position ?? { top: 0, left: 0, visibility: 'hidden' }}
               className={cn(
                 'fixed w-56 overflow-hidden rounded-card border border-line-strong bg-surface py-1 shadow-overlay',
-                LAYER.popoverPanel,
+                layers.panel,
                 panelClassName,
               )}
             >

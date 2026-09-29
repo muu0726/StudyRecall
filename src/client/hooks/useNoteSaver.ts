@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { NotebookDTO } from '../../shared/types';
-import { api, asNotebookConflict } from '../lib/api';
+import { api, asNotebookConflict, asNoteDuplicate } from '../lib/api';
 import { clearDraft, saveDraft } from '../lib/note-draft';
 
 /**
@@ -78,9 +78,14 @@ export interface NoteSaver {
 interface Options {
   /** 保存が通ったときに一覧を差し替える */
   onSaved: (notebook: NotebookDTO) => void;
+  /**
+   * サーバーが内容を理由に断ったとき（同じ場所に同じ名前、など）。
+   * **理由の出ない失敗にしないため**にある。競合（他端末の更新）はここへ来ない。
+   */
+  onRejected?: (message: string) => void;
 }
 
-export function useNoteSaver({ onSaved }: Options): NoteSaver {
+export function useNoteSaver({ onSaved, onRejected }: Options): NoteSaver {
   const entries = useRef(new Map<string, Entry>());
   /** 再レンダーを起こすための写し。判断は常に entries を見る */
   const [dirtyIds, setDirtyIds] = useState<ReadonlySet<string>>(() => new Set());
@@ -88,6 +93,8 @@ export function useNoteSaver({ onSaved }: Options): NoteSaver {
 
   const onSavedRef = useRef(onSaved);
   onSavedRef.current = onSaved;
+  const onRejectedRef = useRef(onRejected);
+  onRejectedRef.current = onRejected;
 
   const entry = useCallback((noteId: string): Entry => {
     let found = entries.current.get(noteId);
@@ -158,6 +165,9 @@ export function useNoteSaver({ onSaved }: Options): NoteSaver {
           e.failed = !options.manual;
           return false;
         }
+        // 同じ名前などサーバーが内容を断った場合は、理由を伝える（黙って失敗させない）
+        const rejected = asNoteDuplicate(error);
+        if (rejected) onRejectedRef.current?.(rejected);
         // 通信断などは端末の退避が残っているので、書いた内容は失われない
         e.failed = true;
         return false;

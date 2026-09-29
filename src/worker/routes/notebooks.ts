@@ -11,6 +11,7 @@ import { CONTENT_KEPT, clampQuestionCount, generateQuizFromNotebook } from '../l
 import { canMove, collectSubtreeIds } from '../../shared/note-tree';
 import { orderDeepestFirst } from '../../shared/note-purge-order';
 import { buildPromptSource } from '../../shared/note-sanitize';
+import { findDuplicateTitle, sameTitle } from '../../shared/note-title';
 import { getMonthlyQuota, quotaWarning } from '../lib/quota';
 import {
   DEFAULT_GENERATED_QUESTIONS,
@@ -68,6 +69,27 @@ function loadTreeShape(db: Db, userId: string) {
     })
     .from(notebooks)
     .where(and(eq(notebooks.userId, userId), alive()));
+}
+
+/**
+ * 同じ場所に並ぶノート（兄弟）の題名。**生きているものだけ。**
+ *
+ * ルート（`parentId` が null）の兄弟は「同じカテゴリのルート」。
+ * SQLite は大小・全半角を畳めないので、突き合わせは `findDuplicateTitle` が手元で行う。
+ */
+function listSiblings(db: Db, userId: string, parentId: string | null, categoryId: string) {
+  return db
+    .select({ id: notebooks.id, title: notebooks.title })
+    .from(notebooks)
+    .where(
+      and(
+        eq(notebooks.userId, userId),
+        alive(),
+        parentId === null
+          ? and(sql`${notebooks.parentId} is null`, eq(notebooks.categoryId, categoryId))
+          : eq(notebooks.parentId, parentId),
+      ),
+    );
 }
 
 /** 兄弟の末尾に置くための sortOrder */
@@ -159,6 +181,23 @@ export const notebooksRoute = new Hono<AppEnv>()
       .limit(1);
     if (!category) return c.json({ error: '指定されたカテゴリが見つかりません' }, 404);
 
+    /*
+     * **同じ場所に同じ名前を作らせない。**
+     * 名前を付けずに閉じた「無題のノート」が積み上がるのをやめるために入れた。
+     * 一意インデックスではなく問い合わせで確かめるのは、`parent_id` が NULL の行を
+     * SQLite の一意制約が重複として扱わないため（判定用の列を足す移行が要る）。
+     */
+    const duplicate = findDuplicateTitle(
+      await listSiblings(db, userId, parentId, categoryId),
+      title,
+    );
+    if (duplicate) {
+      return c.json(
+        { error: 'このフォルダに同じ名前のノートがあります', duplicate: true, id: duplicate.id },
+        409,
+      );
+    }
+
     const [row] = await db
       .insert(notebooks)
       .values({
@@ -228,6 +267,24 @@ export const notebooksRoute = new Hono<AppEnv>()
         .where(and(eq(categories.id, categoryId), eq(categories.userId, userId)))
         .limit(1);
       if (!category) return c.json({ error: '指定されたカテゴリが見つかりません' }, 404);
+    }
+
+    /*
+     * 名前を変えるときも、同じ場所に同じ名前を作らせない（作成と同じ規則）。
+     * **本文の楽観ロックの 409 とは本文で見分けられる**（あちらは currentContent を持つ）。
+     */
+    if (title !== undefined && !sameTitle(title, existing.title)) {
+      const duplicate = findDuplicateTitle(
+        await listSiblings(db, userId, existing.parentId, categoryId ?? existing.categoryId),
+        title,
+        id,
+      );
+      if (duplicate) {
+        return c.json(
+          { error: 'このフォルダに同じ名前のノートがあります', duplicate: true, id: duplicate.id },
+          409,
+        );
+      }
     }
 
     // 楽観的ロック。読み込んだ時点の updatedAt を突き合わせて、

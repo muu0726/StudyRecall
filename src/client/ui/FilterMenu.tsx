@@ -27,14 +27,31 @@ interface Props {
   onChange: (value: string) => void;
   /** 選べるものが 1 つも無いときに出す案内 */
   emptyHint?: string;
+  /** 引き金に足すクラス。サイドバーのように行幅いっぱいにしたいときへ */
+  className?: string;
+  /** パネルに足すクラス（幅を広げたいときなど） */
+  panelClassName?: string;
+  /** ドロワーの中から開くときは 'overDrawer'（既定のままだとドロワーの裏に隠れる） */
+  layer?: 'base' | 'overDrawer';
 }
 
-export function FilterMenu({ label, value, options, onChange, emptyHint }: Props) {
+export function FilterMenu({
+  label,
+  value,
+  options,
+  onChange,
+  emptyHint,
+  className,
+  panelClassName,
+  layer,
+}: Props) {
   const selected = options.find((option) => option.value === value);
 
   return (
     <Popover
       role="listbox"
+      layer={layer}
+      panelClassName={panelClassName}
       trigger={({ open, toggle }) => (
         <button
           type="button"
@@ -47,6 +64,7 @@ export function FilterMenu({ label, value, options, onChange, emptyHint }: Props
             selected
               ? 'border-accent bg-accent-soft text-accent-text'
               : 'border-line-strong text-fg-muted hover:bg-row-hover hover:text-fg',
+            className,
           )}
         >
           {selected?.dot && (
@@ -56,7 +74,9 @@ export function FilterMenu({ label, value, options, onChange, emptyHint }: Props
               aria-hidden
             />
           )}
-          <span className="max-w-[9rem] truncate">{selected ? selected.label : label}</span>
+          <span className={cn('max-w-[9rem] truncate', className && 'max-w-none flex-1 text-left')}>
+            {selected ? selected.label : label}
+          </span>
           <ChevronDown className="h-3.5 w-3.5 shrink-0" aria-hidden />
         </button>
       )}

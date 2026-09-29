@@ -451,6 +451,18 @@ export function asNotebookConflict(error: unknown): NotebookConflictResponse | n
   return null;
 }
 
+/**
+ * POST/PUT /api/notebooks が「同じ場所に同じ名前がある」を返したか判定する。
+ * **本文の競合（409）と本文で見分ける**（あちらは currentContent を持つ）。
+ */
+export function asNoteDuplicate(error: unknown): string | null {
+  if (error instanceof ApiError && error.status === 409) {
+    const body = error.body as { duplicate?: unknown; error?: unknown } | null;
+    if (body?.duplicate === true && typeof body.error === 'string') return body.error;
+  }
+  return null;
+}
+
 /** POST/PUT /api/glossary が「同じ用語が既にある」を返したか判定する */
 export function asGlossaryDuplicate(error: unknown): GlossaryDuplicateResponse | null {
   if (error instanceof ApiError && error.status === 409) {

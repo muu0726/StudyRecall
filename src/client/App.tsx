@@ -34,6 +34,8 @@ import { cn } from './lib/cn';
 import { exportNotebookMarkdown } from './lib/export';
 import { lazyWithPreload } from './lib/lazy-with-preload';
 import { useOpenedOnce } from './hooks/useOpenedOnce';
+import { siblingsIn } from '../shared/note-title';
+import type { CreateNoteTarget } from './components/CreateNoteDialog';
 import { LAYER, menuItem } from './ui';
 
 /*
@@ -52,6 +54,7 @@ const IntegrationsModal = lazyWithPreload(() => import('./components/Integration
 const RestoreBackupDialog = lazyWithPreload(() => import('./components/RestoreBackupDialog'));
 const DeleteCategoryDialog = lazyWithPreload(() => import('./components/DeleteCategoryDialog'));
 const CreateCategoryDialog = lazyWithPreload(() => import('./components/CreateCategoryDialog'));
+const CreateNoteDialog = lazyWithPreload(() => import('./components/CreateNoteDialog'));
 const MoveNoteDialog = lazyWithPreload(() => import('./components/MoveNoteDialog'));
 const TrashDialog = lazyWithPreload(() => import('./components/TrashDialog'));
 
@@ -67,6 +70,7 @@ const DEFERRED = [
   RestoreBackupDialog,
   DeleteCategoryDialog,
   CreateCategoryDialog,
+  CreateNoteDialog,
   MoveNoteDialog,
   TrashDialog,
 ];
@@ -190,7 +194,10 @@ export default function App() {
    * 保留中の保存が消える。未保存の点もここが持つ集合から出す。
    */
   const { replace: replaceNotebook } = notes;
-  const saver = useNoteSaver({ onSaved: replaceNotebook });
+  const saver = useNoteSaver({
+    onSaved: replaceNotebook,
+    onRejected: (message) => showToast(message, { kind: 'error' }),
+  });
 
   /** ツリーの ⋯ から開くメニューと、その先の移動・削除ダイアログ */
   const [menuFor, setMenuFor] = useState<NotebookDTO | null>(null);
@@ -200,6 +207,10 @@ export default function App() {
    */
   const [renameTargetId, setRenameTargetId] = useState<string | null>(null);
   const [moveTarget, setMoveTarget] = useState<NotebookDTO | null>(null);
+  /** 作成ダイアログ。開いているあいだだけ置き場所と兄弟を持つ */
+  const [createTarget, setCreateTarget] = useState<CreateNoteTarget | null>(null);
+  const [isCreatingNote, setIsCreatingNote] = useState(false);
+  const [createNoteError, setCreateNoteError] = useState<string | null>(null);
   /** 印刷（PDF 保存）中のノート。マウントされている間だけ #print-root が生える。 */
   const [printTarget, setPrintTarget] = useState<NotebookDTO | null>(null);
   /** ツリーのフォルダ行の ⋯ から開くメニューと、その先の削除ダイアログ */
@@ -347,10 +358,12 @@ export default function App() {
     setDrawerOpen(false);
   };
 
-  /** サイドバーのジャンル → そのタグで絞り込んだ復習画面へ */
+  /**
+   * サイドバーのジャンル → そのタグで絞り込んだ復習画面へ。
+   * **空文字は「すべて」**（解除）。一覧の先頭にその行があるので、押し直しで解除する必要は無い。
+   */
   const handleSelectTag = (tag: string) => {
-    // 同じタグをもう一度押したら絞り込みを解除する
-    setReviewTag((current) => (view === 'review' && current === tag ? '' : tag));
+    setReviewTag(tag);
     goTo('review');
   };
 
@@ -436,14 +449,39 @@ export default function App() {
     syncWithExisting(new Set(notes.notebooks.map((notebook) => notebook.id)));
   }, [notes.notebooks, syncWithExisting]);
 
-  const handleCreateNote = async (categoryId: string, parentId?: string) => {
-    const created = await notes.create(categoryId, parentId);
-    if (created) {
-      tabs.open(created.id);
-      goTo('notes');
-      // 「無題のノート」が選択された状態で開く。そのまま打てば名前になる。
-      setRenameTargetId(created.id);
+  /**
+   * 作成は**ダイアログで名前を決めてから**。
+   * 以前は押した瞬間に「無題のノート」を作っていて、名前を付けずに閉じると同名が積み上がった。
+   */
+  const openCreateNote = (categoryId: string, parentId?: string) => {
+    const parent = parentId ? notes.notebooks.find((n) => n.id === parentId) : undefined;
+    const siblings = siblingsIn(notes.notebooks, parentId ?? null, categoryId).map((n) => ({
+      id: n.id,
+      title: n.title,
+    }));
+    setCreateNoteError(null);
+    setCreateTarget({
+      categoryId,
+      parentId,
+      placeLabel:
+        parent?.title ?? categories.find((c) => c.id === categoryId)?.name ?? 'このフォルダ',
+      siblings,
+    });
+  };
+
+  const handleCreateNote = async (title: string) => {
+    if (!createTarget || isCreatingNote) return;
+    setIsCreatingNote(true);
+    setCreateNoteError(null);
+    const result = await notes.create(createTarget.categoryId, createTarget.parentId, title);
+    setIsCreatingNote(false);
+    if ('error' in result) {
+      setCreateNoteError(result.error);
+      return;
     }
+    setCreateTarget(null);
+    tabs.open(result.notebook.id);
+    goTo('notes');
   };
 
   const handleTitleFocused = useCallback(() => setRenameTargetId(null), []);
@@ -452,6 +490,7 @@ export default function App() {
   const hasOpenedDeleteCategory = useOpenedOnce(deleteCategoryTarget !== null);
   const hasOpenedMove = useOpenedOnce(moveTarget !== null);
   const hasOpenedCreateCategory = useOpenedOnce(isCreateCategoryOpen);
+  const hasOpenedCreateNote = useOpenedOnce(createTarget !== null);
   const hasOpenedIntegrations = useOpenedOnce(isIntegrationsOpen);
   const hasOpenedRestore = useOpenedOnce(isRestoreOpen);
   const hasOpenedCategory = useOpenedOnce(isCategoryOpen);
@@ -507,7 +546,7 @@ export default function App() {
           selectedNoteId={tabs.activeId}
           openNoteIds={openNoteIdSet}
           onSelectNote={handleSelectNote}
-          onCreateNote={(categoryId, parentId) => void handleCreateNote(categoryId, parentId)}
+          onCreateNote={(categoryId, parentId) => openCreateNote(categoryId, parentId)}
           onCreateCategory={() => {
             setIsCreateCategoryOpen(true);
             setDrawerOpen(false);
@@ -624,7 +663,7 @@ export default function App() {
                           onTitleFocused={handleTitleFocused}
                           onCreate={() => {
                             const first = categories[0];
-                            if (first) void handleCreateNote(first.id);
+                            if (first) openCreateNote(first.id);
                           }}
                           onRequestDelete={setDeleteTarget}
                           onOpenExplorer={() => setDrawerOpen(true)}
@@ -889,6 +928,17 @@ export default function App() {
               open={isCreateCategoryOpen}
               onClose={() => setIsCreateCategoryOpen(false)}
               onCreated={() => void refresh()}
+            />
+          )}
+
+          {hasOpenedCreateNote && (
+            <CreateNoteDialog
+              open={createTarget !== null}
+              target={createTarget}
+              isBusy={isCreatingNote}
+              error={createNoteError}
+              onClose={() => setCreateTarget(null)}
+              onCreate={(title) => void handleCreateNote(title)}
             />
           )}
 

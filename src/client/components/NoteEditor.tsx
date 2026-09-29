@@ -15,6 +15,7 @@ import { DEFAULT_GENERATED_QUESTIONS, MAX_GENERATED_QUESTIONS } from '../../shar
 import { api } from '../lib/api';
 import { getAncestorPath } from '../../shared/note-tree';
 import { MAX_PROMPT_CHARS, willTruncate } from '../../shared/note-sanitize';
+import { findDuplicateTitle, siblingsIn } from '../../shared/note-title';
 import { submitQuizResultResilient } from '../lib/offline-queue';
 import { cn } from '../lib/cn';
 import { Banner } from '../ui';
@@ -41,8 +42,6 @@ import GlossaryQuickAddPopover from './GlossaryQuickAddPopover';
  * このコンポーネントより長生きさせないと、タブを切り替えた瞬間に
  * 保留中の保存が消えるため。
  */
-
-const NEW_NOTE_TITLE = '無題のノート';
 
 interface Props {
   noteId: string;
@@ -215,6 +214,21 @@ export default function NoteEditor({
     saver.register(noteId, notebook.updatedAt);
   }, [notebook, noteId, saver]);
 
+  /**
+   * 題名として保存してよいか。だめな理由の文言（無ければ null）。
+   *
+   * **サーバーも同じ規則で断る**（`findDuplicateTitle`）。ここで先に止めるのは、
+   * 2 秒後の自動保存が黙って失敗するより、打っているそばに理由が出たほうが直しやすいため。
+   */
+  const titleError = (() => {
+    const trimmed = draftTitle.trim();
+    if (!trimmed) return 'ノートの名前を入力してください';
+    const siblings = siblingsIn(notebooks, notebook.parentId, notebook.categoryId);
+    return findDuplicateTitle(siblings, trimmed, noteId)
+      ? 'この場所には同じ名前のノートがあります'
+      : null;
+  })();
+
   /** 入力を saver に預ける。端末への退避と 2 秒の debounce は saver 側 */
   const schedule = (next: Partial<{ title: string; content: string; categoryId: string }>) => {
     const title = next.title ?? draftTitle;
@@ -228,7 +242,14 @@ export default function NoteEditor({
       saver.cancel(noteId);
       return;
     }
-    saver.schedule(noteId, { title: title.trim() || NEW_NOTE_TITLE, content, categoryId });
+    // 題名がだめなあいだは保存しない（本文だけ古い題名で保存すると、見た目と中身がずれる）
+    const trimmed = title.trim();
+    const siblings = siblingsIn(notebooks, notebook.parentId, notebook.categoryId);
+    if (!trimmed || findDuplicateTitle(siblings, trimmed, noteId)) {
+      saver.cancel(noteId);
+      return;
+    }
+    saver.schedule(noteId, { title: trimmed, content, categoryId });
   };
 
   /**
@@ -404,7 +425,13 @@ export default function NoteEditor({
             }}
             placeholder="ノートのタイトル"
             aria-label="ノートのタイトル"
-            className="min-w-0 flex-1 rounded-control border border-line-strong bg-surface px-2.5 py-1.5 text-title font-bold text-fg focus:border-accent focus:ring-2 focus:ring-accent/35 focus:outline-none"
+            aria-invalid={titleError ? true : undefined}
+            className={cn(
+              'min-w-0 flex-1 rounded-control border bg-surface px-2.5 py-1.5 text-title font-bold text-fg focus:ring-2 focus:outline-none',
+              titleError
+                ? 'border-danger focus:border-danger focus:ring-danger/35'
+                : 'border-line-strong focus:border-accent focus:ring-accent/35',
+            )}
           />
 
           <button
@@ -416,6 +443,13 @@ export default function NoteEditor({
             <Trash2 className="h-4 w-4" aria-hidden />
           </button>
         </div>
+
+        {/* 直せば保存が動く。ここで止めておかないと、2 秒後に理由の出ない失敗になる */}
+        {titleError && (
+          <p role="alert" className="border-t border-line px-4 py-2 text-caption text-danger">
+            {titleError}（このままでは保存されません）
+          </p>
+        )}
 
         {promptWillTruncate && (
           <p className="border-t border-line px-4 py-2 text-caption text-fg-subtle">
